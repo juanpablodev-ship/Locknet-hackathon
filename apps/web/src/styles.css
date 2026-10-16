@@ -33,6 +33,11 @@ body {
   font-size: 20px;
 }
 
+.cargando {
+  font-size: 24px;
+  font-weight: 700;
+}
+
 .cupo {
   margin: 4px 0 16px;
   font-size: 72px;
@@ -117,6 +122,12 @@ body {
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
+}
+
+.interruptor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .sello {
@@ -235,6 +246,45 @@ body {
   background: #e8f5e9;
   border: 2px solid var(--verde);
   color: var(--verde);
+}
+
+.panel-ambar {
+  background: #fff8e1;
+  border: 2px solid var(--ambar);
+  color: var(--ambar);
+}
+
+.progreso {
+  margin: 16px 0 8px;
+  font-weight: 700;
+}
+
+.aportes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.aporte {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.aporte-nombre {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.sello-verificado {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--verde);
+  color: #fff;
+  font-weight: 700;
 }
 
 .votante-barra {
