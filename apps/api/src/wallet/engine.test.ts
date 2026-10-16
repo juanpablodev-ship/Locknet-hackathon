@@ -1,32 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Guardian, Money, Verdict, WalletEvent } from '../../../../contracts'
+import type { WalletEvent } from '../../../../contracts'
 import { cuidadoDeMama } from '../../../../contracts/ejemplo'
 import { createEngine, type Engine } from './engine'
+import { cop, fakeGuardian, fakePayments } from './test-fakes'
 
-const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
 const farmacia = { name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }
 const falsa = { name: 'Farmacia (cuenta nueva)', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medel1in' }
 const sinHttps = { name: 'Raro', walletAddress: 'http://ilp.interledger-test.dev/raro' }
-
-// Guardián falso, solo para estas pruebas. Se reemplaza por /mocks/guardian.mock.ts (R5) o el real.
-const verdict = (status: Verdict['status'], riskPoints: number, userMessage: string): Verdict =>
-  ({ check: 'destination', status, riskPoints, userMessage, reasons: [] })
-const fakeGuardian = {
-  checkDestination: ({ walletAddress, known }) => {
-    if (!walletAddress.startsWith('https://')) return verdict('block', 100, 'Destino sin HTTPS.')
-    if (known.some((k) => k.walletAddress === walletAddress)) return verdict('pass', 0, 'Destino conocido.')
-    if (walletAddress.endsWith('medel1in')) return verdict('warn', 94, 'Se parece a la farmacia, pero no es la misma.')
-    return verdict('warn', 20, 'Destino nuevo.')
-  },
-  riskScore: (vs) => (vs.some((v) => v.status === 'block') ? 100 : Math.min(100, vs.reduce((n, v) => n + v.riskPoints, 0))),
-} as Pick<Guardian, 'checkDestination' | 'riskScore'> as Guardian
 
 let engine: Engine
 let events: WalletEvent[]
 
 beforeEach(() => {
   events = []
-  engine = createEngine({ guardian: fakeGuardian, emit: (e) => events.push(e), now: () => 1 })
+  engine = createEngine({ guardian: fakeGuardian, payments: fakePayments().svc, emit: (e) => events.push(e), now: () => 1 })
   engine.addWallet(structuredClone(cuidadoDeMama))
 })
 
