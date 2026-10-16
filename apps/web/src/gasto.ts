@@ -1,7 +1,9 @@
 import type { SharedWallet, Spend, Verdict } from '../../../contracts/index.js'
-import { formatMoney, riskLevel, statusLabel } from './format.js'
+import { formatMoney, progressText, riskLevel, statusLabel } from './format.js'
 import { escapeHtml } from './inicio.js'
 import { NOMBRE_GUARDIAN } from './config.js'
+
+type Share = Spend['shares'][number]
 
 function peorVerdict(verdicts: Verdict[]): Verdict | undefined {
   return verdicts.reduce<Verdict | undefined>((peor, v) => (!peor || v.riskPoints > peor.riskPoints ? v : peor), undefined)
@@ -54,6 +56,39 @@ function cuerpoEsperandoAprobacion(spend: Spend, wallet: SharedWallet, votaComo?
   `
 }
 
+function nombresFaltantes(spend: Spend, wallet: SharedWallet): string[] {
+  return spend.shares
+    .filter((s) => s.status !== 'paid')
+    .map((s) => wallet.members.find((m) => m.id === s.memberId)?.name ?? s.memberId)
+}
+
+function estadoAporte(status: Share['status']): { texto: string; tono: 'verde' | 'ambar' | 'rojo' } {
+  if (status === 'paid') return { texto: 'Confirmado', tono: 'verde' }
+  if (status === 'failed') return { texto: 'Falló', tono: 'rojo' }
+  return { texto: 'Pendiente', tono: 'ambar' }
+}
+
+function renderAporte(share: Share, wallet: SharedWallet): string {
+  const nombre = escapeHtml(wallet.members.find((m) => m.id === share.memberId)?.name ?? share.memberId)
+  const estado = estadoAporte(share.status)
+  return `
+    <div class="aporte">
+      <p class="aporte-nombre">${nombre}</p>
+      <p>Aporta: ${share.debit ? formatMoney(share.debit) : '—'}</p>
+      <p>Llegó: ${share.received ? formatMoney(share.received) : '—'}</p>
+      <p class="estado estado-${estado.tono}">${estado.texto}</p>
+    </div>
+  `
+}
+
+function cuerpoProgreso(spend: Spend, wallet: SharedWallet): string {
+  const aportes = spend.shares.map((s) => renderAporte(s, wallet)).join('')
+  return `
+    <p class="progreso">${escapeHtml(progressText(spend.progress, nombresFaltantes(spend, wallet)))}</p>
+    <div class="aportes">${aportes}</div>
+  `
+}
+
 function cuerpoBloqueado(spend: Spend): string {
   const bloqueante = spend.verdicts.find((v) => v.status === 'block') ?? peorVerdict(spend.verdicts)
   return `
@@ -62,6 +97,29 @@ function cuerpoBloqueado(spend: Spend): string {
       ${bloqueante ? `<p>${escapeHtml(bloqueante.userMessage)}</p>` : ''}
       ${bloqueante ? `<p class="motivos">${bloqueante.reasons.map(escapeHtml).join(' · ')}</p>` : ''}
     </div>
+  `
+}
+
+function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
+  const fallido = spend.shares.find((s) => s.status === 'failed')
+  const nombreFallido = fallido
+    ? escapeHtml(wallet.members.find((m) => m.id === fallido.memberId)?.name ?? fallido.memberId)
+    : ''
+
+  return `
+    <div class="panel panel-ambar">
+      <p class="panel-titulo">Pago incompleto</p>
+      ${fallido ? `<p>${nombreFallido}: ${escapeHtml(fallido.failReason ?? 'no se pudo confirmar el aporte')}</p>` : ''}
+    </div>
+    ${cuerpoProgreso(spend, wallet)}
+    ${
+      fallido
+        ? `<div class="acciones">
+             <button type="button" class="boton" data-accion="reintentar" data-spend="${escapeHtml(spend.id)}">Reintentar el aporte de ${nombreFallido}</button>
+           </div>`
+        : ''
+    }
+    <div id="mensaje" role="status"></div>
   `
 }
 
@@ -76,6 +134,10 @@ function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string):
         <div class="panel panel-verde">
           <p class="panel-titulo">El grupo aprobó el gasto.</p>
         </div>
+        <div class="acciones">
+          <button type="button" class="boton" data-accion="pagar" data-spend="${escapeHtml(spend.id)}">Pagar ahora</button>
+        </div>
+        <div id="mensaje" role="status"></div>
       `
     case 'rejected':
       return `
@@ -86,6 +148,18 @@ function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string):
       `
     case 'blocked':
       return cuerpoBloqueado(spend)
+    case 'paying':
+      return `
+        ${cuerpoProgreso(spend, wallet)}
+        <div id="mensaje" role="status"></div>
+      `
+    case 'incomplete':
+      return cuerpoIncompleto(spend, wallet)
+    case 'paid':
+      return `
+        <p class="sello sello-verificado">Gasto verificado: llegó completo a ${escapeHtml(spend.destination.name)}</p>
+        ${cuerpoProgreso(spend, wallet)}
+      `
     default:
       return `<h1>${statusLabel(spend.status)}</h1>`
   }
