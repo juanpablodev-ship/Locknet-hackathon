@@ -7,3 +7,5 @@ Desde la raíz del repositorio:
 - Para abrirlo desde un celular, conecta ambos dispositivos a la misma red Wi-Fi y visita `http://<IP-del-portátil>:5173`.
 
 El modo live todavía no conecta el flujo para unirse a una billetera.
+
+Para mostrar la banda de respuestas grabadas, inicia Vite con `VITE_DEMO_MODE=fixtures` en su entorno.

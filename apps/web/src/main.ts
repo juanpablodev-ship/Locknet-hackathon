@@ -24,6 +24,8 @@ import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
 import { renderHistorial } from './historial.js'
+import { DEMO_MODE } from './config.js'
+import { renderAppChrome } from './navegacion.js'
 import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
 import './styles.css'
@@ -510,6 +512,15 @@ function render(): void {
   const app = document.getElementById('app')
   if (!app) return
   const route = parseHash(location.hash)
+  let shell = document.getElementById('app-shell')
+  if (!shell) {
+    shell = document.createElement('header')
+    shell.id = 'app-shell'
+    document.body.insertBefore(shell, app)
+  }
+  shell.className = `app-shell${DEMO_MODE === 'fixtures' ? ' app-shell-fixtures' : ''}`
+  shell.innerHTML = renderAppChrome(route, DEMO_MODE)
+  document.body.dataset.demoMode = DEMO_MODE
 
   if (route.name === 'inicio') {
     void pintarInicio()

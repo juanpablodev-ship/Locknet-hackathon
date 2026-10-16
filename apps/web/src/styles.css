@@ -15,6 +15,62 @@ body {
   margin: 0;
 }
 
+#app {
+  padding-top: 72px;
+}
+
+body[data-demo-mode='fixtures'] #app {
+  padding-top: 128px;
+}
+
+.app-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+}
+
+.banda-respaldo {
+  padding: 10px 16px;
+  background: #fff1c2;
+  border-bottom: 2px solid var(--ambar);
+  color: var(--texto);
+  font-weight: 700;
+  text-align: center;
+}
+
+.menu-navegacion {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--fondo);
+  border-bottom: 1px solid var(--borde);
+}
+
+.menu-navegacion a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  color: var(--texto);
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.menu-navegacion .menu-activo {
+  background: var(--verde);
+  border-color: var(--verde);
+  color: #fff;
+}
+
 .contenedor {
   max-width: 1100px;
   margin: 0 auto;
