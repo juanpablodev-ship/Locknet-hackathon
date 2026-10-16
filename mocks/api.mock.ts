@@ -175,3 +175,47 @@ export function playEscenario3(stepMs = 1200): void {
     })
   })
 }
+
+function encontrarGastoYBilletera(spendId: string): { wallet: SharedWallet; spend: Spend } {
+  for (const wallet of wallets) {
+    const spend = spends[wallet.id]?.find((s) => s.id === spendId)
+    if (spend) return { wallet, spend }
+  }
+  throw new Error('Gasto no encontrado')
+}
+
+// Misma regla de votación que apps/api/src/wallet/engine.ts (castApproval).
+export function castApproval(spendId: string, memberId: string, yes: boolean): Spend {
+  const { wallet, spend } = encontrarGastoYBilletera(spendId)
+
+  if (spend.status !== 'awaiting-approval') {
+    throw new Error(`El gasto no está esperando aprobación (estado: ${spend.status})`)
+  }
+
+  const votantes = wallet.members.filter((m) => m.status === 'active')
+  if (!votantes.some((m) => m.id === memberId)) throw new Error(`No es miembro activo: ${memberId}`)
+  if (spend.approvals.some((a) => a.memberId === memberId)) throw new Error(`Ya votó: ${memberId}`)
+
+  spend.approvals.push({ memberId, yes })
+  emitir({
+    walletId: wallet.id,
+    type: 'approval-cast',
+    spendId,
+    memberId,
+    message: yes ? 'Aprobó el gasto.' : 'Rechazó el gasto.',
+  })
+
+  const required = wallet.rules.groupApproval.approvalsRequired
+  const yesCount = spend.approvals.filter((a) => a.yes).length
+  const pending = votantes.length - spend.approvals.length
+
+  if (yesCount >= required) {
+    spend.status = 'approved'
+    emitir({ walletId: wallet.id, type: 'spend-approved', spendId, message: 'El grupo aprobó el gasto.' })
+  } else if (yesCount + pending < required) {
+    spend.status = 'rejected'
+    emitir({ walletId: wallet.id, type: 'spend-rejected', spendId, message: 'El grupo rechazó el gasto.' })
+  }
+
+  return structuredClone(spend)
+}

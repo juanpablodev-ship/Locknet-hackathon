@@ -4,6 +4,7 @@ import { cuidadoDeMama } from '../contracts/ejemplo.js'
 import {
   _testEmitir,
   _testProgramar,
+  castApproval,
   getSpends,
   getWallet,
   getWallets,
@@ -232,5 +233,64 @@ describe('playEscenario3', () => {
 
     const ataques = getSpends('w-mama').filter((s) => s.id === 's-ataque')
     expect(ataques).toHaveLength(0)
+  })
+})
+
+describe('castApproval', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+    playEscenario3(100)
+    vi.advanceTimersByTime(100)
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('2 votos a favor aprueban el gasto', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    castApproval('s-ataque', 'm-bogota', true)
+    const resultado = castApproval('s-ataque', 'm-medellin', true)
+
+    expect(resultado.status).toBe('approved')
+    expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'approval-cast', 'spend-approved'])
+  })
+
+  it('1 voto en contra no rechaza el gasto', () => {
+    const resultado = castApproval('s-ataque', 'm-bogota', false)
+    expect(resultado.status).toBe('awaiting-approval')
+  })
+
+  it('2 votos en contra rechazan el gasto', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    castApproval('s-ataque', 'm-bogota', false)
+    const resultado = castApproval('s-ataque', 'm-medellin', false)
+
+    expect(resultado.status).toBe('rejected')
+    expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'approval-cast', 'spend-rejected'])
+  })
+
+  it('votar dos veces con el mismo miembro lanza "Ya votó"', () => {
+    castApproval('s-ataque', 'm-bogota', true)
+    expect(() => castApproval('s-ataque', 'm-bogota', true)).toThrow('Ya votó')
+  })
+
+  it('votar sobre un gasto ya rejected lanza el error de estado', () => {
+    castApproval('s-ataque', 'm-bogota', false)
+    castApproval('s-ataque', 'm-medellin', false)
+
+    expect(() => castApproval('s-ataque', 'm-madrid', true)).toThrow(
+      'El gasto no está esperando aprobación (estado: rejected)'
+    )
+  })
+
+  it('votar con un miembro inexistente lanza "No es miembro activo"', () => {
+    expect(() => castApproval('s-ataque', 'm-fantasma', true)).toThrow('No es miembro activo')
   })
 })
