@@ -8,6 +8,16 @@ export const MODO: 'live' | 'mock' =
   import.meta.env.VITE_API_MODE === 'live' || import.meta.env.MODE === 'live' ? 'live' : 'mock'
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
+export interface ApiModeInfo {
+  mode: 'live' | 'fixtures'
+  label?: string
+  recordedAt?: string
+}
+
+export interface DemoResetResult extends ApiModeInfo {
+  wallets: string[]
+}
+
 function unirsePendiente(): never {
   throw new Error('Unirse todavía no está conectado a la API')
 }
@@ -34,6 +44,14 @@ async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown):
     throw new Error(error.error)
   }
   return (await respuesta.json()) as T
+}
+
+export function getApiMode(): Promise<ApiModeInfo> {
+  return pedir('GET', '/api/mode')
+}
+
+export function resetDemo(): Promise<DemoResetResult> {
+  return pedir('POST', '/api/demo/reset')
 }
 
 export async function getWallets(): Promise<SharedWallet[]> {

@@ -1,8 +1,19 @@
 import type { Route } from './router.js'
+import type { ApiModeInfo } from './api.js'
+import { escapeHtml } from './inicio.js'
 
-export function renderBandaRespaldo(mode: 'fixtures' | 'live'): string {
+export function renderBandaRespaldo(
+  mode: ApiModeInfo['mode'],
+  label?: string,
+  error?: string,
+): string {
+  if (error) {
+    return `<div class="banda-respaldo" role="status"><span id="mensaje">${escapeHtml(error)}</span></div>`
+  }
   if (mode !== 'fixtures') return ''
-  return '<div class="banda-respaldo" role="status">MODO RESPALDO · respuestas reales grabadas</div>'
+  return `<div class="banda-respaldo" role="status">${escapeHtml(
+    label ?? 'MODO RESPALDO · respuestas reales grabadas',
+  )}</div>`
 }
 
 function current(route: Route, item: 'inicio' | 'gasto' | 'unirse' | 'historial'): boolean {
@@ -28,6 +39,11 @@ export function renderMenuNavegacion(route: Route): string {
   return `<nav class="menu-navegacion" aria-label="Navegación principal">${items}</nav>`
 }
 
-export function renderAppChrome(route: Route, mode: 'fixtures' | 'live'): string {
-  return `${renderBandaRespaldo(mode)}${renderMenuNavegacion(route)}`
+export function renderAppChrome(
+  route: Route,
+  mode: ApiModeInfo['mode'],
+  label?: string,
+  error?: string,
+): string {
+  return `${renderBandaRespaldo(mode, label, error)}${renderMenuNavegacion(route)}`
 }

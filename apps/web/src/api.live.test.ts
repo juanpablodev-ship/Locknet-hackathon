@@ -77,6 +77,30 @@ describe('api.ts en modo live', () => {
 
     await api.retryShare('s-medicina')
     expectRequest('/api/spends/s-medicina/retry', 'POST')
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {
+      mode: 'fixtures',
+      label: 'Modo respaldo — datos simulados',
+      recordedAt: '2026-10-16T21:13:45.876Z',
+    }))
+    await expect(api.getApiMode()).resolves.toEqual({
+      mode: 'fixtures',
+      label: 'Modo respaldo — datos simulados',
+      recordedAt: '2026-10-16T21:13:45.876Z',
+    })
+    expectRequest('/api/mode', 'GET')
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {
+      mode: 'fixtures',
+      label: 'Modo respaldo — datos simulados',
+      wallets: ['w-mama'],
+    }))
+    await expect(api.resetDemo()).resolves.toEqual({
+      mode: 'fixtures',
+      label: 'Modo respaldo — datos simulados',
+      wallets: ['w-mama'],
+    })
+    expectRequest('/api/demo/reset', 'POST')
   })
 
   it('conserva la base VITE_API_URL configurada', async () => {

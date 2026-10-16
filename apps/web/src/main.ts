@@ -2,10 +2,12 @@ import type { Member, SharedWallet, Spend, Verdict } from '../../../contracts/in
 import { parseHash, type Route } from './router.js'
 import {
   MODO,
+  type ApiModeInfo,
   castApproval,
   crearTurnos,
   executeSpend,
   finishJoin,
+  getApiMode,
   getSpend,
   getWallet,
   getWallets,
@@ -14,6 +16,7 @@ import {
   playEscenario1,
   playEscenario3,
   requestSpend,
+  resetDemo,
   resetMock,
   retryShare,
   setFalloAporte,
@@ -44,6 +47,8 @@ let desuscribir: (() => void) | null = null
 let votaComoActual: string | undefined
 let redireccionUnirsePendiente: string | null = null
 let hashInvalidoActual = false
+let modoServidor: ApiModeInfo | null = null
+let errorModoServidor: string | null = null
 const turnos = crearTurnos()
 
 function navegarA(hash: string): void {
@@ -109,9 +114,18 @@ function enlazarPanelDev(): void {
       playEscenario3()
       navegarA('#/gasto/s-ataque')
     } else if (accion === 'reiniciar') {
-      resetMock()
-      hashInvalidoActual = false
-      navegarA('#/inicio')
+      void (async () => {
+        try {
+          const resultado = await resetDemo()
+          if (MODO === 'mock') resetMock()
+          modoServidor = { mode: resultado.mode, label: resultado.label }
+          errorModoServidor = null
+          hashInvalidoActual = false
+          navegarA('#/inicio')
+        } catch (err) {
+          mostrarErrorModo(err)
+        }
+      })()
     }
   })
 
@@ -505,6 +519,43 @@ async function pintarVueltaUnirse(route: Extract<Route, { name: 'unirse-volver' 
   }
 }
 
+function pintarChrome(route: Route): void {
+  let shell = document.getElementById('app-shell')
+  if (!shell) {
+    shell = document.createElement('header')
+    shell.id = 'app-shell'
+    const app = document.getElementById('app')
+    if (!app) return
+    document.body.insertBefore(shell, app)
+  }
+  const mode = modoServidor?.mode ?? DEMO_MODE
+  shell.className = `app-shell${mode === 'fixtures' ? ' app-shell-fixtures' : ''}`
+  shell.innerHTML = renderAppChrome(route, mode, modoServidor?.label, errorModoServidor ?? undefined)
+  document.body.dataset.demoMode = mode
+}
+
+function mostrarErrorModo(err: unknown): void {
+  const texto = err instanceof Error ? err.message : 'Ocurrió un error inesperado.'
+  const mensaje = document.querySelector('#app #mensaje')
+  if (mensaje) {
+    mensaje.textContent = texto
+    return
+  }
+  errorModoServidor = texto
+  pintarChrome(parseHash(location.hash))
+}
+
+async function cargarModoServidor(): Promise<void> {
+  try {
+    modoServidor = await getApiMode()
+    errorModoServidor = null
+  } catch (err) {
+    mostrarErrorModo(err)
+    return
+  }
+  pintarChrome(parseHash(location.hash))
+}
+
 function render(): void {
   desuscribir?.()
   desuscribir = null
@@ -512,15 +563,7 @@ function render(): void {
   const app = document.getElementById('app')
   if (!app) return
   const route = parseHash(location.hash)
-  let shell = document.getElementById('app-shell')
-  if (!shell) {
-    shell = document.createElement('header')
-    shell.id = 'app-shell'
-    document.body.insertBefore(shell, app)
-  }
-  shell.className = `app-shell${DEMO_MODE === 'fixtures' ? ' app-shell-fixtures' : ''}`
-  shell.innerHTML = renderAppChrome(route, DEMO_MODE)
-  document.body.dataset.demoMode = DEMO_MODE
+  pintarChrome(route)
 
   if (route.name === 'inicio') {
     void pintarInicio()
@@ -558,3 +601,4 @@ function render(): void {
 
 window.addEventListener('hashchange', render)
 render()
+if (MODO === 'live') void cargarModoServidor()
