@@ -53,7 +53,10 @@ export async function getSpends(walletId: string): Promise<Spend[]> {
 
 export async function getSpend(spendId: string): Promise<Spend> {
   if (MODO === 'live') return pedir('GET', `/api/spends/${encodeURIComponent(spendId)}`)
-  const spend = mock.getSpends('w-mama').find((s) => s.id === spendId)
+  const spend = mock
+    .getWallets()
+    .flatMap((wallet) => mock.getSpends(wallet.id))
+    .find((item) => item.id === spendId)
   if (!spend) throw new Error('Gasto no encontrado')
   return spend
 }

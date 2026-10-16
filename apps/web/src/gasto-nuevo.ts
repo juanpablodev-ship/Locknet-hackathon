@@ -11,7 +11,7 @@ export function previewReparto(pesos: number, wallet: SharedWallet): string {
   const parte = (total / miembros).toString()
   const aproximado = total % miembros !== 0n ? '≈' : ''
   const amount = { value: (BigInt(parte) * 100n).toString(), assetCode: wallet.currency, assetScale: 2 }
-  return `Cada uno pone: ${aproximado}${formatMoney(amount)}`
+  return `Cada uno pone: ${aproximado}${escapeHtml(formatMoney(amount))}`
 }
 
 export function renderGastoNuevo(wallet: SharedWallet): string {

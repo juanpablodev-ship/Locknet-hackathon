@@ -53,6 +53,59 @@ body {
   margin: 16px 0;
 }
 
+.reglas-billetera {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.reglas-billetera h2 {
+  margin-top: 0;
+  font-size: 24px;
+}
+
+.nota-configuracion {
+  font-size: 20px;
+}
+
+.barra-meta {
+  width: 100%;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+}
+
+.barra-meta span {
+  display: block;
+  height: 100%;
+  background: var(--verde);
+}
+
+.selector-billeteras {
+  margin: 0 0 24px;
+}
+
+.selector-billeteras > p {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.selector-billeteras .acciones {
+  margin-top: 0;
+}
+
+.selector-billeteras .boton {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.billetera-seleccionada {
+  outline: 4px solid var(--texto);
+  outline-offset: 2px;
+}
+
 .miembro {
   border: 1px solid var(--borde);
   border-radius: 8px;

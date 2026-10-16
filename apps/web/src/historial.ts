@@ -18,7 +18,7 @@ function renderFila(spend: Spend): string {
         <p class="estado estado-${tone}">${escapeHtml(statusLabel(spend.status))}</p>
         ${sello}
       </div>
-      <p class="fila-gasto-monto">${formatMoney(spend.amount)}</p>
+      <p class="fila-gasto-monto">${escapeHtml(formatMoney(spend.amount))}</p>
       <a class="boton" href="#/gasto/${escapeHtml(spend.id)}">Ver gasto</a>
     </article>
   `

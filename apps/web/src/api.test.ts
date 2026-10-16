@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { castApproval, crearTurnos, finishJoin, getWallet, requestSpend, resetMock, startJoin } from './api.js'
+import {
+  castApproval,
+  crearTurnos,
+  finishJoin,
+  getSpend,
+  getWallet,
+  requestSpend,
+  resetMock,
+  startJoin,
+} from './api.js'
 
 describe('api.ts en modo simulado', () => {
   it('getWallet devuelve una Promise con la billetera', async () => {
@@ -12,6 +21,17 @@ describe('api.ts en modo simulado', () => {
 
   it('getWallet("nada") se rechaza con "Billetera no encontrada"', async () => {
     await expect(getWallet('nada')).rejects.toThrow('Billetera no encontrada')
+  })
+
+  it('getSpend encuentra gastos de billeteras distintas de w-mama', async () => {
+    resetMock()
+    const gasto = await requestSpend('w-parque', {
+      name: 'Contratista del parque',
+      walletAddress: 'https://ilp.interledger-test.dev/contratista-parque',
+    }, { value: '5000000', assetCode: 'COP', assetScale: 2 })
+
+    await expect(getSpend(gasto.id)).resolves.toMatchObject({ walletId: 'w-parque' })
+    resetMock()
   })
 
   it('castApproval con voto doble se rechaza con "Ya votó"', async () => {

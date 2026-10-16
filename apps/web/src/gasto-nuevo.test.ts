@@ -30,4 +30,11 @@ describe('renderGastoNuevo', () => {
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('&quot;x&quot;')
   })
+
+  it('escapa el código monetario en la vista previa', () => {
+    const wallet = structuredClone(cuidadoDeMama)
+    wallet.currency = '<img src=x>'
+
+    expect(previewReparto(120000, wallet)).not.toContain('<img')
+  })
 })

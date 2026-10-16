@@ -38,4 +38,11 @@ describe('renderHistorial', () => {
     expect(html).not.toContain('<script>alert')
     expect(html).toContain('&lt;script&gt;')
   })
+
+  it('escapa el código monetario del gasto', () => {
+    const spend = structuredClone(medicina)
+    spend.amount.assetCode = '<img src=x>'
+
+    expect(renderHistorial([spend], cuidadoDeMama)).not.toContain('<img')
+  })
 })

@@ -8,6 +8,7 @@ import {
   finishJoin,
   getSpend,
   getWallet,
+  getWallets,
   getSpends,
   onEvents,
   playEscenario1,
@@ -24,6 +25,7 @@ import { renderGasto } from './gasto.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
 import { renderHistorial } from './historial.js'
 import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
+import { getWalletActual, setWalletActual } from './wallet-actual.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -64,17 +66,18 @@ function pintarError(app: HTMLElement, err: unknown, reintentar: () => void): vo
 
 function panelDevHtml(): string {
   if (MODO !== 'mock') return ''
+  const soloMama = getWalletActual() === 'w-mama'
   return `
     <div class="panel-dev">
       <span>Modo respaldo</span>
-      <button type="button" data-accion="escenario1">Escenario 1</button>
+      ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
       <button type="button" data-accion="escenario2">Escenario 2</button>
-      <button type="button" data-accion="escenario3">Escenario 3</button>
+      ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
       <button type="button" data-accion="reiniciar">Reiniciar</button>
-      <label class="interruptor">
+      ${soloMama ? `<label class="interruptor">
         <input type="checkbox" id="falla-madrid" />
         Que falle Madrid
-      </label>
+      </label>` : ''}
       <label class="interruptor">
         <input type="checkbox" id="hash-invalido" ${hashInvalidoActual ? 'checked' : ''} />
         Simular hash inválido
@@ -94,9 +97,10 @@ function enlazarPanelDev(): void {
       navegarA('#/inicio')
     } else if (accion === 'escenario2') {
       void (async () => {
-        const wallet = await getWallet('w-mama')
+        const walletId = getWalletActual()
+        const wallet = await getWallet(walletId)
         const farmacia = wallet.knownDestinations[0]
-        const spend = await requestSpend('w-mama', farmacia, { value: '12000000', assetCode: 'COP', assetScale: 2 })
+        const spend = await requestSpend(walletId, farmacia, { value: '12000000', assetCode: wallet.currency, assetScale: 2 })
         navegarA(`#/gasto/${spend.id}`)
       })()
     } else if (accion === 'escenario3') {
@@ -128,8 +132,14 @@ async function pintarInicio(): Promise<void> {
   pintarCargando(app)
 
   let wallet: SharedWallet
+  let wallets: SharedWallet[]
+  let spends: Spend[]
   try {
-    wallet = await getWallet('w-mama')
+    wallets = await getWallets()
+    const actual = wallets.find((item) => item.id === getWalletActual())
+    if (!actual) throw new Error('Billetera no encontrada')
+    wallet = actual
+    spends = await getSpends(wallet.id)
   } catch (err) {
     if (!turnos.esVigente(miTurno)) return
     pintarError(app, err, () => void pintarInicio())
@@ -137,10 +147,18 @@ async function pintarInicio(): Promise<void> {
   }
   if (!turnos.esVigente(miTurno)) return
 
-  app.innerHTML = renderInicio(wallet) + panelDevHtml()
+  app.innerHTML = renderInicio(wallet, spends, wallets) + panelDevHtml()
   enlazarPanelDev()
+  app.querySelector('.selector-billeteras')?.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest('[data-wallet-id]') as HTMLElement | null
+    const walletId = button?.dataset.walletId
+    if (walletId && wallets.some((item) => item.id === walletId)) {
+      setWalletActual(walletId)
+      render()
+    }
+  })
 
-  desuscribir = onEvents('w-mama', (e) => {
+  desuscribir = onEvents(wallet.id, (e) => {
     if (e.type === 'member-active' || e.type === 'member-revoked' || e.type === 'capacity-updated') {
       render()
     }
@@ -264,7 +282,7 @@ async function pintarFormularioGasto(): Promise<void> {
 
   let wallet: SharedWallet
   try {
-    wallet = await getWallet('w-mama')
+    wallet = await getWallet(getWalletActual())
   } catch (err) {
     if (!turnos.esVigente(miTurno)) return
     pintarError(app, err, () => void pintarFormularioGasto())
@@ -306,7 +324,7 @@ async function pintarFormularioGasto(): Promise<void> {
 
     void (async () => {
       try {
-        const spend = await requestSpend('w-mama', { name: nombre, walletAddress }, {
+        const spend = await requestSpend(wallet.id, { name: nombre, walletAddress }, {
           value: (BigInt(valorPesos) * 100n).toString(),
           assetCode: wallet.currency,
           assetScale: 2,
@@ -426,7 +444,7 @@ async function pintarUnirse(): Promise<void> {
   pintarCargando(app)
 
   try {
-    const wallet = await getWallet('w-mama')
+    const wallet = await getWallet(getWalletActual())
     if (!turnos.esVigente(miTurno)) return
     const qrSvg = await qrComoSvg(`${location.origin}${location.pathname}#/unirse`)
     if (!turnos.esVigente(miTurno)) return
@@ -444,7 +462,8 @@ async function pintarHistorial(): Promise<void> {
   pintarCargando(app)
 
   try {
-    const [wallet, spends] = await Promise.all([getWallet('w-mama'), getSpends('w-mama')])
+    const walletId = getWalletActual()
+    const [wallet, spends] = await Promise.all([getWallet(walletId), getSpends(walletId)])
     if (!turnos.esVigente(miTurno)) return
     app.innerHTML = renderHistorial(spends, wallet) + panelDevHtml()
     enlazarPanelDev()
