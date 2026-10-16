@@ -6,12 +6,12 @@ import { cop, fakeGuardian, fakePayments } from './test-fakes'
 
 const farmacia = { name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }
 
-function setup(opts: Parameters<typeof fakePayments>[0] = {}) {
+function setup(opts: Parameters<typeof fakePayments>[0] = {}, incomingPerShare = false) {
   const events: WalletEvent[] = []
   const payments = fakePayments(opts)
   const engine = createEngine({
     guardian: fakeGuardian, payments: payments.svc, emit: (e) => events.push(e),
-    now: () => 1, pollMs: 0, maxPolls: 3, sleep: async () => {},
+    now: () => 1, pollMs: 0, maxPolls: 3, sleep: async () => {}, incomingPerShare,
   })
   engine.addWallet(structuredClone(cuidadoDeMama))
   const { id } = engine.requestSpend('w-mama', farmacia, cop(120_000))
@@ -76,6 +76,23 @@ describe('executeSpend: pagos por aporte', () => {
     const falsa = { name: 'Falsa', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medel1in' }
     const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))
     await expect(engine.executeSpend(id)).rejects.toThrow(/awaiting-approval → paying/)
+  })
+
+  it('plan B: un cobro de $40.000 por aporte → 3 de 3 → paid', async () => {
+    const { engine, payments, id } = setup({}, true)
+    const s = await engine.executeSpend(id)
+    expect(payments.calls.createIncoming).toEqual([cop(40_000), cop(40_000), cop(40_000)])
+    expect(s.status).toBe('paid')
+    expect(s.verdicts.find((v) => v.check === 'reconcile')!.status).toBe('pass')
+  })
+
+  it('plan B: reintento crea un cobro solo para el aporte que falló', async () => {
+    const { engine, payments, id } = setup({ failMember: { 'm-madrid': 'cupo insuficiente' } }, true)
+    expect((await engine.executeSpend(id)).status).toBe('incomplete')
+    delete payments.opts.failMember!['m-madrid']
+    const s = await engine.retryShare(id)
+    expect(payments.calls.createIncoming).toEqual([cop(40_000), cop(40_000), cop(40_000), cop(40_000)])
+    expect(s.status).toBe('paid')
   })
 
   it('no reintenta un gasto que ya está pagado', async () => {

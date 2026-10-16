@@ -80,8 +80,15 @@ const wrap = (h: Handler) => (req: Request, res: Response, next: NextFunction) =
   Promise.resolve().then(() => h(req, res)).catch(next)
 }
 
-export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: number; join?: JoinDeps; demo?: DemoDeps }) {
+export function createApp(deps: {
+  engine: Engine; bus: EventBus; heartbeatMs?: number; join?: JoinDeps; demo?: DemoDeps
+  available?: (memberId: string) => Promise<Money>   // MembersService.available() de R1 (cupo real)
+}) {
   const { engine, bus } = deps
+  // Refresca el cupo en segundo plano; un fallo nunca rompe la respuesta al usuario.
+  const refreshLater = (walletId: string) => {
+    if (deps.available) engine.refreshCapacity(walletId, deps.available).catch(() => {})
+  }
   const heartbeatMs = deps.heartbeatMs ?? 15_000
   const app = express()
   app.use(express.json())
@@ -137,11 +144,18 @@ export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: n
     if (spend.status !== expected) {
       throw new Error(`El gasto debe estar en ${expected} (estado: ${spend.status})`)
     }
-    run(spend.id).catch((e) => console.error(`[api] falló ${spend.id}:`, e))
+    run(spend.id)
+      .catch((e) => console.error(`[api] falló ${spend.id}:`, e instanceof Error ? e.message : 'error'))
+      .finally(() => refreshLater(spend.walletId))
     res.status(202).json({ spendId: spend.id, status: 'paying' })
   }
   app.post('/api/spends/:id/execute', wrap(background('approved', (id) => engine.executeSpend(id))))
   app.post('/api/spends/:id/retry', wrap(background('incomplete', (id) => engine.retryShare(id))))
+
+  app.post('/api/wallets/:id/capacity/refresh', wrap(async (req, res) => {
+    if (!deps.available) throw new Error('Consulta de cupo no encontrada en este servidor')
+    res.json(await engine.refreshCapacity(req.params.id, deps.available))
+  }))
 
   // ---------- Modo y reinicio de demo ----------
   app.get('/api/mode', (_req, res) => {
@@ -207,6 +221,7 @@ export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: n
       return back('error')   // incluye hash inválido: R1 no continúa la concesión
     }
     engine.addMember(session.walletId, member)
+    refreshLater(session.walletId)
     return back('ok')
   }))
 
