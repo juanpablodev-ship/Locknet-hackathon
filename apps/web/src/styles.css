@@ -1,0 +1,29 @@
+:root {
+  --verde: #1e7d34;
+  --ambar: #b8860b;
+  --rojo: #b00020;
+  --fondo: #ffffff;
+  --texto: #1a1a1a;
+  --borde: #4a4a4a;
+}
+
+body {
+  font-size: 20px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--fondo);
+  color: var(--texto);
+  margin: 0;
+}
+
+.contenedor {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 375px) {
+  .contenedor {
+    overflow-x: hidden;
+  }
+}
