@@ -15,11 +15,12 @@
 ## Qué hicimos nosotros (pruebas, verificación, correcciones)
 
 - R2: se contrastaron las llamadas con las páginas oficiales del SDK de Open Payments para permisos de cobro y cotización, creación/consulta de cobros, cotización y creación/consulta de pagos salientes.
-- R2: pruebas de dos aportes parciales en el simulado y de casos fallidos; `npm test` (45 pruebas aprobadas en total, 8 de R2) y `npm run typecheck` (sin errores) ejecutados localmente. No se ejecutaron pagos reales ni pruebas con Test Wallet.
+- R2: pruebas de dos aportes parciales en el simulado y de casos fallidos. Verificación local: `npm test` 64/64 aprobadas, `npm run typecheck` aprobado y `git diff --check` aprobado.
+- R2: se validó un grant saliente real y se ejecutó una sola prueba de pago en Test Wallet. Según revisión visual, el outgoing payment y el incoming payment terminaron `COMPLETED`; se observaron EUR 2,00 debitados y EUR 1,00 recibidos. La diferencia no se atribuye a ninguna causa: la ejecución anterior no conservó los IDs y no hubo conciliación API retrospectiva. No se ejecutaron pagos adicionales.
 
 ## Pendientes de R2
 
-- Probar el flujo real con un permiso y token propio de prueba, sin guardarlo en el repositorio.
+- Confirmar en una ejecución futura el `debitAmount` de la quote y conciliar por API con IDs persistidos, sin reutilizar ni adivinar los IDs de la prueba anterior.
 - Verificar en Test Wallet si dos pagadores pueden aportar parcialmente a un mismo cobro usando `incomingAmount` total y `receiveAmount` por parte.
 - Si falla esa verificación, coordinar con R3 el plan B de un cobro por miembro.
 - Implementar y probar `distributeReturn` después de la puerta de calidad del caso prioritario.
