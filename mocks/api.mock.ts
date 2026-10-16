@@ -1,7 +1,7 @@
 // Simulado de la API web (R4). Primer paso sin depender de nadie: api.mock con datos
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
-import type { Money, SharedWallet, Spend, WalletEvent } from '../contracts/index.js'
+import type { Money, SharedWallet, Spend, Verdict, WalletEvent } from '../contracts/index.js'
 import { ataque, cuidadoDeMama, destinoParecido, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
@@ -82,12 +82,18 @@ export function getSpends(walletId: string): Spend[] {
 
 const listeners: Record<string, Set<(e: WalletEvent) => void>> = {}
 let timers: ReturnType<typeof setTimeout>[] = []
+let falloMemberId: string | null = null
 
 export function resetMock(): void {
   wallets = structuredClone(WALLETS_INICIALES)
   spends = structuredClone(SPENDS_INICIALES)
   for (const id of timers) clearTimeout(id)
   timers = []
+  falloMemberId = null
+}
+
+export function setFalloAporte(memberId: string | null): void {
+  falloMemberId = memberId
 }
 
 export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => void {
@@ -182,6 +188,240 @@ function encontrarGastoYBilletera(spendId: string): { wallet: SharedWallet; spen
     if (spend) return { wallet, spend }
   }
   throw new Error('Gasto no encontrado')
+}
+
+function nombreDe(wallet: SharedWallet, memberId: string): string {
+  return wallet.members.find((m) => m.id === memberId)?.name ?? memberId
+}
+
+function repartirIgual(amount: Money, n: number): Money[] {
+  const total = BigInt(amount.value)
+  const base = total / BigInt(n)
+  const resto = Number(total % BigInt(n))
+  return Array.from({ length: n }, (_, i) => ({ ...amount, value: (base + (i < resto ? 1n : 0n)).toString() }))
+}
+
+function montoMayor(a: Money, b: Money): boolean {
+  return BigInt(a.value) > BigInt(b.value)
+}
+
+function normalizarDireccion(addr: string): string {
+  return addr.toLowerCase().replace(/rn/g, 'm').replace(/1/g, 'l').replace(/0/g, 'o')
+}
+
+function distanciaEdicion(a: string, b: string): number {
+  if (a === b) return 0
+  const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [
+    i,
+    ...Array.from({ length: b.length }, () => 0),
+  ])
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + costo)
+    }
+  }
+  return dp[a.length][b.length]
+}
+
+function seParece(candidata: string, conocida: string): boolean {
+  const a = normalizarDireccion(candidata)
+  const b = normalizarDireccion(conocida)
+  return a === b || distanciaEdicion(a, b) <= 2
+}
+
+// Revisión simulada del destino (no es el guardián real: valores propios del mock).
+function revisarDestino(wallet: SharedWallet, walletAddress: string): { risk: number; verdicts: Verdict[] } {
+  if (wallet.knownDestinations.some((d) => d.walletAddress === walletAddress)) {
+    return { risk: 5, verdicts: [] }
+  }
+
+  const parecido = wallet.knownDestinations.find((d) => seParece(walletAddress, d.walletAddress))
+  if (parecido) {
+    return {
+      risk: 94,
+      verdicts: [
+        {
+          check: 'destination',
+          status: 'warn',
+          riskPoints: 94,
+          userMessage: 'Esta cuenta se parece a la de la farmacia que usan siempre, pero no es la misma.',
+          reasons: [`${walletAddress} ≈ ${parecido.walletAddress}`],
+        },
+      ],
+    }
+  }
+
+  return {
+    risk: 45,
+    verdicts: [
+      {
+        check: 'destination',
+        status: 'warn',
+        riskPoints: 45,
+        userMessage: 'Es una cuenta nueva para este grupo.',
+        reasons: [`${walletAddress} no coincide con ningún destino conocido`],
+      },
+    ],
+  }
+}
+
+let contadorGastos = 0
+
+export function requestSpend(walletId: string, destination: Spend['destination'], amount: Money): Spend {
+  const wallet = wallets.find((w) => w.id === walletId)
+  if (!wallet) throw new Error('Billetera no encontrada')
+
+  const activos = wallet.members.filter((m) => m.status === 'active')
+  const partes = repartirIgual(amount, activos.length)
+  const spend: Spend = {
+    id: `s-${Date.now()}-${++contadorGastos}`,
+    walletId,
+    destination,
+    amount,
+    status: 'requested',
+    risk: 0,
+    verdicts: [],
+    approvals: [],
+    shares: activos.map((m, i) => ({ memberId: m.id, share: partes[i], status: 'pending' })),
+    progress: { confirmed: 0, total: activos.length },
+  }
+  spends[walletId] = [...(spends[walletId] ?? []), spend]
+  emitir({
+    walletId,
+    type: 'spend-requested',
+    spendId: spend.id,
+    amount,
+    message: `Se pidió un gasto a ${destination.name}`,
+  })
+
+  const revision = revisarDestino(wallet, destination.walletAddress)
+  spend.risk = revision.risk
+  spend.verdicts = revision.verdicts
+  emitir({
+    walletId,
+    type: 'spend-reviewed',
+    spendId: spend.id,
+    risk: spend.risk,
+    message: revision.verdicts[0]?.userMessage ?? 'Destino conocido.',
+  })
+
+  const regla = wallet.rules.groupApproval
+  if (spend.verdicts.length > 0 || montoMayor(amount, regla.aboveAmount)) {
+    spend.status = 'awaiting-approval'
+  } else {
+    spend.status = 'approved'
+    emitir({ walletId, type: 'spend-approved', spendId: spend.id, message: 'El grupo aprobó el gasto.' })
+  }
+  return structuredClone(spend)
+}
+
+function convertirAEur(montoCop: Money): Money {
+  const pesos = Number(montoCop.value) / 10 ** montoCop.assetScale
+  const centavosEur = Math.round(pesos * 0.00023 * 100)
+  return { value: String(centavosEur), assetCode: 'EUR', assetScale: 2 }
+}
+
+function terminarPago(wallet: SharedWallet, spend: Spend): void {
+  const huboFallos = spend.shares.some((s) => s.status === 'failed')
+  if (huboFallos) {
+    spend.status = 'incomplete'
+    return
+  }
+
+  spend.status = 'paid'
+  emitir({ walletId: wallet.id, type: 'spend-paid', spendId: spend.id, amount: spend.amount, message: 'Gasto verificado' })
+
+  wallet.authorizedCapacity = {
+    ...wallet.authorizedCapacity,
+    value: (BigInt(wallet.authorizedCapacity.value) - BigInt(spend.amount.value)).toString(),
+  }
+  for (const share of spend.shares) {
+    const miembro = wallet.members.find((m) => m.id === share.memberId)
+    if (miembro?.available && share.debit) {
+      miembro.available = {
+        ...miembro.available,
+        value: (BigInt(miembro.available.value) - BigInt(share.debit.value)).toString(),
+      }
+    }
+  }
+  emitir({
+    walletId: wallet.id,
+    type: 'capacity-updated',
+    amount: wallet.authorizedCapacity,
+    message: 'Cupo del grupo actualizado tras el pago.',
+  })
+}
+
+function pagarAportes(wallet: SharedWallet, spend: Spend, shares: Spend['shares']): void {
+  const stepMs = 1500
+  shares.forEach((share, i) => {
+    programar(stepMs * (i + 1), () => {
+      if (share.memberId === falloMemberId) {
+        share.status = 'failed'
+        share.failReason = 'cupo insuficiente'
+        falloMemberId = null
+        emitir({
+          walletId: wallet.id,
+          type: 'share-failed',
+          spendId: spend.id,
+          memberId: share.memberId,
+          amount: share.share,
+          message: `Falló el aporte de ${nombreDe(wallet, share.memberId)}: cupo insuficiente`,
+        })
+      } else {
+        const miembro = wallet.members.find((m) => m.id === share.memberId)
+        share.debit = miembro?.assetCode === 'EUR' ? convertirAEur(share.share) : structuredClone(share.share)
+        share.received = structuredClone(share.share)
+        share.status = 'paid'
+        delete share.failReason
+        emitir({
+          walletId: wallet.id,
+          type: 'share-paid',
+          spendId: spend.id,
+          memberId: share.memberId,
+          amount: share.share,
+          message: `${nombreDe(wallet, share.memberId)} aportó`,
+        })
+      }
+
+      spend.progress = {
+        confirmed: spend.shares.filter((s) => s.status === 'paid').length,
+        total: spend.shares.length,
+      }
+
+      const todosListos = spend.shares.every((s) => s.status === 'paid' || s.status === 'failed')
+      if (todosListos) terminarPago(wallet, spend)
+    })
+  })
+}
+
+export function executeSpend(spendId: string): void {
+  const { wallet, spend } = encontrarGastoYBilletera(spendId)
+  if (spend.status !== 'approved') {
+    throw new Error(`El gasto no está aprobado (estado: ${spend.status})`)
+  }
+  spend.status = 'paying'
+  pagarAportes(wallet, spend, spend.shares.filter((s) => s.status === 'pending'))
+}
+
+export function retryShare(spendId: string): void {
+  const { wallet, spend } = encontrarGastoYBilletera(spendId)
+  if (spend.status !== 'incomplete') {
+    throw new Error(`El gasto no está incompleto (estado: ${spend.status})`)
+  }
+  spend.status = 'paying'
+  const fallidos = spend.shares.filter((s) => s.status === 'failed')
+  fallidos.forEach((s) => {
+    s.status = 'pending'
+    delete s.failReason
+  })
+  spend.progress = {
+    confirmed: spend.shares.filter((s) => s.status === 'paid').length,
+    total: spend.shares.length,
+  }
+  pagarAportes(wallet, spend, fallidos)
 }
 
 // Misma regla de votación que apps/api/src/wallet/engine.ts (castApproval).
