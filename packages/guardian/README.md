@@ -40,6 +40,7 @@ if (v.status === 'block') throw new Error(v.userMessage)
 ```
 
 Ejemplo completo: [`examples/official-snippet.ts`](examples/official-snippet.ts). `grantUri` debe ser la URL exacta usada en `grant.request` (`walletAddress.authServer`).
+En la Test Wallet, `walletAddress.authServer` ya incluye el tenant que Rafiki usa en el hash.
 
 El ejemplo necesita `@interledger/open-payments` instalado (en este repo ya lo trae `apps/api`). La librería no tiene dependencias.
 
