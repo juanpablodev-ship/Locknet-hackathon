@@ -88,6 +88,12 @@ export function normalizeHandle(s: string): string {
 
 export type HandleComparison = "same" | "lookalike" | "different";
 
+export interface ComparisonDetail {
+  result: HandleComparison;
+  /** Una línea legible que dice qué regla disparó. */
+  reason: string;
+}
+
 /** Mismo largo y las únicas diferencias son un dígito por otro dígito. */
 function onlyDigitSwaps(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -97,27 +103,54 @@ function onlyDigitSwaps(a: string, b: string): boolean {
   return true;
 }
 
+const name = (path: string) => path.replace(/^\//, "");
+
 /**
- * Compara un destino candidato con uno conocido.
+ * Compara un destino candidato con uno conocido y explica por qué.
  * - same: host y path idénticos.
  * - lookalike: mismo path con otro host, igual tras normalizar pero distinto
  *   en crudo, o distancia ≤ 2 sobre lo normalizado con longitud ≥ 8.
  * - La excepción de dígitos (hermano_1 vs hermano_2) solo aplica a la regla
  *   de distancia.
  */
-export function compareHandles(candidate: string, known: string): HandleComparison {
+export function explainComparison(candidate: string, known: string): ComparisonDetail {
   const a = parseAddress(candidate);
   const b = parseAddress(known);
 
-  if (a.host === b.host && a.path === b.path) return "same";
-  if (a.host !== b.host && a.path !== "" && a.path === b.path) return "lookalike";
+  if (a.host === b.host && a.path === b.path) {
+    return { result: "same", reason: `${a.host}${a.path} es idéntico al destino conocido` };
+  }
+  if (a.host !== b.host && a.path !== "" && a.path === b.path) {
+    return {
+      result: "lookalike",
+      reason: `mismo nombre en otro servidor: ${a.host} vs ${b.host}`,
+    };
+  }
 
   const na = normalizeHandle(a.path);
   const nb = normalizeHandle(b.path);
-  if (na === nb) return "lookalike";
-
-  if (Math.min(na.length, nb.length) >= 8 && editDistance(na, nb) <= 2) {
-    return onlyDigitSwaps(a.path, b.path) ? "different" : "lookalike";
+  if (na === nb) {
+    return {
+      result: "lookalike",
+      reason: `${name(a.path)} ≈ ${name(b.path)} (iguales tras normalizar)`,
+    };
   }
-  return "different";
+
+  if (Math.min(na.length, nb.length) >= 8) {
+    const distance = editDistance(na, nb);
+    if (distance <= 2) {
+      if (onlyDigitSwaps(a.path, b.path)) {
+        return { result: "different", reason: `${name(a.path)} y ${name(b.path)} solo cambian dígitos` };
+      }
+      return {
+        result: "lookalike",
+        reason: `${name(a.path)} ≈ ${name(b.path)} (distancia de edición ${distance})`,
+      };
+    }
+  }
+  return { result: "different", reason: `${name(a.path)} no se parece a ${name(b.path)}` };
+}
+
+export function compareHandles(candidate: string, known: string): HandleComparison {
+  return explainComparison(candidate, known).result;
 }

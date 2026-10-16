@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareHandles, editDistance, normalizeHandle, parseAddress } from "../src/address.js";
+import { compareHandles, explainComparison, editDistance, normalizeHandle, parseAddress } from "../src/address.js";
 
 describe("parseAddress", () => {
   it("pasa a minúsculas y quita la barra final", () => {
@@ -130,5 +130,20 @@ describe("compareHandles", () => {
 
   it("handles cortos con distancia ≤ 2 → different", () => {
     expect(compareHandles(host + "tienda", host + "tiendas")).toBe("different");
+  });
+});
+
+describe("explainComparison", () => {
+  it("dice la regla que disparó", () => {
+    expect(explainComparison("https://x.dev/farmacia-medel1in", "https://x.dev/farmacia-medellin").reason).toBe(
+      "farmacia-medel1in ≈ farmacia-medellin (iguales tras normalizar)",
+    );
+    expect(explainComparison("https://x.dev/farmacia-medelin", "https://x.dev/farmacia-medellin").reason).toBe(
+      "farmacia-medelin ≈ farmacia-medellin (distancia de edición 1)",
+    );
+  });
+
+  it("no marca lookalike cuando son distintos", () => {
+    expect(explainComparison("https://x.dev/panaderia-centro", "https://x.dev/farmacia-medellin").result).not.toBe("lookalike");
   });
 });
