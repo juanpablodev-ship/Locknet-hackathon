@@ -64,6 +64,39 @@ describe('hash de interacción', () => {
     interactRef: '4IFWWIKYB2PQ6U56NL1', grantUri: 'https://server.example.com/tx',
     hash: 'x-gguKWTj8rQf7d7i3w3UhzvuJ5bpOlKyAlVpLxBffY' }
   it('acepta el vector publicado por GNAP/Open Payments', () => { expect(verifyInteractionHash(vector)).toBe(true) })
+  it('acepta los mismos bytes en Base64 estándar con padding y URL-encoding de Rafiki', () => {
+    const standard = Buffer.from(vector.hash, 'base64url').toString('base64')
+    const encoded = encodeURIComponent(standard)
+    expect(encoded).toContain('%3D')
+    expect(encoded).toContain('%2B')
+    const received = new URLSearchParams(`hash=${encoded}`).get('hash')!
+    expect(received).toBe(standard)
+    expect(verifyInteractionHash({ ...vector, hash: received })).toBe(true)
+    const altered = Buffer.from(standard, 'base64')
+    altered[0] ^= 1
+    expect(verifyInteractionHash({ ...vector, hash: altered.toString('base64') })).toBe(false)
+  })
+  it('rechaza decodificación permisiva, padding incorrecto y alfabetos mezclados', () => {
+    const standard = Buffer.from(vector.hash, 'base64url').toString('base64')
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    const last = alphabet.indexOf(standard[42])
+    const nonCanonical = standard.slice(0, 42) + alphabet[last + 1] + '='
+    expect(Buffer.from(nonCanonical, 'base64').equals(Buffer.from(standard, 'base64'))).toBe(true)
+    for (const hash of [nonCanonical, standard + '=', standard.slice(0, -2),
+      ' ' + standard, standard + '\n', standard.replace('+', '-'),
+      encodeURIComponent(standard), standard.replace('+', ' ')]) {
+      expect(verifyInteractionHash({ ...vector, hash })).toBe(false)
+    }
+  })
+  it('rechaza nonces invertidos, CRLF, salto final y URI distinta sin probar variantes al verificar', () => {
+    const fields = [vector.clientNonce, vector.interactNonce, vector.interactRef, vector.grantUri]
+    for (const base of [fields.join('\r\n'), fields.join('\n') + '\n',
+      [fields[1], fields[0], fields[2], fields[3]].join('\n'),
+      [fields[0], fields[1], fields[2], fields[3] + '/'].join('\n')]) {
+      const hash = createHash('sha256').update(base, 'ascii').digest('base64')
+      expect(verifyInteractionHash({ ...vector, hash })).toBe(false)
+    }
+  })
   it('rechaza cambios en cada elemento y relleno Base64', () => {
     for (const name of ['clientNonce', 'interactNonce', 'interactRef', 'grantUri', 'hash'] as const) {
       expect(verifyInteractionHash({ ...vector, [name]: vector[name] + 'x' })).toBe(false)
@@ -145,9 +178,58 @@ describe('retorno y continuación', () => {
     const second = await startVerification(client, config)
     await expect(finishVerification(client, second, callback(second))).rejects.toThrow()
   })
+  it('acepta callback con Base64 escapado y rechaza hashes de otra solicitud', async () => {
+    const { client } = fixture()
+    const first = await startVerification(client, config)
+    const second = await startVerification(client, config)
+    const valid = callback(first)
+    valid.searchParams.set('hash', Buffer.from(valid.searchParams.get('hash')!, 'base64url').toString('base64'))
+    const parsed = new URL(valid.toString())
+    expect(parsed.toString()).toContain('%3D')
+    const wrong = callback(second)
+    wrong.searchParams.set('state', first.state)
+    await expect(finishVerification(client, first, wrong)).rejects.toThrow('Hash')
+    expect(client.grant.continue).not.toHaveBeenCalled()
+    await expect(finishVerification(client, first, parsed)).resolves.toContain('Permiso confirmado')
+  })
 })
 
 describe('servidor aislado (SDK simulado, sin Test Wallet)', () => {
+  it('no sobrescribe la solicitud al abrir start una segunda vez', async () => {
+    const { client } = fixture()
+    vi.mocked(createAuthenticatedClient).mockResolvedValue(client)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const running = runVerification(config)
+    const rejected = expect(running).rejects.toThrow('detalles sensibles omitidos')
+    await vi.waitFor(() => expect(log).toHaveBeenCalled())
+    const first = await fetch('http://localhost:3344/start', { redirect: 'manual' })
+    expect(first.status).toBe(303)
+    const second = await fetch('http://localhost:3344/start', { redirect: 'manual' })
+    expect(await second.text()).toContain('[interaction-state]')
+    await rejected
+    expect(client.grant.request).toHaveBeenCalledTimes(1)
+    expect(client.grant.continue).not.toHaveBeenCalled()
+  })
+  it('identifica el fallo de solicitud sin filtrar el error original en HTTP o consola', async () => {
+    const { client, pending } = fixture()
+    const sensitive = pending.continue.access_token.value
+    vi.mocked(client.grant.request).mockRejectedValue(new Error(sensitive))
+    vi.mocked(createAuthenticatedClient).mockResolvedValue(client)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const running = runVerification(config)
+    const rejected = expect(running).rejects.toThrow('detalles sensibles omitidos')
+    await vi.waitFor(() => expect(log).toHaveBeenCalled())
+    const response = await fetch('http://localhost:3344/start', { redirect: 'manual' })
+    expect(response.status).toBe(400)
+    const body = await response.text()
+    expect(body).toContain('[grant-request]')
+    expect(body).not.toContain(sensitive)
+    await rejected
+    expect(error).toHaveBeenCalledWith(body)
+    expect(JSON.stringify([log.mock.calls, error.mock.calls])).not.toContain(sensitive)
+  })
   it('sirve redirección y confirma por HTTP sin divulgar tokens', async () => {
     const { client } = fixture()
     vi.mocked(createAuthenticatedClient).mockResolvedValue(client)
@@ -178,4 +260,38 @@ describe('servidor aislado (SDK simulado, sin Test Wallet)', () => {
     try { await expect(runVerification(config)).rejects.toThrow('puerto local') }
     finally { await new Promise<void>(resolve => blocker.close(() => resolve())) }
   })
+})
+
+describe('diagnósticos por etapa sin datos de sesión', () => {
+  it('reporta las etapas de éxito usando solo etiquetas fijas', async () => {
+    const { client } = fixture()
+    const report = vi.fn()
+    const session = await startVerification(client, config, report)
+    expect(report.mock.calls.flat()).toEqual(['wallet-query', 'wallet-response', 'grant-request', 'grant-response'])
+    report.mockClear()
+    await finishVerification(client, session, callback(session), report)
+    expect(report.mock.calls.flat()).toEqual(['callback-state', 'callback-hash', 'continuation-wait',
+      'grant-continuation', 'final-grant', 'final-grant', 'limits-wallet', 'limits-actions',
+      'limits-recipient', 'limits-interval', 'limits-debit'])
+  })
+  it.each(['callback-state', 'callback-hash', 'grant-continuation', 'limits-interval', 'limits-debit'] as const)(
+    'identifica el rechazo en %s sin publicar datos', async expectedStage => {
+      const { client, final } = fixture()
+      const session = await startVerification(client, config)
+      const url = callback(session)
+      const report = vi.fn()
+      if (expectedStage === 'callback-state') url.searchParams.set('state', 'invalid')
+      if (expectedStage === 'callback-hash') url.searchParams.set('hash', 'invalid')
+      if (expectedStage === 'grant-continuation') vi.mocked(client.grant.continue).mockRejectedValue(new Error(session.grant.continue.access_token.value))
+      const item = final.access_token.access[0]
+      if (item.type !== 'outgoing-payment' || !item.limits || !('debitAmount' in item.limits)) throw new Error('fixture inválido')
+      if (expectedStage === 'limits-interval') item.limits.interval = 'other'
+      if (expectedStage === 'limits-debit') item.limits.debitAmount.value = '1'
+      await expect(finishVerification(client, session, url, report)).rejects.toThrow()
+      expect(report).toHaveBeenLastCalledWith(expectedStage)
+      const output = JSON.stringify(report.mock.calls)
+      expect(output).not.toContain(session.state)
+      expect(output).not.toContain(session.clientNonce)
+      expect(output).not.toContain(session.grant.continue.access_token.value)
+    })
 })
