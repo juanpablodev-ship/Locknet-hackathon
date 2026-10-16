@@ -18,7 +18,7 @@ body {
 .contenedor {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px 16px 96px;
   box-sizing: border-box;
 }
 
@@ -235,4 +235,25 @@ body {
   background: #e8f5e9;
   border: 2px solid var(--verde);
   color: var(--verde);
+}
+
+.votante-barra {
+  padding-top: 16px;
+  padding-bottom: 8px;
+}
+
+.votante {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.votante select {
+  padding: 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 20px;
 }
