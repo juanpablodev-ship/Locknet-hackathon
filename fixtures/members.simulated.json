@@ -1,0 +1,10 @@
+{
+  "source": "synthetic",
+  "label": "Modo respaldo — datos simulados, no respuestas grabadas del proveedor",
+  "scenarios": {
+    "active": { "spentDebitAmount": { "value": "100", "assetCode": "COP", "assetScale": 2 }, "spentReceiveAmount": null },
+    "exhausted": { "spentDebitAmount": { "value": "10000", "assetCode": "COP", "assetScale": 2 }, "spentReceiveAmount": null },
+    "newPeriod": { "spentDebitAmount": null, "spentReceiveAmount": null },
+    "providerError": { "status": 503, "message": "Error de proveedor SIMULADO" }
+  }
+}
