@@ -4,11 +4,13 @@ import { cuidadoDeMama } from '../contracts/ejemplo.js'
 import {
   _testEmitir,
   _testProgramar,
+  castApproval,
   getSpends,
   getWallet,
   getWallets,
   onEvents,
   playEscenario1,
+  playEscenario3,
   resetMock,
 } from './api.mock.js'
 
@@ -175,5 +177,120 @@ describe('playEscenario1', () => {
 
     expect(eventos).toHaveLength(1)
     expect(getWallet('w-mama')).toEqual(cuidadoDeMama)
+  })
+})
+
+describe('playEscenario3', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('al instante existe el gasto s-ataque con status requested', () => {
+    playEscenario3()
+
+    const gasto = getSpends('w-mama').find((s) => s.id === 's-ataque')
+    expect(gasto?.status).toBe('requested')
+  })
+
+  it('tras avanzar el reloj queda awaiting-approval con riesgo 94 y el verdict de destino', () => {
+    playEscenario3(1000)
+    vi.advanceTimersByTime(1000)
+
+    const gasto = getSpends('w-mama').find((s) => s.id === 's-ataque')
+    expect(gasto?.status).toBe('awaiting-approval')
+    expect(gasto?.risk).toBe(94)
+    expect(gasto?.verdicts).toEqual([expect.objectContaining({ check: 'destination', status: 'warn' })])
+  })
+
+  it('emite exactamente 2 eventos en orden, el segundo con risk 94', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    playEscenario3(1000)
+    vi.advanceTimersByTime(1000)
+
+    expect(eventos.map((e) => e.type)).toEqual(['spend-requested', 'spend-reviewed'])
+    expect(eventos[1].risk).toBe(94)
+  })
+
+  it('llamarlo dos veces no deja dos gastos s-ataque', () => {
+    playEscenario3()
+    playEscenario3()
+
+    const ataques = getSpends('w-mama').filter((s) => s.id === 's-ataque')
+    expect(ataques).toHaveLength(1)
+  })
+
+  it('resetMock lo elimina', () => {
+    playEscenario3()
+    resetMock()
+
+    const ataques = getSpends('w-mama').filter((s) => s.id === 's-ataque')
+    expect(ataques).toHaveLength(0)
+  })
+})
+
+describe('castApproval', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+    playEscenario3(100)
+    vi.advanceTimersByTime(100)
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('2 votos a favor aprueban el gasto', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    castApproval('s-ataque', 'm-bogota', true)
+    const resultado = castApproval('s-ataque', 'm-medellin', true)
+
+    expect(resultado.status).toBe('approved')
+    expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'approval-cast', 'spend-approved'])
+  })
+
+  it('1 voto en contra no rechaza el gasto', () => {
+    const resultado = castApproval('s-ataque', 'm-bogota', false)
+    expect(resultado.status).toBe('awaiting-approval')
+  })
+
+  it('2 votos en contra rechazan el gasto', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    castApproval('s-ataque', 'm-bogota', false)
+    const resultado = castApproval('s-ataque', 'm-medellin', false)
+
+    expect(resultado.status).toBe('rejected')
+    expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'approval-cast', 'spend-rejected'])
+  })
+
+  it('votar dos veces con el mismo miembro lanza "Ya votó"', () => {
+    castApproval('s-ataque', 'm-bogota', true)
+    expect(() => castApproval('s-ataque', 'm-bogota', true)).toThrow('Ya votó')
+  })
+
+  it('votar sobre un gasto ya rejected lanza el error de estado', () => {
+    castApproval('s-ataque', 'm-bogota', false)
+    castApproval('s-ataque', 'm-medellin', false)
+
+    expect(() => castApproval('s-ataque', 'm-madrid', true)).toThrow(
+      'El gasto no está esperando aprobación (estado: rejected)'
+    )
+  })
+
+  it('votar con un miembro inexistente lanza "No es miembro activo"', () => {
+    expect(() => castApproval('s-ataque', 'm-fantasma', true)).toThrow('No es miembro activo')
   })
 })

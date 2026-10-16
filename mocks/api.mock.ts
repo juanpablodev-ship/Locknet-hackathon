@@ -2,7 +2,7 @@
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
 import type { Money, SharedWallet, Spend, WalletEvent } from '../contracts/index.js'
-import { cuidadoDeMama, medicina } from '../contracts/ejemplo.js'
+import { ataque, cuidadoDeMama, destinoParecido, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
 
@@ -137,4 +137,85 @@ export function playEscenario1(stepMs = 1200): void {
       message: 'Cupo del grupo: $300.000. Nadie depositó nada.',
     })
   })
+}
+
+export function playEscenario3(stepMs = 1200): void {
+  const walletId = 'w-mama'
+
+  const nuevo: Spend = structuredClone(ataque)
+  nuevo.status = 'requested'
+  nuevo.risk = 0
+  nuevo.verdicts = []
+
+  spends[walletId] = [...spends[walletId].filter((s) => s.id !== nuevo.id), nuevo]
+
+  emitir({
+    walletId,
+    type: 'spend-requested',
+    spendId: nuevo.id,
+    amount: nuevo.amount,
+    message: 'Piden un gasto de $120.000 a una cuenta nueva',
+  })
+
+  programar(stepMs, () => {
+    const gasto = spends[walletId].find((s) => s.id === nuevo.id)
+    if (!gasto) return
+
+    gasto.status = 'awaiting-approval'
+    gasto.risk = 94
+    gasto.verdicts = [structuredClone(destinoParecido)]
+    gasto.approvals = []
+
+    emitir({
+      walletId,
+      type: 'spend-reviewed',
+      spendId: gasto.id,
+      risk: 94,
+      message: destinoParecido.userMessage,
+    })
+  })
+}
+
+function encontrarGastoYBilletera(spendId: string): { wallet: SharedWallet; spend: Spend } {
+  for (const wallet of wallets) {
+    const spend = spends[wallet.id]?.find((s) => s.id === spendId)
+    if (spend) return { wallet, spend }
+  }
+  throw new Error('Gasto no encontrado')
+}
+
+// Misma regla de votación que apps/api/src/wallet/engine.ts (castApproval).
+export function castApproval(spendId: string, memberId: string, yes: boolean): Spend {
+  const { wallet, spend } = encontrarGastoYBilletera(spendId)
+
+  if (spend.status !== 'awaiting-approval') {
+    throw new Error(`El gasto no está esperando aprobación (estado: ${spend.status})`)
+  }
+
+  const votantes = wallet.members.filter((m) => m.status === 'active')
+  if (!votantes.some((m) => m.id === memberId)) throw new Error(`No es miembro activo: ${memberId}`)
+  if (spend.approvals.some((a) => a.memberId === memberId)) throw new Error(`Ya votó: ${memberId}`)
+
+  spend.approvals.push({ memberId, yes })
+  emitir({
+    walletId: wallet.id,
+    type: 'approval-cast',
+    spendId,
+    memberId,
+    message: yes ? 'Aprobó el gasto.' : 'Rechazó el gasto.',
+  })
+
+  const required = wallet.rules.groupApproval.approvalsRequired
+  const yesCount = spend.approvals.filter((a) => a.yes).length
+  const pending = votantes.length - spend.approvals.length
+
+  if (yesCount >= required) {
+    spend.status = 'approved'
+    emitir({ walletId: wallet.id, type: 'spend-approved', spendId, message: 'El grupo aprobó el gasto.' })
+  } else if (yesCount + pending < required) {
+    spend.status = 'rejected'
+    emitir({ walletId: wallet.id, type: 'spend-rejected', spendId, message: 'El grupo rechazó el gasto.' })
+  }
+
+  return structuredClone(spend)
 }
