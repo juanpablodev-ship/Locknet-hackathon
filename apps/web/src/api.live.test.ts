@@ -88,6 +88,15 @@ describe('api.ts en modo live', () => {
     expectRequest('https://api.example.test/api/wallets', 'GET')
   })
 
+  it('permite activar live mediante el modo de Vite', async () => {
+    vi.stubEnv('VITE_API_MODE', '')
+    vi.stubEnv('MODE', 'live')
+    vi.resetModules()
+    api = await import('./api.js')
+
+    expect(api.MODO).toBe('live')
+  })
+
   it('rechaza con el mensaje exacto que devuelve la API', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(409, { error: 'Ya votó: m1' }))
 

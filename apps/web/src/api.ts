@@ -4,7 +4,8 @@
 import type { Money, SharedWallet, Spend, WalletEvent } from '../../../contracts/index.js'
 import * as mock from '../../../mocks/api.mock.js'
 
-export const MODO: 'live' | 'mock' = import.meta.env.VITE_API_MODE === 'live' ? 'live' : 'mock'
+export const MODO: 'live' | 'mock' =
+  import.meta.env.VITE_API_MODE === 'live' || import.meta.env.MODE === 'live' ? 'live' : 'mock'
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
 async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<T> {
