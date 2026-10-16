@@ -119,6 +119,12 @@ body {
   cursor: pointer;
 }
 
+.interruptor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .sello {
   display: inline-block;
   margin: 0 0 16px;

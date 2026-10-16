@@ -3,12 +3,16 @@ import { parseHash, type Route } from './router.js'
 import {
   MODO,
   castApproval,
+  executeSpend,
   getSpend,
   getWallet,
   onEvents,
   playEscenario1,
   playEscenario3,
-  resetMock
+  requestSpend,
+  resetMock,
+  retryShare,
+  setFalloAporte
 } from './api.js'
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
@@ -37,8 +41,13 @@ function panelDevHtml(): string {
     <div class="panel-dev">
       <span>Modo respaldo</span>
       <button type="button" data-accion="escenario1">Escenario 1</button>
+      <button type="button" data-accion="escenario2">Escenario 2</button>
       <button type="button" data-accion="escenario3">Escenario 3</button>
       <button type="button" data-accion="reiniciar">Reiniciar</button>
+      <label class="interruptor">
+        <input type="checkbox" id="falla-madrid" />
+        Que falle Madrid
+      </label>
     </div>
   `
 }
@@ -52,6 +61,11 @@ function enlazarPanelDev(): void {
     if (accion === 'escenario1') {
       playEscenario1()
       navegarA('#/inicio')
+    } else if (accion === 'escenario2') {
+      const wallet = getWallet('w-mama')
+      const farmacia = wallet.knownDestinations[0]
+      const spend = requestSpend('w-mama', farmacia, { value: '12000000', assetCode: 'COP', assetScale: 2 })
+      navegarA(`#/gasto/${spend.id}`)
     } else if (accion === 'escenario3') {
       playEscenario3()
       navegarA('#/gasto/s-ataque')
@@ -59,6 +73,11 @@ function enlazarPanelDev(): void {
       resetMock()
       navegarA('#/inicio')
     }
+  })
+
+  const interruptor = document.getElementById('falla-madrid') as HTMLInputElement | null
+  interruptor?.addEventListener('change', () => {
+    setFalloAporte(interruptor.checked ? 'm-madrid' : null)
   })
 }
 
@@ -118,16 +137,23 @@ function pintarGasto(id: string): void {
 
   app.querySelector('.acciones')?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
-    if (!boton || !votaComoActual) return
+    if (!boton) return
     const accion = boton.dataset.accion
     const spendId = boton.dataset.spend
-    if (!spendId || (accion !== 'aprobar' && accion !== 'rechazar')) return
+    if (!spendId) return
 
     try {
-      castApproval(spendId, votaComoActual, accion === 'aprobar')
+      if (accion === 'aprobar' || accion === 'rechazar') {
+        if (!votaComoActual) return
+        castApproval(spendId, votaComoActual, accion === 'aprobar')
+      } else if (accion === 'pagar') {
+        executeSpend(spendId)
+      } else if (accion === 'reintentar') {
+        retryShare(spendId)
+      }
     } catch (err) {
       const mensaje = document.getElementById('mensaje')
-      if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo registrar el voto.'
+      if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo completar la acción.'
     }
   })
 
@@ -142,7 +168,15 @@ function tryGetSpend(id: string) {
   }
 }
 
-const EVENTOS_GASTO = ['spend-reviewed', 'approval-cast', 'spend-approved', 'spend-rejected']
+const EVENTOS_GASTO = new Set([
+  'spend-reviewed',
+  'approval-cast',
+  'spend-approved',
+  'spend-rejected',
+  'share-paid',
+  'share-failed',
+  'spend-paid'
+])
 
 function render(): void {
   desuscribir?.()
@@ -167,7 +201,7 @@ function render(): void {
     const spend = tryGetSpend(route.id)
     if (spend) {
       desuscribir = onEvents(spend.walletId, (e) => {
-        if (EVENTOS_GASTO.includes(e.type) && e.spendId === route.id) {
+        if (e.type === 'capacity-updated' || (EVENTOS_GASTO.has(e.type) && e.spendId === route.id)) {
           pintarGasto(route.id)
         }
       })
