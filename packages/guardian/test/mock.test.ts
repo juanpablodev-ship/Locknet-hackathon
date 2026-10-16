@@ -21,12 +21,12 @@ describe('guardianMock', () => {
     expect([v.status, v.riskPoints]).toEqual(['warn', 94])
   })
 
-  it('checkQuote: comisión de 30% → block; sin comisión → pass', () => {
-    expect(guardianMock.checkQuote({ debitAmount: cop(130), receiveAmount: cop(100), maxFeePercent: 20 }).status).toBe('block')
-    expect(guardianMock.checkQuote({ debitAmount: cop(100), receiveAmount: cop(100), maxFeePercent: 20 }).status).toBe('pass')
+  it('checkQuote es el real: 23% con maxFee 5 → block; sin comisión → pass', () => {
+    expect(guardianMock.checkQuote({ debitAmount: cop(123), receiveAmount: cop(100), maxFeePercent: 5 }).userMessage).toContain('23%')
+    expect(guardianMock.checkQuote({ debitAmount: cop(100), receiveAmount: cop(100), maxFeePercent: 5 }).status).toBe('pass')
   })
 
-  it('reconcile: llegó menos → warn; llegó todo → pass', () => {
+  it('reconcile es el real: llegó menos → warn; llegó todo → pass', () => {
     expect(guardianMock.reconcile({ expected: cop(100), received: cop(99) }).status).toBe('warn')
     expect(guardianMock.reconcile({ expected: cop(100), received: cop(100) }).status).toBe('pass')
   })
