@@ -45,6 +45,88 @@ async function begin(f: ReturnType<typeof setup>, encoding: 'base64' | 'base64ur
   return { result, p: { state, interactRef, hash }, finish }
 }
 
+async function beginSpecific() {
+  const f = setup(); const joined = await begin(f); const { member } = await f.service.finishJoin(joined.p)
+  const debit = { ...member.cap, value: '125' }
+  const receiver = 'https://receiver.example/incoming-payments/example'
+  await f.service.startWalletConfirm(member.id, { incomingPaymentUrl: receiver, debit })
+  const finish = f.request.mock.calls[1][1].interact!.finish!
+  const interactRef = randomBytes(16).toString('hex')
+  const p = { state: new URL(finish.uri).searchParams.get('state')!, interactRef,
+    hash: createHash('sha256').update([finish.nonce, f.pending.interact.finish, interactRef, f.wallet.authServer].join('\n')).digest('base64') }
+  const specific = structuredClone(f.final)
+  specific.access_token.value = randomBytes(32).toString('hex')
+  specific.continue = { uri: 'https://auth.example/specific', access_token: { value: randomBytes(32).toString('hex') } }
+  const access = specific.access_token.access[0]
+  if (access.type !== 'outgoing-payment') throw new Error('fixture inválido')
+  access.limits = { receiver, debitAmount: debit }
+  f.continuation.mockResolvedValue(specific)
+  f.continuation.mockClear()
+  return { ...f, memberId: member.id, debit, receiver, specific, p }
+}
+
+describe('P2: concesión independiente con destinatario fijo; guardián real y SDK simulado', () => {
+  it('solicita receiver y monto exactos sin intervalo, verifica hash y no reutiliza el token mensual', async () => {
+    const f = await beginSpecific()
+    expect(f.request.mock.calls[1][1].access_token).toEqual({ access: [{ type: 'outgoing-payment', identifier: f.wallet.id,
+      actions: ['read', 'create'], limits: { receiver: f.receiver, debitAmount: f.debit } }] })
+    const verify = vi.spyOn(guardian, 'verifyInteractionHash')
+    const result = await f.service.finishWalletConfirm(f.p)
+    expect(result).toMatchObject({ memberId: f.memberId, approved: true, token: f.specific.access_token.value, hashVerdict: { status: 'pass' } })
+    expect(result.token).not.toBe(f.final.access_token.value)
+    expect(verify.mock.invocationCallOrder[0]).toBeLessThan(f.continuation.mock.invocationCallOrder[0])
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+    expect(f.continuation).toHaveBeenCalledTimes(1)
+    await f.service.revoke(f.memberId)
+    expect(f.cancel.mock.calls.map(call => call[0].url)).toEqual([f.specific.continue.uri, f.final.continue.uri])
+  })
+  it.each(['hash', 'session', 'expired', 'revoked'] as const)('rechaza %s sin continuar la concesión', async failure => {
+    const f = await beginSpecific()
+    if (failure === 'hash') { const bytes = Buffer.from(f.p.hash, 'base64'); bytes[0] ^= 1; f.p.hash = bytes.toString('base64') }
+    if (failure === 'session') f.session.current = 'other'
+    if (failure === 'expired') f.session.time += 600_001
+    if (failure === 'revoked') await f.service.revoke(f.memberId)
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+    expect(f.continuation).not.toHaveBeenCalled()
+  })
+  it.each(['receiver', 'amount', 'interval', 'monthly-token', 'provider'] as const)('rechaza resultado %s y no devuelve aprobación', async failure => {
+    const f = await beginSpecific(); const access = f.specific.access_token.access[0]
+    if (access.type !== 'outgoing-payment' || !access.limits || !('debitAmount' in access.limits)) throw new Error('fixture inválido')
+    if (failure === 'receiver') access.limits.receiver = 'https://receiver.example/incoming-payments/other'
+    if (failure === 'amount') access.limits.debitAmount.value = '126'
+    if (failure === 'interval') access.limits.interval = f.member.interval
+    if (failure === 'monthly-token') f.specific.access_token.value = f.final.access_token.value
+    if (failure === 'provider') f.continuation.mockRejectedValue(new Error('synthetic'))
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow('confirmar')
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+  })
+  it('rechaza destinatarios inválidos, miembro desconocido y solicitudes pendientes sin otro grant', async () => {
+    const f = await beginSpecific()
+    await expect(f.service.startWalletConfirm(f.memberId, { incomingPaymentUrl: f.receiver, debit: f.debit })).rejects.toThrow('pendiente')
+    await expect(f.service.startWalletConfirm(f.memberId, { incomingPaymentUrl: 'http://example.invalid', debit: f.debit })).rejects.toThrow()
+    await expect(f.service.startWalletConfirm('missing', { incomingPaymentUrl: f.receiver, debit: f.debit })).rejects.toThrow()
+    expect(f.request).toHaveBeenCalledTimes(2)
+  })
+  it('un callback concurrente no duplica la continuación específica', async () => {
+    const f = await beginSpecific()
+    let release!: (grant: GrantWithAccessToken) => void
+    f.continuation.mockReturnValue(new Promise(resolve => { release = resolve }))
+    const first = f.service.finishWalletConfirm(f.p)
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+    expect(f.continuation).toHaveBeenCalledTimes(1)
+    release(f.specific)
+    await expect(first).resolves.toMatchObject({ approved: true })
+  })
+  it('si falla la cancelación mensual después de cancelar P2, reintenta solo lo pendiente', async () => {
+    const f = await beginSpecific(); await f.service.finishWalletConfirm(f.p)
+    f.cancel.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('synthetic'))
+    await expect(f.service.revoke(f.memberId)).rejects.toThrow('local bloqueado')
+    await expect(f.service.tokenFor(f.memberId)).rejects.toThrow('no utilizable')
+    await f.service.revoke(f.memberId)
+    expect(f.cancel.mock.calls.map(call => call[0].url)).toEqual([f.specific.continue.uri, f.final.continue.uri, f.final.continue.uri])
+  })
+})
+
 describe('unión con Open Sentinels real', () => {
   it.each(['base64', 'base64url'] as const)('startJoin → finishJoin valida %s y activa solo tras continuar', async encoding => {
     const f = setup()

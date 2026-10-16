@@ -5,9 +5,12 @@ import type { startVerification } from './verify-outgoing-grant'
 type RecordEntry = {
   walletId: string; member: Member; grant?: GrantWithAccessToken; wallet: WalletAddress
   tokenExpiresAt: number; unavailable?: boolean; revoking?: Promise<void>
+  specificGrants?: GrantWithAccessToken[]; revocationRemaining?: GrantWithAccessToken[]
 }
 type State = {
   epoch: number; records: Map<string, RecordEntry>; starting: Set<string>
+  confirming: Set<string>
+  confirmations: Map<string, { memberId: string; sessionId: string; interaction: Awaited<ReturnType<typeof startVerification>>; expiresAt: number }>
   pending: Map<string, { walletId: string; member: Omit<Member, 'id' | 'status'>;
     interaction: Awaited<ReturnType<typeof startVerification>>; expiresAt: number; sessionId: string }>
 }
@@ -16,7 +19,7 @@ const states = new WeakMap<object, State>()
 /** Handle sin secretos serializables. Compartir UNO entre R2 y las sesiones de R3. */
 export function createMembersStore() {
   const store = Object.freeze({ kind: 'members-memory' as const })
-  states.set(store, { epoch: 0, records: new Map(), pending: new Map(), starting: new Set() })
+  states.set(store, { epoch: 0, records: new Map(), pending: new Map(), starting: new Set(), confirming: new Set(), confirmations: new Map() })
   return store
 }
 export type MembersStore = ReturnType<typeof createMembersStore>
@@ -34,7 +37,7 @@ export function listMembers(store: MembersStore): Member[] {
 export function resetMembersStore(store: MembersStore): void {
   const state = membersState(store)
   state.epoch++
-  state.records.clear(); state.pending.clear(); state.starting.clear()
+  state.records.clear(); state.pending.clear(); state.starting.clear(); state.confirming.clear(); state.confirmations.clear()
 }
 
 /** Alcance explícito: R[n]/UTC/P1D o P1M; mensual con día 1–28, sin ambigüedad de fin de mes. */
@@ -110,15 +113,20 @@ export function createMemberOperations(client: Pick<AuthenticatedClient, 'grant'
       if (entry.revoking) return entry.revoking
       if (!entry.grant?.continue.uri || !entry.grant.continue.access_token.value) throw new Error('Gestión de concesión no disponible')
       entry.unavailable = true // No entregar tokens mientras hay incertidumbre de revocación.
-      const continuation = entry.grant.continue
-      if (new URL(continuation.uri).protocol !== 'https:') throw new Error('URI de gestión inválida')
+      entry.revocationRemaining ??= [...(entry.specificGrants ?? []), entry.grant]
       entry.revoking = Promise.resolve().then(async () => {
         try {
           // Fuente: https://openpayments.dev/sdk/grant-revoke/ (datos de continue, no access_token.manage).
-          await client.grant.cancel({ url: continuation.uri, accessToken: continuation.access_token.value })
+          while (entry.revocationRemaining!.length) {
+            const continuation = entry.revocationRemaining![0].continue
+            if (new URL(continuation.uri).protocol !== 'https:') throw new Error('URI de gestión inválida')
+            await client.grant.cancel({ url: continuation.uri, accessToken: continuation.access_token.value })
+            entry.revocationRemaining!.shift()
+          }
           entry.member.status = 'revoked'
           entry.member.available = { ...entry.member.cap, value: '0' }
           entry.grant = undefined
+          entry.specificGrants = undefined; entry.revocationRemaining = undefined
         } catch { throw new Error('No se pudo confirmar la revocación; permiso local bloqueado') }
         finally { entry.revoking = undefined }
       })

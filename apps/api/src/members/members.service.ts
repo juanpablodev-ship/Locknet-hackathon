@@ -5,8 +5,7 @@ import { guardian } from '../../../../packages/guardian/src/index.js'
 import { finishGrantInteraction, startVerification } from './verify-outgoing-grant'
 import { createMemberOperations, createMembersStore, membersState, permissionPeriod, type MembersStore } from './member-operations'
 
-// Firmas compartidas sin copiar ni ampliar MembersService. Las demás operaciones
-// del contrato quedan para otra tarea; no se proporcionan implementaciones falsas.
+// Implementación del contrato compartido. Las concesiones solo viven en el servidor.
 export function createMembersJoinService(client: Pick<AuthenticatedClient, 'walletAddress' | 'grant' | 'outgoingPayment'>, options: {
   finishUri: string
   policy: { maxCap: Money }
@@ -14,7 +13,7 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
   currentSessionId: () => string | undefined
   now?: () => number
   store?: MembersStore
-}): Pick<MembersService, 'startJoin' | 'finishJoin' | 'tokenFor' | 'available' | 'revoke'> {
+}): MembersService {
   const callback = new URL(options.finishUri)
   if ((callback.protocol !== 'https:' && !(callback.protocol === 'http:' && callback.hostname === 'localhost')) ||
       callback.username || callback.password || callback.search || callback.hash || !options.sessionId) {
@@ -92,6 +91,59 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
       } catch {
         throw new Error('No se pudo confirmar la unión')
       }
+    },
+
+    async startWalletConfirm(memberId, request) {
+      const entry = state.records.get(memberId)
+      if (currentSessionId() !== sessionId || !entry || entry.member.status !== 'active' || !entry.grant ||
+          entry.unavailable || entry.revoking || now() >= entry.tokenExpiresAt) throw new Error('Miembro o sesión no utilizable')
+      permissionPeriod(entry.member.interval, now())
+      const input = structuredClone(request)
+      const receiver = new URL(input.incomingPaymentUrl)
+      // Fuente: esquema oficial incluido en SDK 7.4.0, auth-server.yaml,
+      // components.schemas.receiver y limits-outgoing; base grant-outgoing-payment.ts.
+      if (receiver.protocol !== 'https:' || receiver.username || receiver.password || receiver.search || receiver.hash ||
+          !/\/incoming-payments\/[^/]+$/.test(receiver.pathname) || !/^[1-9]\d*$/.test(input.debit.value) ||
+          input.debit.assetCode !== entry.member.cap.assetCode || input.debit.assetScale !== entry.member.cap.assetScale) {
+        throw new Error('Permiso específico inválido')
+      }
+      for (const [key, value] of state.confirmations) if (value.expiresAt <= now()) state.confirmations.delete(key)
+      if (state.confirming.has(memberId) || [...state.confirmations.values()].some(value => value.memberId === memberId)) {
+        throw new Error('Ya existe una confirmación pendiente')
+      }
+      const epoch = state.epoch
+      state.confirming.add(memberId)
+      try {
+        const interaction = await startVerification(client, { memberUrl: entry.member.walletAddress, cap: input.debit.value,
+          expectedDebit: input.debit, receiver: input.incomingPaymentUrl, finishUri: callback.toString() })
+        if (state.epoch !== epoch || currentSessionId() !== sessionId || entry.unavailable || state.records.get(memberId) !== entry) throw new Error('Sesión inválida')
+        state.confirmations.set(interaction.state, { memberId, sessionId, interaction, expiresAt: now() + 600_000 })
+        return { redirectUrl: interaction.grant.interact.redirect }
+      } catch { throw new Error('No se pudo iniciar la confirmación específica') }
+      finally { if (state.epoch === epoch) state.confirming.delete(memberId) }
+    },
+
+    async finishWalletConfirm(p) {
+      const pending = state.confirmations.get(p.state)
+      if (currentSessionId() !== sessionId || !pending || pending.sessionId !== sessionId) throw new Error('Confirmación inexistente o sesión inválida')
+      state.confirmations.delete(p.state)
+      const epoch = state.epoch
+      const entry = state.records.get(pending.memberId)
+      const valid = () => {
+        try { permissionPeriod(entry?.member.interval, now()) } catch { return false }
+        return state.epoch === epoch && currentSessionId() === sessionId && pending.expiresAt > now() &&
+        !!entry && state.records.get(pending.memberId) === entry && entry.member.status === 'active' &&
+        !entry.unavailable && !entry.revoking && now() < entry.tokenExpiresAt
+      }
+      if (!valid()) throw new Error('Confirmación vencida o permiso no utilizable')
+      try {
+        const { grant, hashVerdict } = await finishGrantInteraction(client, pending.interaction, p, undefined, valid)
+        if (!valid() || (grant.access_token.expires_in !== undefined && (!Number.isFinite(grant.access_token.expires_in) || grant.access_token.expires_in <= 0))) throw new Error('Permiso no utilizable')
+        if (grant.access_token.value === entry!.grant!.access_token.value) throw new Error('Se esperaba una concesión independiente')
+        entry!.specificGrants ??= []; entry!.specificGrants.push(grant)
+        // Contrato: token solo para el consumidor servidor R2. R3 DEBE omitirlo en HTTP/SSE.
+        return { memberId: pending.memberId, approved: true, token: grant.access_token.value, hashVerdict }
+      } catch { throw new Error('No se pudo confirmar el permiso específico') }
     },
   }
 }

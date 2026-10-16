@@ -46,8 +46,8 @@ export function verifyInteractionHash(p: Parameters<Guardian['verifyInteractionH
   return guardian.verifyInteractionHash(p).status === 'pass'
 }
 
-export async function startVerification(client: Client, config: Pick<ReturnType<typeof readConfig>, 'memberUrl' | 'cap' | 'interval'> & {
-  port?: number; finishUri?: string; expectedDebit?: Money
+export async function startVerification(client: Client, config: Pick<ReturnType<typeof readConfig>, 'memberUrl' | 'cap'> & {
+  interval?: string; receiver?: string; port?: number; finishUri?: string; expectedDebit?: Money
 }, report?: ReportStage) {
   report?.('wallet-query')
   const wallet = await client.walletAddress.get({ url: config.memberUrl })
@@ -70,7 +70,8 @@ export async function startVerification(client: Client, config: Pick<ReturnType<
   const grant = await client.grant.request({ url: grantUri }, {
     access_token: { access: [{
       identifier: wallet.id, type: 'outgoing-payment', actions: ['read', 'create'],
-      limits: { debitAmount, interval: config.interval },
+      limits: { debitAmount, ...(config.interval === undefined ? {} : { interval: config.interval }),
+        ...(config.receiver === undefined ? {} : { receiver: config.receiver }) },
     }] },
     interact: { start: ['redirect'], finish: {
       method: 'redirect', uri: finishUri.toString(), nonce: clientNonce,
@@ -81,11 +82,11 @@ export async function startVerification(client: Client, config: Pick<ReturnType<
       new URL(grant.interact.redirect).protocol !== 'https:' || new URL(grant.continue.uri).protocol !== 'https:') {
     throw new Error('Se esperaba una concesión interactiva segura')
   }
-  return { grant, grantUri, wallet, debitAmount, interval: config.interval, clientNonce, state,
+  return { grant, grantUri, wallet, debitAmount, interval: config.interval, receiver: config.receiver, clientNonce, state,
     requestedAt: Date.now(), consumed: false }
 }
 
-export function confirmLimits(grant: Grant, wallet: WalletAddress, debit: Money, interval: string, report?: ReportStage): boolean {
+export function confirmLimits(grant: Grant, wallet: WalletAddress, debit: Money, interval: string | undefined, report?: ReportStage, receiver?: string): boolean {
   report?.('final-grant')
   if (!isFinalizedGrantWithAccessToken(grant) || !grant.access_token.value || grant.access_token.access.length !== 1) return false
   const access = grant.access_token.access[0]
@@ -96,9 +97,9 @@ export function confirmLimits(grant: Grant, wallet: WalletAddress, debit: Money,
   report?.('limits-actions')
   if (access.actions.length !== 2 || !access.actions.includes('read') || !access.actions.includes('create')) return false
   report?.('limits-recipient')
-  if (!limits || 'receiver' in limits) return false
+  if (!limits || (receiver === undefined ? 'receiver' in limits : limits.receiver !== receiver)) return false
   report?.('limits-interval')
-  if (limits.interval !== interval) return false
+  if (interval === undefined ? 'interval' in limits : limits.interval !== interval) return false
   report?.('limits-debit')
   return 'debitAmount' in limits && limits.debitAmount.value === debit.value &&
     limits.debitAmount.assetCode === debit.assetCode && limits.debitAmount.assetScale === debit.assetScale
@@ -142,7 +143,7 @@ export async function finishGrantInteraction(client: Client, session: Awaited<Re
     url: session.grant.continue.uri, accessToken: session.grant.continue.access_token.value,
   }, { interact_ref: p.interactRef })
   report?.('final-grant')
-  if (!isFinalizedGrantWithAccessToken(grant) || !confirmLimits(grant, session.wallet, session.debitAmount, session.interval, report)) {
+  if (!isFinalizedGrantWithAccessToken(grant) || !confirmLimits(grant, session.wallet, session.debitAmount, session.interval, report, session.receiver)) {
     throw new Error('La concesión no confirmó exactamente el permiso solicitado')
   }
   return { grant, hashVerdict }
