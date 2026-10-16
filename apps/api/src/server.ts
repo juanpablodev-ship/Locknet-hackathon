@@ -51,7 +51,11 @@ export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: n
     next()
   })
 
+  app.get('/api/wallets', wrap((_req, res) => res.json(engine.listWallets())))
+
   app.get('/api/wallets/:id', wrap((req, res) => res.json(engine.getWallet(req.params.id))))
+
+  app.get('/api/spends/:id', wrap((req, res) => res.json(engine.getSpend(req.params.id))))
 
   app.get('/api/wallets/:id/spends', wrap((req, res) => {
     engine.getWallet(req.params.id)
