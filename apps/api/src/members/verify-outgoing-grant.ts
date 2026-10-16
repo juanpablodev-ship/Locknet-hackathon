@@ -10,6 +10,11 @@ import type { Guardian, Money } from '../../../../contracts/index'
 // Experimento R1; no implementa MembersService ni sustituye al guardián de R5.
 // API: https://openpayments.dev/guides/outgoing-grant-future-payments/
 type Client = Pick<AuthenticatedClient, 'walletAddress' | 'grant'>
+type Stage = 'wallet-query' | 'wallet-response' | 'grant-request' | 'grant-response'
+  | 'callback-state' | 'callback-hash' | 'continuation-wait' | 'grant-continuation'
+  | 'final-grant' | 'limits-wallet' | 'limits-actions' | 'limits-recipient'
+  | 'limits-interval' | 'limits-debit' | 'interaction-state'
+type ReportStage = (stage: Stage) => void
 
 export function readConfig(env: NodeJS.ProcessEnv) {
   for (const name of ['WALLET_ADDRESS', 'KEY_ID', 'PRIVATE_KEY_PATH', 'MEMBER_WALLET_ADDRESS', 'MEMBER_CAP', 'MEMBER_INTERVAL']) {
@@ -37,15 +42,25 @@ export function readConfig(env: NodeJS.ProcessEnv) {
 }
 
 export function verifyInteractionHash(p: Parameters<Guardian['verifyInteractionHash']>[0]): boolean {
-  // RFC 9635 §4.2.3: LF, ASCII, SHA-256, Base64URL sin relleno.
+  // Un único digest: RFC 9635 §4.2.3. Rafiki también lo representa en Base64
+  // estándar con padding (interaction/routes.ts, revisión 68c11dc32742127).
   const fields = [p.clientNonce, p.interactNonce, p.interactRef, p.grantUri]
-  if (fields.some(value => !/^[\x21-\x7e]+$/.test(value)) || !/^[A-Za-z0-9_-]{43}$/.test(p.hash)) return false
-  const expected = createHash('sha256').update(fields.join('\n'), 'ascii').digest('base64url')
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(p.hash))
+  if (fields.some(value => !/^[\x21-\x7e]+$/.test(value))) return false
+  const encoding = /^[A-Za-z0-9_-]{43}$/.test(p.hash) ? 'base64url'
+    : /^[A-Za-z0-9+/]{43}=$/.test(p.hash) ? 'base64' : undefined
+  if (!encoding) return false
+  const received = Buffer.from(p.hash, encoding)
+  // Buffer.from es permisivo: exigir longitud y round-trip canónico evita
+  // relleno inválido, bits de padding no nulos y mezclas de alfabetos.
+  if (received.length !== 32 || received.toString(encoding) !== p.hash) return false
+  const expected = createHash('sha256').update(fields.join('\n'), 'ascii').digest()
+  return timingSafeEqual(expected, received)
 }
 
-export async function startVerification(client: Client, config: ReturnType<typeof readConfig>) {
+export async function startVerification(client: Client, config: ReturnType<typeof readConfig>, report?: ReportStage) {
+  report?.('wallet-query')
   const wallet = await client.walletAddress.get({ url: config.memberUrl })
+  report?.('wallet-response')
   if (!Number.isInteger(wallet.assetScale) || wallet.assetScale < 0 || !wallet.assetCode) {
     throw new Error('La wallet no devolvió una moneda válida')
   }
@@ -54,6 +69,7 @@ export async function startVerification(client: Client, config: ReturnType<typeo
   const clientNonce = randomBytes(32).toString('base64url')
   const state = randomBytes(32).toString('base64url')
   const debitAmount: Money = { value: config.cap, assetCode: wallet.assetCode, assetScale: wallet.assetScale }
+  report?.('grant-request')
   const grant = await client.grant.request({ url: grantUri }, {
     access_token: { access: [{
       identifier: wallet.id, type: 'outgoing-payment', actions: ['read', 'create'],
@@ -63,6 +79,7 @@ export async function startVerification(client: Client, config: ReturnType<typeo
       method: 'redirect', uri: `http://localhost:${config.port}/finish?state=${state}`, nonce: clientNonce,
     } },
   })
+  report?.('grant-response')
   if (!isPendingGrant(grant) || !grant.interact.finish || !grant.continue.access_token.value ||
       new URL(grant.interact.redirect).protocol !== 'https:' || new URL(grant.continue.uri).protocol !== 'https:') {
     throw new Error('Se esperaba una concesión interactiva segura')
@@ -71,36 +88,49 @@ export async function startVerification(client: Client, config: ReturnType<typeo
     requestedAt: Date.now(), consumed: false }
 }
 
-export function confirmLimits(grant: Grant, wallet: WalletAddress, debit: Money, interval: string): boolean {
+export function confirmLimits(grant: Grant, wallet: WalletAddress, debit: Money, interval: string, report?: ReportStage): boolean {
+  report?.('final-grant')
   if (!isFinalizedGrantWithAccessToken(grant) || !grant.access_token.value || grant.access_token.access.length !== 1) return false
   const access = grant.access_token.access[0]
   if (access.type !== 'outgoing-payment') return false
   const limits = access.limits
-  return access.identifier === wallet.id && access.actions.length === 2 &&
-    access.actions.includes('read') && access.actions.includes('create') &&
-    !!limits && !('receiver' in limits) && limits.interval === interval &&
-    'debitAmount' in limits && limits.debitAmount.value === debit.value &&
+  report?.('limits-wallet')
+  if (access.identifier !== wallet.id) return false
+  report?.('limits-actions')
+  if (access.actions.length !== 2 || !access.actions.includes('read') || !access.actions.includes('create')) return false
+  report?.('limits-recipient')
+  if (!limits || 'receiver' in limits) return false
+  report?.('limits-interval')
+  if (limits.interval !== interval) return false
+  report?.('limits-debit')
+  return 'debitAmount' in limits && limits.debitAmount.value === debit.value &&
     limits.debitAmount.assetCode === debit.assetCode && limits.debitAmount.assetScale === debit.assetScale
 }
 
-export async function finishVerification(client: Client, session: Awaited<ReturnType<typeof startVerification>>, url: URL) {
+export async function finishVerification(client: Client, session: Awaited<ReturnType<typeof startVerification>>, url: URL, report?: ReportStage) {
+  report?.('callback-state')
   if (session.consumed || Date.now() - session.requestedAt > 600_000 || url.pathname !== '/finish' ||
       ['state', 'hash', 'interact_ref'].some(name => url.searchParams.getAll(name).length !== 1) ||
-      url.searchParams.get('state') !== session.state || !verifyInteractionHash({
+      url.searchParams.get('state') !== session.state) throw new Error('Retorno inválido, vencido o ya utilizado')
+  report?.('callback-hash')
+  if (!verifyInteractionHash({
         clientNonce: session.clientNonce, interactNonce: session.grant.interact.finish,
         interactRef: url.searchParams.get('interact_ref')!, grantUri: session.grantUri,
         hash: url.searchParams.get('hash')!,
-      })) throw new Error('Retorno inválido, vencido o ya utilizado')
+      })) throw new Error('Hash de interacción inválido')
   // Consumir antes del await impide continuaciones concurrentes/repetidas.
   session.consumed = true
+  report?.('continuation-wait')
   const wait = session.grant.continue.wait ?? 0
   const remaining = session.requestedAt + wait * 1000 - Date.now()
   if (!Number.isFinite(remaining) || remaining > 600_000) throw new Error('Espera de continuación fuera del experimento')
   if (remaining > 0) await delay(remaining)
+  report?.('grant-continuation')
   const grant = await client.grant.continue({
     url: session.grant.continue.uri, accessToken: session.grant.continue.access_token.value,
   }, { interact_ref: url.searchParams.get('interact_ref')! })
-  if (!isFinalizedGrantWithAccessToken(grant) || !confirmLimits(grant, session.wallet, session.debitAmount, session.interval)) {
+  report?.('final-grant')
+  if (!isFinalizedGrantWithAccessToken(grant) || !confirmLimits(grant, session.wallet, session.debitAmount, session.interval, report)) {
     throw new Error('La concesión no confirmó exactamente el permiso solicitado')
   }
   // El token se descarta al salir: no se imprime, persiste ni devuelve al navegador.
@@ -114,6 +144,8 @@ export async function runVerification(config: ReturnType<typeof readConfig>) {
   })
   let session: Awaited<ReturnType<typeof startVerification>> | undefined
   let busy = false
+  let stage: Stage = 'interaction-state'
+  const report: ReportStage = value => { stage = value }
   await new Promise<void>((resolve, reject) => {
     const server = createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'no-store')
@@ -130,13 +162,14 @@ export async function runVerification(config: ReturnType<typeof readConfig>) {
       if (url.pathname !== '/start' && url.pathname !== '/finish') { res.writeHead(404).end(); return }
       busy = true
       try {
+        report('interaction-state')
         if (url.pathname === '/start') {
           if (session) throw new Error('Interacción ya iniciada')
-          session = await startVerification(client, config)
+          session = await startVerification(client, config, report)
           res.writeHead(303, { Location: session.grant.interact.redirect }).end()
         } else {
           if (!session) throw new Error('No hay interacción pendiente')
-          const result = await finishVerification(client, session, url)
+          const result = await finishVerification(client, session, url, report)
           res.end(result)
           console.log(result)
           clearTimeout(timeout)
@@ -144,7 +177,9 @@ export async function runVerification(config: ReturnType<typeof readConfig>) {
         }
       } catch {
         // Los errores del SDK pueden contener credenciales o respuestas completas.
-        res.writeHead(400).end('No se pudo confirmar el permiso. Reinicia la verificación.')
+        const message = `No se pudo confirmar el permiso [${stage}]. Reinicia la verificación.`
+        res.writeHead(400).end(message)
+        console.error(message)
         clearTimeout(timeout)
         server.close(() => reject(new Error('Verificación fallida; detalles sensibles omitidos')))
       } finally { busy = false }
