@@ -1,12 +1,16 @@
 // Única puerta entre las pantallas y los datos. Las pantallas importan SOLO de aquí,
 // nunca del simulado directamente (sección 14 del plan: cambiar de simulado a real es
 // cambiar esta línea de importación).
-import type { Money, SharedWallet, Spend, WalletEvent } from '../../../contracts/index.js'
+import type { Member, Money, SharedWallet, Spend, Verdict, WalletEvent } from '../../../contracts/index.js'
 import * as mock from '../../../mocks/api.mock.js'
 
 export const MODO: 'live' | 'mock' =
   import.meta.env.VITE_API_MODE === 'live' || import.meta.env.MODE === 'live' ? 'live' : 'mock'
 const BASE = import.meta.env.VITE_API_URL ?? ''
+
+function unirsePendiente(): never {
+  throw new Error('Unirse todavía no está conectado a la API')
+}
 
 async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<T> {
   let respuesta: Response
@@ -58,11 +62,13 @@ export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => 
   if (MODO === 'mock') return mock.onEvents(walletId, cb)
   const source = new EventSource(`${BASE}/api/wallets/${encodeURIComponent(walletId)}/events`)
   source.onmessage = (event) => {
+    let parsed: WalletEvent
     try {
-      cb(JSON.parse(event.data) as WalletEvent)
+      parsed = JSON.parse(event.data) as WalletEvent
     } catch {
       return
     }
+    cb(parsed)
   }
   return () => source.close()
 }
@@ -97,8 +103,25 @@ export async function retryShare(spendId: string): Promise<void> {
   await mock.retryShare(spendId)
 }
 
+export async function startJoin(
+  walletId: string,
+  member: Omit<Member, 'id' | 'status'>,
+): Promise<{ redirectUrl: string; grantWarning: Verdict }> {
+  if (MODO === 'live') unirsePendiente()
+  return mock.startJoin(walletId, member)
+}
+
+export async function finishJoin(p: { ok: boolean; memberId: string }): Promise<Member | Verdict> {
+  if (MODO === 'live') unirsePendiente()
+  return mock.finishJoin(p)
+}
+
 export function setFalloAporte(memberId: string | null): void {
   if (MODO === 'mock') mock.setFalloAporte(memberId)
+}
+
+export function setHashInvalido(invalido: boolean): void {
+  if (MODO === 'mock') mock.setHashInvalido(invalido)
 }
 
 // Solo para el panel de desarrollo. En modo live no hacen nada.

@@ -258,6 +258,10 @@ body {
   font-weight: 700;
 }
 
+#mensaje.estado-ambar {
+  color: var(--ambar);
+}
+
 .revisando {
   font-size: 24px;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { castApproval, crearTurnos, getWallet, requestSpend, resetMock } from './api.js'
+import { castApproval, crearTurnos, finishJoin, getWallet, requestSpend, resetMock, startJoin } from './api.js'
 
 describe('api.ts en modo simulado', () => {
   it('getWallet devuelve una Promise con la billetera', async () => {
@@ -24,6 +24,30 @@ describe('api.ts en modo simulado', () => {
 
     await expect(castApproval(spend.id, 'm-bogota', true)).rejects.toThrow('Ya votó')
     resetMock()
+  })
+
+  it('startJoin y finishJoin devuelven promesas en modo simulado', async () => {
+    resetMock()
+    const resultado = await startJoin('w-mama', {
+      name: 'Persona nueva',
+      walletAddress: 'https://ilp.interledger-test.dev/persona-nueva',
+      assetCode: 'COP',
+      cap: { value: '5000000', assetCode: 'COP', assetScale: 2 },
+      interval: 'R12/2026-10-16T00:00:00Z/P1M',
+    })
+    const memberId = new URLSearchParams(resultado.redirectUrl.split('?')[1]).get('miembro')
+
+    expect(resultado.grantWarning.status).toBe('pass')
+    expect(memberId).not.toBeNull()
+    await expect(finishJoin({ ok: true, memberId: memberId! })).resolves.toMatchObject({ status: 'active' })
+    resetMock()
+  })
+
+  it('finishJoin con confirmación inválida resuelve un Verdict de bloqueo', async () => {
+    await expect(finishJoin({ ok: false, memberId: '' })).resolves.toMatchObject({
+      check: 'consent-hash',
+      status: 'block',
+    })
   })
 })
 

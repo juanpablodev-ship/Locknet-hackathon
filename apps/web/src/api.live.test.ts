@@ -28,6 +28,7 @@ describe('api.ts en modo live', () => {
 
   beforeEach(async () => {
     vi.resetModules()
+    fetchMock.mockClear()
     vi.stubEnv('VITE_API_MODE', 'live')
     vi.stubEnv('VITE_API_URL', '')
     vi.stubGlobal('fetch', fetchMock)
@@ -109,6 +110,21 @@ describe('api.ts en modo live', () => {
     await expect(api.getWallets()).rejects.toThrow('No se pudo conectar con el servidor')
   })
 
+  it('deja el flujo de unirse pendiente en modo live', async () => {
+    const member = {
+      name: 'Persona nueva',
+      walletAddress: 'https://ilp.interledger-test.dev/persona-nueva',
+      assetCode: 'COP',
+      cap: { value: '5000000', assetCode: 'COP', assetScale: 2 },
+    }
+
+    await expect(api.startJoin('w-mama', member)).rejects.toThrow('Unirse todavía no está conectado a la API')
+    await expect(api.finishJoin({ ok: false, memberId: '' })).rejects.toThrow(
+      'Unirse todavía no está conectado a la API'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('procesa mensajes SSE válidos, ignora JSON inválido y cierra la conexión', () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const recibidos: unknown[] = []
@@ -122,6 +138,16 @@ describe('api.ts en modo live', () => {
     expect(recibidos).toHaveLength(1)
     dejarDeEscuchar()
     expect(source?.close).toHaveBeenCalledOnce()
+  })
+
+  it('no oculta errores lanzados por el callback SSE', () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const dejarDeEscuchar = api.onEvents('w-mama', () => {
+      throw new Error('falló el suscriptor')
+    })
+
+    expect(() => FakeEventSource.current?.send('{}')).toThrow('falló el suscriptor')
+    dejarDeEscuchar()
   })
 
   it('usa datos del contrato como respuesta de las consultas', async () => {

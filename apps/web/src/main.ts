@@ -1,10 +1,11 @@
-import type { Member, SharedWallet, Spend } from '../../../contracts/index.js'
+import type { Member, SharedWallet, Spend, Verdict } from '../../../contracts/index.js'
 import { parseHash, type Route } from './router.js'
 import {
   MODO,
   castApproval,
   crearTurnos,
   executeSpend,
+  finishJoin,
   getSpend,
   getWallet,
   onEvents,
@@ -13,11 +14,14 @@ import {
   requestSpend,
   resetMock,
   retryShare,
-  setFalloAporte
+  setFalloAporte,
+  setHashInvalido,
+  startJoin
 } from './api.js'
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
+import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -32,6 +36,8 @@ const nombres: Record<Route['name'], string> = {
 
 let desuscribir: (() => void) | null = null
 let votaComoActual: string | undefined
+let redireccionUnirsePendiente: string | null = null
+let hashInvalidoActual = false
 const turnos = crearTurnos()
 
 function navegarA(hash: string): void {
@@ -67,6 +73,10 @@ function panelDevHtml(): string {
         <input type="checkbox" id="falla-madrid" />
         Que falle Madrid
       </label>
+      <label class="interruptor">
+        <input type="checkbox" id="hash-invalido" ${hashInvalidoActual ? 'checked' : ''} />
+        Simular hash inválido
+      </label>
     </div>
   `
 }
@@ -92,6 +102,7 @@ function enlazarPanelDev(): void {
       navegarA('#/gasto/s-ataque')
     } else if (accion === 'reiniciar') {
       resetMock()
+      hashInvalidoActual = false
       navegarA('#/inicio')
     }
   })
@@ -99,6 +110,12 @@ function enlazarPanelDev(): void {
   const interruptor = document.getElementById('falla-madrid') as HTMLInputElement | null
   interruptor?.addEventListener('change', () => {
     setFalloAporte(interruptor.checked ? 'm-madrid' : null)
+  })
+
+  const hashInvalido = document.getElementById('hash-invalido') as HTMLInputElement | null
+  hashInvalido?.addEventListener('change', () => {
+    hashInvalidoActual = hashInvalido.checked
+    setHashInvalido(hashInvalido.checked)
   })
 }
 
@@ -123,7 +140,7 @@ async function pintarInicio(): Promise<void> {
 
   desuscribir = onEvents('w-mama', (e) => {
     if (e.type === 'member-active' || e.type === 'member-revoked' || e.type === 'capacity-updated') {
-      void pintarInicio()
+      render()
     }
   })
 }
@@ -232,7 +249,7 @@ async function pintarGasto(id: string): Promise<void> {
   // de un pintado que quedó obsoleto mientras se esperaban las promesas de arriba.
   desuscribir = onEvents(wallet.id, (e) => {
     if (e.type === 'capacity-updated' || (EVENTOS_GASTO.has(e.type) && e.spendId === id)) {
-      void pintarGasto(id)
+      render()
     }
   })
 }
@@ -301,6 +318,153 @@ async function pintarFormularioGasto(): Promise<void> {
   enlazarPanelDev()
 }
 
+interface ValoresUnirse {
+  nombre: string
+  direccion: string
+  tope: string
+}
+
+function leerValoresUnirse(): ValoresUnirse {
+  return {
+    nombre: (document.getElementById('nombre-miembro') as HTMLInputElement | null)?.value ?? '',
+    direccion: (document.getElementById('direccion-miembro') as HTMLInputElement | null)?.value ?? '',
+    tope: (document.getElementById('tope-miembro') as HTMLInputElement | null)?.value ?? '',
+  }
+}
+
+function pintarFormularioUnirse(
+  wallet: SharedWallet,
+  qrSvg: string,
+  warning?: Verdict,
+  values: ValoresUnirse = { nombre: '', direccion: '', tope: '50000' },
+): void {
+  const app = document.getElementById('app')
+  if (!app) return
+
+  app.innerHTML = renderUnirse(wallet, qrSvg, warning) + panelDevHtml()
+  const form = document.getElementById('form-unirse') as HTMLFormElement | null
+  const nombre = document.getElementById('nombre-miembro') as HTMLInputElement | null
+  const direccion = document.getElementById('direccion-miembro') as HTMLInputElement | null
+  const tope = document.getElementById('tope-miembro') as HTMLInputElement | null
+  if (nombre) nombre.value = values.nombre
+  if (direccion) direccion.value = values.direccion
+  if (tope) tope.value = values.tope
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const mensaje = document.getElementById('mensaje')
+    const capPesos = Number(tope?.value)
+    if (!Number.isSafeInteger(capPesos) || capPesos <= 0) {
+      if (mensaje) mensaje.textContent = 'Escribe un tope mensual mayor que cero en pesos enteros.'
+      return
+    }
+
+    const memberName = nombre?.value.trim() ?? ''
+    const walletAddress = direccion?.value.trim() ?? ''
+    if (!memberName || !walletAddress) {
+      if (mensaje) mensaje.textContent = 'Escribe tu nombre y la dirección de tu billetera.'
+      return
+    }
+
+    const miTurno = turnos.nuevo()
+    const submitted = { nombre: memberName, direccion: walletAddress, tope: String(capPesos) }
+    void (async () => {
+      try {
+        const interval = wallet.members.find((member) => member.interval)?.interval
+        const join = await startJoin(wallet.id, {
+          name: memberName,
+          walletAddress,
+          assetCode: wallet.currency,
+          cap: {
+            value: (BigInt(capPesos) * 100n).toString(),
+            assetCode: wallet.currency,
+            assetScale: 2,
+          },
+          ...(interval ? { interval } : {}),
+        })
+        if (!turnos.esVigente(miTurno)) return
+
+        if (join.grantWarning.status === 'warn') {
+          redireccionUnirsePendiente = join.redirectUrl
+          pintarFormularioUnirse(wallet, qrSvg, join.grantWarning, submitted)
+        } else {
+          redireccionUnirsePendiente = join.redirectUrl
+          navegarA(join.redirectUrl)
+        }
+      } catch (err) {
+        if (!turnos.esVigente(miTurno) || !mensaje) return
+        if (err instanceof Error && err.message === 'Unirse todavía no está conectado a la API') {
+          mensaje.textContent = 'Pendiente de conectar'
+          mensaje.className = 'estado estado-ambar'
+        } else {
+          mensaje.textContent = err instanceof Error ? err.message : 'No se pudo iniciar el proceso para unirse.'
+          mensaje.className = ''
+        }
+      }
+    })()
+  })
+
+  document.querySelector('.advertencia-unirse')?.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
+    const action = button?.dataset.accion
+    if (action === 'confirmar-unirse' && redireccionUnirsePendiente) {
+      navegarA(redireccionUnirsePendiente)
+    } else if (action === 'cancelar-unirse') {
+      redireccionUnirsePendiente = null
+      pintarFormularioUnirse(wallet, qrSvg, undefined, leerValoresUnirse())
+    }
+  })
+  enlazarPanelDev()
+}
+
+async function pintarUnirse(): Promise<void> {
+  const app = document.getElementById('app')
+  if (!app) return
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
+
+  try {
+    const wallet = await getWallet('w-mama')
+    if (!turnos.esVigente(miTurno)) return
+    const qrSvg = await qrComoSvg(`${location.origin}${location.pathname}#/unirse`)
+    if (!turnos.esVigente(miTurno)) return
+    pintarFormularioUnirse(wallet, qrSvg)
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    pintarError(app, err, () => void pintarUnirse())
+  }
+}
+
+async function pintarVueltaUnirse(route: Extract<Route, { name: 'unirse-volver' }>): Promise<void> {
+  const app = document.getElementById('app')
+  if (!app) return
+  if (route.ok === undefined) {
+    app.innerHTML = renderVueltaUnirse(false)
+    return
+  }
+
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
+  try {
+    const resultado = await finishJoin({ ok: route.ok, memberId: route.memberId ?? '' })
+    if (!turnos.esVigente(miTurno)) return
+    app.innerHTML = renderVueltaUnirse(!('check' in resultado))
+    redireccionUnirsePendiente = null
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    if (err instanceof Error && err.message === 'Unirse todavía no está conectado a la API') {
+      app.innerHTML = `
+        <div class="contenedor">
+          <p id="mensaje" class="estado estado-ambar" role="status">Pendiente de conectar</p>
+          <a class="boton" href="#/unirse">Volver</a>
+        </div>
+      `
+    } else {
+      pintarError(app, err, () => void pintarVueltaUnirse(route))
+    }
+  }
+}
+
 function render(): void {
   desuscribir?.()
   desuscribir = null
@@ -321,6 +485,16 @@ function render(): void {
 
   if (route.name === 'gasto-nuevo') {
     void pintarFormularioGasto()
+    return
+  }
+
+  if (route.name === 'unirse') {
+    void pintarUnirse()
+    return
+  }
+
+  if (route.name === 'unirse-volver') {
+    void pintarVueltaUnirse(route)
     return
   }
 

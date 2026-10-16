@@ -364,13 +364,14 @@ describe('startJoin y finishJoin', () => {
     const { redirectUrl } = startJoin('w-mama', NUEVO_MIEMBRO)
     const memberId = new URLSearchParams(redirectUrl.split('?')[1]).get('miembro')
 
-    const verdict = finishJoin({ ok: false, memberId: memberId! })
+    const verdict = finishJoin({ ok: false, memberId: '' })
 
     expect('check' in verdict && verdict.status).toBe('block')
     expect('check' in verdict && verdict.userMessage).toBe(
       'No pudimos confirmar que vienes de tu banco. No te uniste.'
     )
     expect(getWallet('w-mama').members).toHaveLength(3)
+    expect(() => finishJoin({ ok: true, memberId: memberId! })).toThrow('Invitación no encontrada')
   })
 
   it('el modo de desarrollo puede simular un hash inválido', () => {

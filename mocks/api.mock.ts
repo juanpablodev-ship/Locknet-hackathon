@@ -85,6 +85,7 @@ let timers: ReturnType<typeof setTimeout>[] = []
 let falloMemberId: string | null = null
 let joinCounter = 0
 let hashInvalido = false
+let ultimoJoinPendiente: string | null = null
 const joinsPendientes = new Map<string, { walletId: string; member: Member }>()
 
 export function resetMock(): void {
@@ -95,6 +96,7 @@ export function resetMock(): void {
   falloMemberId = null
   joinCounter = 0
   hashInvalido = false
+  ultimoJoinPendiente = null
   joinsPendientes.clear()
 }
 
@@ -137,6 +139,7 @@ export function startJoin(
   const id = `m-nuevo-${++joinCounter}`
   const nuevo: Member = { ...structuredClone(member), id, status: 'active' }
   joinsPendientes.set(id, { walletId, member: nuevo })
+  ultimoJoinPendiente = id
 
   const superaTope = excedeTopeCOP(member.cap)
   const sinIntervalo = !member.interval
@@ -169,10 +172,10 @@ export function startJoin(
 
 export function finishJoin({ ok, memberId }: { ok: boolean; memberId: string }): Member | Verdict {
   const pendiente = joinsPendientes.get(memberId)
-  if (!pendiente) throw new Error('Invitación no encontrada')
-  joinsPendientes.delete(memberId)
-
   if (!ok) {
+    const idPendiente = memberId || ultimoJoinPendiente
+    if (idPendiente) joinsPendientes.delete(idPendiente)
+    if (idPendiente === ultimoJoinPendiente) ultimoJoinPendiente = null
     return {
       check: 'consent-hash',
       status: 'block',
@@ -181,6 +184,9 @@ export function finishJoin({ ok, memberId }: { ok: boolean; memberId: string }):
       reasons: ['La confirmación del banco no es válida.'],
     }
   }
+  if (!pendiente) throw new Error('Invitación no encontrada')
+  joinsPendientes.delete(memberId)
+  if (memberId === ultimoJoinPendiente) ultimoJoinPendiente = null
 
   const wallet = wallets.find((item) => item.id === pendiente.walletId)
   if (!wallet) throw new Error('Billetera no encontrada')
