@@ -14,6 +14,18 @@ describe('parseHash', () => {
     expect(parseHash('#/unirse')).toEqual({ name: 'unirse' })
   })
 
+  it('reconoce #/unirse/volver', () => {
+    expect(parseHash('#/unirse/volver')).toEqual({ name: 'unirse-volver' })
+  })
+
+  it('lee el resultado y miembro de la vuelta del banco', () => {
+    expect(parseHash('#/unirse/volver?ok=1&miembro=m-nuevo-1')).toEqual({
+      name: 'unirse-volver',
+      ok: true,
+      memberId: 'm-nuevo-1',
+    })
+  })
+
   it('reconoce #/gasto/nuevo como gasto-nuevo, no como un gasto con id "nuevo"', () => {
     expect(parseHash('#/gasto/nuevo')).toEqual({ name: 'gasto-nuevo' })
   })

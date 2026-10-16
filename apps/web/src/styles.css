@@ -125,6 +125,21 @@ body {
   font-weight: 700;
 }
 
+.qr-unirse {
+  width: min(280px, 100%);
+  margin: 16px auto;
+}
+
+.qr-unirse svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.advertencia-unirse .panel-titulo {
+  font-size: 28px;
+}
+
 .panel-dev {
   position: fixed;
   bottom: 0;
