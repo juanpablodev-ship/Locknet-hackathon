@@ -8,6 +8,7 @@ import {
   finishJoin,
   getSpend,
   getWallet,
+  getSpends,
   onEvents,
   playEscenario1,
   playEscenario3,
@@ -21,6 +22,7 @@ import {
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
+import { renderHistorial } from './historial.js'
 import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
 import './styles.css'
 
@@ -435,6 +437,23 @@ async function pintarUnirse(): Promise<void> {
   }
 }
 
+async function pintarHistorial(): Promise<void> {
+  const app = document.getElementById('app')
+  if (!app) return
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
+
+  try {
+    const [wallet, spends] = await Promise.all([getWallet('w-mama'), getSpends('w-mama')])
+    if (!turnos.esVigente(miTurno)) return
+    app.innerHTML = renderHistorial(spends, wallet) + panelDevHtml()
+    enlazarPanelDev()
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    pintarError(app, err, () => void pintarHistorial())
+  }
+}
+
 async function pintarVueltaUnirse(route: Extract<Route, { name: 'unirse-volver' }>): Promise<void> {
   const app = document.getElementById('app')
   if (!app) return
@@ -495,6 +514,11 @@ function render(): void {
 
   if (route.name === 'unirse-volver') {
     void pintarVueltaUnirse(route)
+    return
+  }
+
+  if (route.name === 'historial') {
+    void pintarHistorial()
     return
   }
 

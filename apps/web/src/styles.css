@@ -130,6 +130,28 @@ body {
   margin: 16px auto;
 }
 
+.lista-historial {
+  display: grid;
+  gap: 16px;
+}
+
+.fila-gasto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.fila-gasto-destino,
+.fila-gasto-monto {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
 .qr-unirse svg {
   display: block;
   width: 100%;
