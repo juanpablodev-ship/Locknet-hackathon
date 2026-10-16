@@ -2,7 +2,7 @@
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
 import type { Money, SharedWallet, Spend, WalletEvent } from '../contracts/index.js'
-import { cuidadoDeMama, medicina } from '../contracts/ejemplo.js'
+import { ataque, cuidadoDeMama, destinoParecido, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
 
@@ -135,6 +135,43 @@ export function playEscenario1(stepMs = 1200): void {
       type: 'capacity-updated',
       amount: capacidad,
       message: 'Cupo del grupo: $300.000. Nadie depositó nada.',
+    })
+  })
+}
+
+export function playEscenario3(stepMs = 1200): void {
+  const walletId = 'w-mama'
+
+  const nuevo: Spend = structuredClone(ataque)
+  nuevo.status = 'requested'
+  nuevo.risk = 0
+  nuevo.verdicts = []
+
+  spends[walletId] = [...spends[walletId].filter((s) => s.id !== nuevo.id), nuevo]
+
+  emitir({
+    walletId,
+    type: 'spend-requested',
+    spendId: nuevo.id,
+    amount: nuevo.amount,
+    message: 'Piden un gasto de $120.000 a una cuenta nueva',
+  })
+
+  programar(stepMs, () => {
+    const gasto = spends[walletId].find((s) => s.id === nuevo.id)
+    if (!gasto) return
+
+    gasto.status = 'awaiting-approval'
+    gasto.risk = 94
+    gasto.verdicts = [structuredClone(destinoParecido)]
+    gasto.approvals = []
+
+    emitir({
+      walletId,
+      type: 'spend-reviewed',
+      spendId: gasto.id,
+      risk: 94,
+      message: destinoParecido.userMessage,
     })
   })
 }

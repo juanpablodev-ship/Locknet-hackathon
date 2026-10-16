@@ -9,6 +9,7 @@ import {
   getWallets,
   onEvents,
   playEscenario1,
+  playEscenario3,
   resetMock,
 } from './api.mock.js'
 
@@ -175,5 +176,61 @@ describe('playEscenario1', () => {
 
     expect(eventos).toHaveLength(1)
     expect(getWallet('w-mama')).toEqual(cuidadoDeMama)
+  })
+})
+
+describe('playEscenario3', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('al instante existe el gasto s-ataque con status requested', () => {
+    playEscenario3()
+
+    const gasto = getSpends('w-mama').find((s) => s.id === 's-ataque')
+    expect(gasto?.status).toBe('requested')
+  })
+
+  it('tras avanzar el reloj queda awaiting-approval con riesgo 94 y el verdict de destino', () => {
+    playEscenario3(1000)
+    vi.advanceTimersByTime(1000)
+
+    const gasto = getSpends('w-mama').find((s) => s.id === 's-ataque')
+    expect(gasto?.status).toBe('awaiting-approval')
+    expect(gasto?.risk).toBe(94)
+    expect(gasto?.verdicts).toEqual([expect.objectContaining({ check: 'destination', status: 'warn' })])
+  })
+
+  it('emite exactamente 2 eventos en orden, el segundo con risk 94', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    playEscenario3(1000)
+    vi.advanceTimersByTime(1000)
+
+    expect(eventos.map((e) => e.type)).toEqual(['spend-requested', 'spend-reviewed'])
+    expect(eventos[1].risk).toBe(94)
+  })
+
+  it('llamarlo dos veces no deja dos gastos s-ataque', () => {
+    playEscenario3()
+    playEscenario3()
+
+    const ataques = getSpends('w-mama').filter((s) => s.id === 's-ataque')
+    expect(ataques).toHaveLength(1)
+  })
+
+  it('resetMock lo elimina', () => {
+    playEscenario3()
+    resetMock()
+
+    const ataques = getSpends('w-mama').filter((s) => s.id === 's-ataque')
+    expect(ataques).toHaveLength(0)
   })
 })
