@@ -31,8 +31,12 @@ describe('guardianMock', () => {
     expect(guardianMock.reconcile({ expected: cop(100), received: cop(100) }).status).toBe('pass')
   })
 
-  it('checkGrantRequest → pass; riskScore es el real (block → 100)', () => {
-    expect(guardianMock.checkGrantRequest({ policy: { maxCap: cop(1) } }).status).toBe('pass')
+  it('checkGrantRequest es el real: sin tope → warn; tope normal → pass', () => {
+    expect(guardianMock.checkGrantRequest({ policy: { maxCap: cop(500) } }).status).toBe('warn')
+    expect(guardianMock.checkGrantRequest({ debitAmount: cop(100), interval: 'R12/2026-10-16T00:00:00Z/P1M', policy: { maxCap: cop(500) } }).status).toBe('pass')
+  })
+
+  it('riskScore es el real (block → 100)', () => {
     expect(guardianMock.riskScore([guardianMock.verifyInteractionHash({ ...p, hash: 'invalido' })])).toBe(100)
   })
 })

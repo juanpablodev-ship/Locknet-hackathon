@@ -1,6 +1,6 @@
 // Simulado del guardián para R1-R4. checkDestination y riskScore son los reales; el resto son falsos simples.
 import type { Guardian, Verdict } from '../contracts/index.js'
-import { checkDestination, riskScore } from '../packages/guardian/src/index.js'
+import { checkDestination, checkGrantRequest, riskScore } from '../packages/guardian/src/index.js'
 
 const verdict = (check: Verdict['check'], status: Verdict['status'], riskPoints: number, userMessage: string, reasons: string[] = []): Verdict =>
   ({ check, status, riskPoints, userMessage, reasons })
@@ -11,7 +11,7 @@ export const guardianMock: Guardian = {
     hash === 'invalido'
       ? verdict('consent-hash', 'block', 100, 'No pudimos confirmar que vienes de tu banco. No te uniste.', ['hash de interacción inválido'])
       : verdict('consent-hash', 'pass', 0, 'Hash válido.'),
-  checkGrantRequest: () => verdict('grant', 'pass', 0, 'Permiso normal.'),
+  checkGrantRequest,
   checkDestination,
   checkQuote: ({ debitAmount, receiveAmount }) =>
     debitAmount.assetCode === receiveAmount.assetCode && BigInt(debitAmount.value) * 100n > BigInt(receiveAmount.value) * 120n
