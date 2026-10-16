@@ -21,8 +21,7 @@ describe('checkGrantRequest', () => {
     const v = checkGrantRequest({ debitAmount: cop(5_000_000), policy })
     expect(v.status).toBe('warn')
     expect(v.riskPoints).toBe(100)
-    expect(v.userMessage).toContain('$5.000.000 COP')
-    expect(v.userMessage).toContain('sin límite de tiempo')
+    expect(v.userMessage).toBe('Esta billetera te pide autorizar hasta $5.000.000 COP sin límite de tiempo. Es mucho más de lo normal.')
   })
 
   it('sin debitAmount → warn ≥ 80, sin tope', () => {
@@ -30,6 +29,16 @@ describe('checkGrantRequest', () => {
     expect(v.status).toBe('warn')
     expect(v.riskPoints).toBeGreaterThanOrEqual(80)
     expect(v.userMessage).toBe('Esta billetera te pide autorizar pagos sin tope.')
+  })
+
+  it('sin tope y sin intervalo → mensaje combinado', () => {
+    expect(checkGrantRequest({ policy }).userMessage).toBe('Esta billetera te pide autorizar pagos sin tope y sin límite de tiempo.')
+  })
+
+  it('sobre el tope pero con intervalo → no menciona el tiempo', () => {
+    expect(checkGrantRequest({ debitAmount: cop(5_000_000), interval, policy }).userMessage).toBe(
+      'Esta billetera te pide autorizar hasta $5.000.000 COP. Es mucho más de lo normal.',
+    )
   })
 
   it('assetScale 2 vs 0 se comparan bien', () => {
