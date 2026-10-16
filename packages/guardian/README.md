@@ -4,17 +4,19 @@ Verificaciones de seguridad abiertas para cualquier app que mueva dinero con Ope
 
 Son funciones puras en TypeScript: reciben datos y devuelven un veredicto. Sin red, sin dependencias.
 
-**No adivina: explica.** Cada veredicto trae `userMessage` (para la persona) y `reasons` (el detalle técnico).
-
-```ts
-type Verdict = { check; status: 'pass' | 'warn' | 'block'; riskPoints: number; userMessage: string; reasons: string[] }
-```
-
 ## ¿Para quién es?
 
 - Nació para proteger nuestra billetera compartida, donde la plata de varios se mueve en cada gasto.
 - Sirve igual para cualquier proyecto que use Open Payments: una natillera, una colecta para una donación, una tienda que cobra a varios clientes.
 - Se usa sin nuestra billetera: no importa nada de ella (ver el ejemplo sobre el snippet oficial).
+
+## Qué devuelve
+
+**No adivina: explica.** Cada veredicto trae `userMessage` (para la persona) y `reasons` (el detalle técnico).
+
+```ts
+type Verdict = { check; status: 'pass' | 'warn' | 'block'; riskPoints: number; userMessage: string; reasons: string[] }
+```
 
 ## Las 6 funciones
 
@@ -29,7 +31,7 @@ type Verdict = { check; status: 'pass' | 'warn' | 'block'; riskPoints: number; u
 
 ## Ejemplo: 3 líneas sobre el snippet oficial
 
-El snippet oficial de continuación deja la verificación en `@TODO`. Con el guardián:
+El snippet oficial de continuación deja la verificación en `@TODO`. Con Open Sentinels:
 
 ```ts
 // Guardián: verifica que el retorno viene del banco (el snippet oficial lo deja en @TODO)
@@ -54,4 +56,4 @@ npx tsc --noEmit
 
 - **No detecta todo el fraude.** Da advertencias verificables, cada una con una prueba que la respalda.
 - **Entre monedas distintas solo compara la comisión si recibe `referenceRate`.** Sin ella, `checkQuote` no bloquea.
-- **El hash es defensa en profundidad.** El banco igual valida `interact_ref`; el guardián añade una capa que el SDK oficial de Node no incluye.
+- **El hash es defensa en profundidad.** El banco igual valida `interact_ref`; Open Sentinels añade una capa que el SDK oficial de Node no incluye.
