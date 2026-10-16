@@ -17,6 +17,7 @@ import {
 } from './api.js'
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
+import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -235,6 +236,70 @@ async function pintarGasto(id: string): Promise<void> {
   })
 }
 
+async function pintarFormularioGasto(): Promise<void> {
+  const app = document.getElementById('app')
+  if (!app) return
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
+
+  let wallet: SharedWallet
+  try {
+    wallet = await getWallet('w-mama')
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    pintarError(app, err, () => void pintarFormularioGasto())
+    return
+  }
+  if (!turnos.esVigente(miTurno)) return
+
+  app.innerHTML = renderGastoNuevo(wallet) + panelDevHtml()
+  const formulario = document.getElementById('form-gasto') as HTMLFormElement | null
+  const selector = document.getElementById('destino') as HTMLSelectElement | null
+  const otroDestino = document.getElementById('otro-destino')
+  const monto = document.getElementById('monto-gasto') as HTMLInputElement | null
+  const vistaPrevia = document.getElementById('vista-previa')
+
+  selector?.addEventListener('change', () => {
+    if (otroDestino) otroDestino.hidden = selector.value !== 'otra'
+  })
+  monto?.addEventListener('input', () => {
+    if (vistaPrevia) vistaPrevia.textContent = previewReparto(Number(monto.value), wallet)
+  })
+  formulario?.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const mensaje = document.getElementById('mensaje')
+    const valorPesos = Number(monto?.value)
+    if (!Number.isSafeInteger(valorPesos) || valorPesos <= 0) {
+      if (mensaje) mensaje.textContent = 'Escribe un monto mayor que cero en pesos enteros.'
+      return
+    }
+
+    const destinoElegido = selector?.value
+    const conocido = wallet.knownDestinations.find((destination) => destination.walletAddress === destinoElegido)
+    const nombre = conocido?.name ?? (document.getElementById('nombre-destino') as HTMLInputElement | null)?.value.trim()
+    const walletAddress =
+      conocido?.walletAddress ?? (document.getElementById('direccion-destino') as HTMLInputElement | null)?.value.trim()
+    if (!nombre || !walletAddress) {
+      if (mensaje) mensaje.textContent = 'Elige un destino o escribe su nombre y dirección.'
+      return
+    }
+
+    void (async () => {
+      try {
+        const spend = await requestSpend('w-mama', { name: nombre, walletAddress }, {
+          value: (BigInt(valorPesos) * 100n).toString(),
+          assetCode: wallet.currency,
+          assetScale: 2,
+        })
+        navegarA(`#/gasto/${spend.id}`)
+      } catch (err) {
+        if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo pedir el gasto.'
+      }
+    })()
+  })
+  enlazarPanelDev()
+}
+
 function render(): void {
   desuscribir?.()
   desuscribir = null
@@ -253,6 +318,12 @@ function render(): void {
     return
   }
 
+  if (route.name === 'gasto-nuevo') {
+    void pintarFormularioGasto()
+    return
+  }
+
+  turnos.nuevo()
   app.innerHTML = `<h1>${nombres[route.name]}</h1>`
 }
 

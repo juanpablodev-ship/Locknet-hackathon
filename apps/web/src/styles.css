@@ -102,6 +102,29 @@ body {
   cursor: pointer;
 }
 
+.formulario {
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.formulario input,
+.formulario select,
+.formulario textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.vista-previa {
+  margin: 4px 0;
+  font-weight: 700;
+}
+
 .panel-dev {
   position: fixed;
   bottom: 0;
