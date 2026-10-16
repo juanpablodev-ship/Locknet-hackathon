@@ -27,3 +27,69 @@ body {
     overflow-x: hidden;
   }
 }
+
+.etiqueta {
+  margin: 0;
+  font-size: 20px;
+}
+
+.cupo {
+  margin: 4px 0 16px;
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1.1;
+  word-break: break-word;
+}
+
+.miembros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.miembro {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.miembro-nombre {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.estado {
+  margin: 8px 0 0;
+  font-weight: 700;
+}
+
+.estado-verde {
+  color: var(--verde);
+}
+
+.estado-ambar {
+  color: var(--ambar);
+}
+
+.estado-rojo {
+  color: var(--rojo);
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.boton {
+  display: inline-block;
+  padding: 16px 24px;
+  border-radius: 8px;
+  background: var(--verde);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+}

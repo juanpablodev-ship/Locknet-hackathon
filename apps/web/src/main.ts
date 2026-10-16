@@ -1,4 +1,6 @@
 import { parseHash, type Route } from './router.js'
+import { getWallet } from './api.js'
+import { renderInicio } from './inicio.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -14,6 +16,12 @@ function render(): void {
   const app = document.getElementById('app')
   if (!app) return
   const route = parseHash(location.hash)
+
+  if (route.name === 'inicio') {
+    app.innerHTML = renderInicio(getWallet('w-mama'))
+    return
+  }
+
   app.innerHTML = `<h1>${nombres[route.name]}</h1>`
 }
 
