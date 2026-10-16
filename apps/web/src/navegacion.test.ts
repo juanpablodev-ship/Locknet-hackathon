@@ -6,6 +6,12 @@ describe('banda de modo respaldo', () => {
     expect(renderBandaRespaldo('fixtures')).toContain('MODO RESPALDO · respuestas reales grabadas')
     expect(renderBandaRespaldo('live')).toBe('')
   })
+
+  it('muestra y escapa la etiqueta completa recibida del servidor', () => {
+    expect(renderBandaRespaldo('fixtures', 'Modo respaldo — <datos simulados>')).toContain(
+      'Modo respaldo — &lt;datos simulados&gt;',
+    )
+  })
 })
 
 describe('menú de navegación', () => {
