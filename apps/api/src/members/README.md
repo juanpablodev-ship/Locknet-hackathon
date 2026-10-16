@@ -2,7 +2,8 @@
 
 Este experimento consulta la wallet de un miembro y solicita un permiso interactivo
 `outgoing-payment`, acciones `read/create`, con `limits.debitAmount` y
-`limits.interval`, sin `receiver`. No crea pagos ni implementa `MembersService`.
+`limits.interval`, sin `receiver`. No crea pagos. El módulo `members.service.ts`
+implementa `startJoin` y `finishJoin` con Open Sentinels real.
 
 ## Fuentes verificadas
 
@@ -25,9 +26,8 @@ Este experimento consulta la wallet de un miembro y solicita un permiso interact
   y [sus pruebas](https://github.com/interledger/rafiki/blob/68c11dc32742127bb96767ccbd85e9775bc31646/packages/auth/src/interaction/routes.test.ts),
   revisión `68c11dc32742127bb96767ccbd85e9775bc31646`: `handleFinishableGrant`
   construye los mismos cuatro campos y usa Base64 estándar con relleno.
-  Se admiten únicamente esa representación y Base64URL sin relleno, ambas
-  canónicas. Se decodifican exactamente 32 bytes y se comparan con el único
-  digest esperado mediante `timingSafeEqual`. No se prueban otras bases del hash.
+  Open Sentinels admite esa representación y Base64URL sin relleno y hace la
+  comparación segura del digest. R1 ya no calcula ni normaliza hashes por su cuenta.
 
 No hace falta clonar snippets para esta prueba: las páginas oficiales anteriores
 son la referencia. Si se clonan, deben ir fuera del repositorio.
@@ -93,11 +93,74 @@ vencimiento, concesión no final y permisos modificados. **No prueban aceptació
 real de la Test Wallet ni recarga mensual efectiva**. Obtener una concesión real
 tampoco demuestra que existan fondos o que un pago vaya a completarse.
 
-Se importa `Money` y se deriva la entrada del hash del contrato `Guardian`;
-no se redefinen contratos. La comprobación local del hash no es una integración
-de R5: cuando exista su implementación, el servicio de miembros deberá usarla.
-No se ha implementado almacenamiento, `startJoin`, `finishJoin`, cupo restante,
-revocación por SDK ni permisos con destinatario.
+Se importan los tipos compartidos; no se redefinen contratos. El servicio usa
+el objeto `guardian` real de `packages/guardian/src/index.ts` (paquete
+`open-sentinels`), sin `guardian.mock`. La función de hash es síncrona y devuelve
+`Verdict`; solo `status === 'pass'` permite continuar. El adaptador booleano del
+experimento también delega en Open Sentinels, sin criptografía duplicada.
+
+## Integración de startJoin y finishJoin para R3
+
+`createMembersJoinService(client, options)` devuelve exactamente
+`Pick<MembersService, 'startJoin' | 'finishJoin'>`. No pretende implementar aún
+las otras operaciones del contrato. `client` es el cliente autenticado del SDK
+oficial, creado en el servidor con logging silencioso y timeout de red.
+
+Opciones que debe aportar el servidor:
+
+- `finishUri`: URI de retorno de la aplicación, sin query ni fragmento; HTTPS
+  (se permite HTTP solo para `localhost` en desarrollo).
+- `policy.maxCap`: política confiable del grupo para `guardian.checkGrantRequest`.
+- `sessionId`: identificador de la sesión autenticada a la que pertenece esta
+  instancia. Nunca debe proceder de los parámetros del callback.
+- `currentSessionId`: consulta de la sesión válida del contexto de la petición
+  actual; debe devolver `undefined` si fue cerrada o revocada. Debe consultarse
+  desde el middleware/almacén de sesiones, por ejemplo mediante contexto de
+  petición `AsyncLocalStorage`, nunca desde una variable global que comparta
+  peticiones concurrentes ni desde una petición antigua capturada en un cierre.
+- `now`: reloj opcional para pruebas; producción usa `Date.now`.
+
+R3 debe conservar la instancia en el servidor y seleccionar la correspondiente
+mediante la sesión autenticada del navegador; no crear otra en el callback ni
+seleccionarla únicamente por `state`. El adaptador HTTP debe rechazar parámetros
+duplicados antes de convertirlos a los tres strings de `finishJoin`.
+
+`startJoin(walletId, member)` consulta la wallet, verifica moneda y escala,
+obtiene el aviso del guardián real y solicita el permiso. Devuelve solo la URL de
+consentimiento y el aviso del contrato. El aviso debe mostrarse al usuario.
+Los datos originales (grupo, miembro, wallet, nonces, URI exacta de grant,
+continuación y token) quedan en un mapa privado del servidor, con diez minutos
+de vigencia. Una segunda solicitud pendiente se rechaza y no reemplaza la primera.
+
+`finishJoin({ interactRef, hash, state })` valida la sesión y recupera la interacción
+original por su estado aleatorio. Consume el registro antes de cualquier await,
+incluidos los intentos con hash inválido. Invoca directamente a través de la
+primitiva compartida `guardian.verifyInteractionHash` con los cinco campos del
+contrato. Si el resultado no es `pass`, no llama a `grant.continue` ni devuelve
+un miembro activo. Después respeta `continue.wait`, vuelve a validar la sesión,
+continúa y comprueba los límites exactos. Solo entonces devuelve `Member` activo
+y el veredicto real; el token y la URI de gestión quedan privados en memoria.
+No se registra la URL del callback ni se devuelve la concesión por HTTP.
+
+El almacenamiento es en memoria: reiniciar el proceso pierde interacciones y
+concesiones. Persistencia durable, `available`, `revoke`, `tokenFor` y confirmación
+con destinatario quedan pendientes; tampoco se simulan estas operaciones.
+Esta tarea no modifica `server.ts`: conectar sus handlers y las sesiones le
+corresponde a R3. El script aislado sigue comprobando el permiso con el mismo
+guardián real; no sustituye la prueba HTTP del producto con sesión autenticada.
+
+La integración automatizada usa Open Sentinels real y simula únicamente la red
+del SDK. Prueba hash correcto en ambos formatos, hash alterado, sesión y estado
+inválidos, vencimiento, repeticiones, concurrencia, sesión revocada durante la
+espera, límites distintos, errores del SDK y ausencia de secretos en resultados.
+Esta integración de `finishJoin` todavía no se autorizó contra la Test Wallet;
+el resultado real histórico de abajo corresponde al experimento anterior.
+
+Comprobación de esta integración: 59 pruebas de R1 (23 del servicio nuevo y 36
+del experimento), 262 en el repositorio, `typecheck` y `git diff --check`.
+Las pruebas espían la función real sin sustituirla, comprueban sus cinco
+parámetros y el orden anterior a `grant.continue`, y verifican que un rechazo
+del hash no invoca la continuación ni devuelve un miembro activo.
 
 ## Registro de verificación real — 16 de octubre de 2026, Colombia
 
