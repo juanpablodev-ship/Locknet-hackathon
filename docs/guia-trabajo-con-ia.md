@@ -133,6 +133,12 @@ y /contracts. Mi primer objetivo, en este orden:
    verificación crítica: si falla, quiero saberlo ya.
 2. Mismo script con limits.receiver, para ver si la wallet muestra el destino.
 3. MembersService.startJoin y finishJoin usando /mocks/guardian.mock.ts.
+Fuentes (no inventes la API, cita la que uses):
+- Paso 1: ../open-payments-snippets/grant/grant-outgoing-payment-interval.ts
+  + https://openpayments.dev/es/guides/outgoing-grant-future-payments/
+- Paso 2: sin snippet para limits.receiver; base grant/grant-outgoing-payment.ts
+  + la misma guía de pagos futuros
+- Paso 3: grant/grant-continuation.ts + https://openpayments.dev/es/identity/hash-verification/
 Propón el plan del paso 1 y espera mi aprobación. Las llaves están en .env.
 ```
 
@@ -144,6 +150,14 @@ oficial. Primer objetivo:
 1. Crear un cobro en la wallet de la farmacia (COP) y pagarlo desde DOS wallets con
    receiveAmount parcial. Quiero saber si el cobro acepta varios pagadores.
 2. Después: createIncoming, quoteShare, payShare, track y received según el contrato.
+Fuentes (no inventes la API, cita la que uses):
+- Permiso propio: ../open-payments-snippets/grant/grant-outgoing-payment.ts
+- Cobro: grant/grant-incoming-payment.ts + incoming-payment/incoming-payment-create.ts
+- Cotización: grant/grant-quote.ts + quote/quote-create-receive-amount.ts
+- Pago y seguimiento: outgoing-payment/outgoing-payment-create.ts + outgoing-payment-get.ts
+- Recibido: incoming-payment/incoming-payment-get.ts
+- Guías: https://openpayments.dev/es/guides/onetime-remittance-fixed-receive/
+  y https://openpayments.dev/es/guides/split-payments/
 Propón el plan del paso 1 y espera mi aprobación. Las llaves están en .env.
 ```
 
@@ -155,6 +169,8 @@ Trabajo SOLO contra los simulados (/mocks/*.mock.ts) hasta las 15:00.
 Primer objetivo: el modelo de billetera, gasto y miembro, con la máquina de estados del
 ciclo de vida del gasto (sección 4) y sus pruebas, para el caso "Cuidado de mamá".
 Los casos 2 y 3 (meta y retorno) NO se empiezan hasta que yo lo diga.
+Fuentes: el motor no llama a Open Payments directamente (usa MembersService y
+PaymentsService). Si algo lo requiere, usa la tabla "Fuentes por flujo" de AGENTS.md.
 Propón el plan y espera mi aprobación.
 ```
 
@@ -165,7 +181,9 @@ y /contracts. Trabajo SOLO contra /mocks/api.mock.ts (eventos WalletEvent falsos
 las 16:30. Primer objetivo: la pantalla de inicio de la billetera "Cuidado de mamá"
 ("Cupo autorizado este mes", "nadie depositó nada", miembros con bandera, moneda y tope),
 y después la pantalla de aprobación con el riesgo y la advertencia en grande.
-HTML/CSS simple, que se vea bien en un proyector. Propón el plan y espera mi aprobación.
+HTML/CSS simple, que se vea bien en un proyector.
+Fuentes: la web no llama a Open Payments; solo consume la API y los WalletEvent de /contracts.
+Propón el plan y espera mi aprobación.
 ```
 
 ### R5 — Guardián
@@ -174,7 +192,13 @@ Soy R5 (Guardián). Lee AGENTS.md, /docs/plan-v6.md (secciones 5, 6 y 13-R5) y /
 Construyo /packages/guardian: funciones puras, sin red, sin importar nada de /apps.
 Primer objetivo: checkDestination (normalización 1→l, 0→o, rn→m + distancia de edición)
 y checkGrantRequest, cada una con pruebas: una que pasa y una que bloquea. El caso clave:
-"farmacia-medel1in" frente a "farmacia-medellin" conocido debe dar block o warn alto.
+"farmacia-medel1in" frente a "farmacia-medellin" conocido debe dar warn con riskPoints
+alto (NO block, según /contracts).
+Fuentes (no inventes la API, cita la que uses):
+- Hash: sin snippet (grant/grant-continuation.ts lo deja como "@TODO: Verify hash")
+  → https://openpayments.dev/es/identity/hash-verification/
+- Permisos (checkGrantRequest): https://openpayments.dev/es/guides/outgoing-grant-future-payments/
+- Ejemplo en 3 líneas: ../open-payments-snippets/examples/payment-flow.md
 Propón el plan y espera mi aprobación.
 ```
 
