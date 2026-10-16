@@ -21,7 +21,17 @@ const outgoingPaymentId = 'https://example.test/outgoing/one'
 const amount = { value: '100', assetCode: 'EUR', assetScale: 2 }
 const debit = { ...amount, value: '200' }
 
+function shouldCheckFilePermissions(platform: NodeJS.Platform): boolean {
+  return platform !== 'win32'
+}
+
 describe('estado local del smoke R2', () => {
+  it('omite la comprobación de permisos solo en Windows', () => {
+    expect(shouldCheckFilePermissions('win32')).toBe(false)
+    expect(shouldCheckFilePermissions('darwin')).toBe(true)
+    expect(shouldCheckFilePermissions('linux')).toBe(true)
+  })
+
   it('persiste cada ID y permite leer el estado después de cerrar el proceso', async () => {
     const path = await statePath()
     const initial = createSmokeState(amount, '2026-10-16T20:00:00.000Z')
@@ -49,7 +59,9 @@ describe('estado local del smoke R2', () => {
     expect(raw).not.toContain('SENTINEL_TOKEN')
     expect(raw).not.toContain('SENTINEL_KEY')
     expect(raw).not.toContain('SENTINEL_HEADER')
-    expect((await stat(path)).mode & 0o777).toBe(0o600)
+    if (shouldCheckFilePermissions(process.platform)) {
+      expect((await stat(path)).mode & 0o777).toBe(0o600)
+    }
     expect(await readSmokeState(path)).toMatchObject({ ...state, quoteDebitAmount: debit })
     await writeFile(path, JSON.stringify({ ...state, accessToken: 'SENTINEL_TOKEN' }))
     await expect(readSmokeState(path)).rejects.toThrow('Estado local inválido')
