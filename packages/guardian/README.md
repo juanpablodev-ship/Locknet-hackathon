@@ -1,12 +1,20 @@
-# guardian
+# Open Sentinels
 
-Librería de verificaciones de seguridad para apps que usan Open Payments. Son funciones puras en TypeScript: reciben datos y devuelven un veredicto. Sin red, sin dependencias.
+Verificaciones de seguridad abiertas para cualquier app que mueva dinero con Open Payments.
+
+Son funciones puras en TypeScript: reciben datos y devuelven un veredicto. Sin red, sin dependencias.
 
 **No adivina: explica.** Cada veredicto trae `userMessage` (para la persona) y `reasons` (el detalle técnico).
 
 ```ts
 type Verdict = { check; status: 'pass' | 'warn' | 'block'; riskPoints: number; userMessage: string; reasons: string[] }
 ```
+
+## ¿Para quién es?
+
+- Nació para proteger nuestra billetera compartida, donde la plata de varios se mueve en cada gasto.
+- Sirve igual para cualquier proyecto que use Open Payments: una natillera, una colecta para una donación, una tienda que cobra a varios clientes.
+- Se usa sin nuestra billetera: no importa nada de ella (ver el ejemplo sobre el snippet oficial).
 
 ## Las 6 funciones
 
