@@ -1,11 +1,12 @@
 import { createAuthenticatedClient, isFinalizedGrantWithAccessToken } from '@interledger/open-payments'
-import { assertNoSmokeState, createSmokeState, inspectStoredPayment, readSmokeState,
+import { amountDifference, assertNoSmokeState, createSmokeState, inspectStoredPayment, readSmokeState,
   requireCompleteSmokeState, saveSmokeState, smokeStateFile } from './smoke-state'
+import type { SmokeAmount, SmokeInspection, SmokeState } from './smoke-state'
 
 // Script aislado: no importar desde el servidor ni ejecutar sin autorización expresa.
 // Cargar .env local con el comando existente `npm run op -- ... --execute-smoke` SOLO
 // después de aprobar un pago de prueba. Este archivo no carga ni registra secretos.
-// Guarda solo IDs, fecha, monto esperado y estado en `.env.r2-smoke-state.json`,
+// Guarda solo IDs, fecha, montos y estado en `.env.r2-smoke-state.json`,
 // ignorado por la regla `.env.*` de Git. Si ya existe, no inicia otro smoke.
 // `--status-only` nunca crea recursos; para leer el incoming autenticado tras
 // el outgoing se necesita INCOMING_PAYMENT_ACCESS_TOKEN en el entorno local.
@@ -30,6 +31,33 @@ const required = [
   'SMOKE_ASSET_CODE', 'SMOKE_ASSET_SCALE',
 ] as const
 
+function formatAmount(amount: SmokeAmount): string {
+  const negative = amount.value.startsWith('-')
+  const digits = (negative ? amount.value.slice(1) : amount.value).padStart(amount.assetScale + 1, '0')
+  const split = amount.assetScale ? `${digits.slice(0, -amount.assetScale)}.${digits.slice(-amount.assetScale)}` : digits
+  return `${amount.assetCode} ${negative ? '-' : ''}${split}`
+}
+
+function reportAmounts(state: SmokeState, result: SmokeInspection): void {
+  console.log(`Solicitado como receiveAmount: ${formatAmount(state.receiveAmount)}`)
+  console.log(`DebitAmount de la quote: ${state.quoteDebitAmount ? formatAmount(state.quoteDebitAmount) : 'no registrado'}`)
+  console.log(`DebitAmount observado del outgoing: ${formatAmount(result.outgoingDebitAmount)}`)
+  console.log(`SentAmount observado del outgoing: ${formatAmount(result.outgoingSentAmount)}`)
+  console.log(`ReceivedAmount observado del incoming: ${result.incomingReceivedAmount ? formatAmount(result.incomingReceivedAmount) : 'no disponible'}`)
+  if (result.incomingReceivedAmount) {
+    const difference = amountDifference(result.outgoingDebitAmount, result.incomingReceivedAmount)
+    console.log(`Diferencia débito menos recepción: ${difference ? formatAmount(difference) : 'no comparable (moneda o escala distinta)'}`)
+  }
+  if (result.reason) console.log(`Motivo sanitizado: ${result.reason}`)
+  console.log(`Estado de conciliación: ${result.status}`)
+}
+
+function observedState(state: SmokeState, result: SmokeInspection): SmokeState {
+  return { ...state, status: result.status, outgoingDebitAmount: result.outgoingDebitAmount,
+    outgoingSentAmount: result.outgoingSentAmount, outgoingReceiveAmount: result.outgoingReceiveAmount,
+    ...(result.incomingReceivedAmount ? { incomingReceivedAmount: result.incomingReceivedAmount } : {}) }
+}
+
 // Fuentes oficiales para la ruta de solo lectura:
 // https://openpayments.dev/sdk/outgoing-get/
 // https://openpayments.dev/sdk/incoming-get/ (lectura autenticada por ID)
@@ -52,22 +80,22 @@ async function statusOnly(): Promise<void> {
       keyId: process.env.KEY_ID!,
     })
     step = 'consulta del outgoing payment'
-    const status = await inspectStoredPayment(state,
+    const result = await inspectStoredPayment(state,
       (id) => client.outgoingPayment.get({ url: id, accessToken: process.env.OUTGOING_PAYMENT_ACCESS_TOKEN! }),
       (id) => {
         step = 'consulta del incoming payment'
         const incomingToken = process.env.INCOMING_PAYMENT_ACCESS_TOKEN
         if (!incomingToken) {
           console.error('FALTA: INCOMING_PAYMENT_ACCESS_TOKEN')
-          return Promise.resolve({})
+          return Promise.resolve({ completed: false })
         }
         return client.incomingPayment.get({ url: id, accessToken: incomingToken })
       },
     )
     step = 'persistencia del estado consultado'
-    await saveSmokeState(smokeStateFile, { ...state, status })
-    console.log(`Estado conocido: ${status}`)
-    if (status !== 'amount-matched') process.exitCode = 1
+    await saveSmokeState(smokeStateFile, observedState(state, result))
+    reportAmounts(state, result)
+    if (result.status !== 'amount-matched') process.exitCode = 1
   } catch (error) {
     const safe = error instanceof Error && ['Estado local ausente', 'Estado local inválido', 'Faltan IDs exactos'].includes(error.message)
       ? error.message : `Falló en: ${step}`
@@ -170,7 +198,7 @@ async function main(): Promise<void> {
       { method: 'ilp', walletAddress: env.PAYER_WALLET_ADDRESS, receiver: incoming.id, receiveAmount: amount },
     )
     step = 'persistencia de la quote'
-    state = { ...state, quoteId: quote.id, status: 'quote-created' }
+    state = { ...state, quoteId: quote.id, quoteDebitAmount: quote.debitAmount, status: 'quote-created' }
     await saveSmokeState(smokeStateFile, state)
     if (quote.receiveAmount.value !== amount.value || quote.receiveAmount.assetCode !== amount.assetCode ||
         quote.receiveAmount.assetScale !== amount.assetScale) {
@@ -191,51 +219,35 @@ async function main(): Promise<void> {
       { walletAddress: env.PAYER_WALLET_ADDRESS, quoteId: quote.id },
     )
     step = 'persistencia del outgoing payment'
-    state = { ...state, outgoingPaymentId: outgoing.id, status: 'outgoing-created' }
+    state = { ...state, outgoingPaymentId: outgoing.id, status: 'outgoing-created',
+      outgoingDebitAmount: outgoing.debitAmount, outgoingSentAmount: outgoing.sentAmount,
+      outgoingReceiveAmount: outgoing.receiveAmount }
     await saveSmokeState(smokeStateFile, state)
 
     step = 'consulta del outgoing payment; el token debe incluir permiso read'
-    const outgoingState = await client.outgoingPayment.get({
-      url: outgoing.id, accessToken: env.OUTGOING_PAYMENT_ACCESS_TOKEN,
-    })
-    if (outgoingState.failed) {
-      step = 'outgoing payment fallido'
-      await saveSmokeState(smokeStateFile, { ...state, status: 'outgoing-failed' })
-      throw new Error('outgoing payment fallido')
-    }
-    if (outgoingState.sentAmount.assetCode !== outgoingState.debitAmount.assetCode ||
-        outgoingState.sentAmount.assetScale !== outgoingState.debitAmount.assetScale ||
-        BigInt(outgoingState.sentAmount.value) < BigInt(outgoingState.debitAmount.value)) {
-      step = 'outgoing payment pendiente; no se reintenta automáticamente'
-      await saveSmokeState(smokeStateFile, { ...state, status: 'outgoing-pending' })
-      throw new Error('outgoing payment pendiente; no se reintenta automáticamente')
-    }
-    await saveSmokeState(smokeStateFile, { ...state, status: 'outgoing-sent' })
-
-    step = 'consulta del incoming payment'
-    const incomingState = await client.incomingPayment.get({
-      url: incoming.id, accessToken: incomingGrant.access_token.value,
-    })
-    if (Date.now() >= Date.parse(incomingState.expiresAt ?? expiresAt)) {
-      step = 'incoming payment vencido'
-      throw new Error('incoming payment vencido')
-    }
-    if (!incomingState.completed) {
-      step = 'incoming payment pendiente de completarse'
-      await saveSmokeState(smokeStateFile, { ...state, status: 'incoming-unavailable' })
-      throw new Error('incoming payment pendiente')
-    }
-    if (incomingState.receivedAmount.value !== amount.value ||
-        incomingState.receivedAmount.assetCode !== amount.assetCode ||
-        incomingState.receivedAmount.assetScale !== amount.assetScale) {
-      step = 'conciliación; monto recibido distinto del esperado'
-      await saveSmokeState(smokeStateFile, { ...state, status: 'amount-mismatch' })
-      throw new Error('monto recibido distinto del esperado')
+    const result = await inspectStoredPayment(state,
+      (id) => client.outgoingPayment.get({ url: id, accessToken: env.OUTGOING_PAYMENT_ACCESS_TOKEN }),
+      (id) => {
+        step = 'consulta del incoming payment'
+        return client.incomingPayment.get({ url: id, accessToken: incomingGrant.access_token.value }).then((payment) => {
+          if (!payment.completed && Date.now() >= Date.parse(payment.expiresAt ?? expiresAt)) {
+            step = 'incoming payment vencido'
+            throw new Error('incoming payment vencido')
+          }
+          return payment
+        })
+      },
+    )
+    step = 'persistencia y conciliación de montos observados'
+    state = observedState(state, result)
+    await saveSmokeState(smokeStateFile, state)
+    reportAmounts(state, result)
+    if (result.status !== 'amount-matched') {
+      step = `conciliación: ${result.status}`
+      throw new Error('conciliación incompleta')
     }
     await saveSmokeState(smokeStateFile, { ...state, status: 'reconciled' })
-
-    // No se muestran IDs, URLs, respuestas del SDK ni detalles del grant.
-    console.log('Smoke verificado: pago saliente confirmado y monto recibido coincidente.')
+    console.log('Smoke verificado: recepción esperada confirmada; débito informado por separado.')
   } catch {
     // Los errores del SDK pueden incluir URLs o cabeceras: jamás se imprimen aquí.
     console.error(`Smoke falló en: ${step}. Revisa el paso indicado; sin reintentos automáticos.`)
