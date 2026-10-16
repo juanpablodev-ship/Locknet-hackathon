@@ -40,7 +40,8 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
         cap: structuredClone(member.cap), interval: member.interval,
       }
       permissionPeriod(input.interval, now())
-      const wallet = new URL(input.walletAddress)
+      let wallet: URL
+      try { wallet = new URL(input.walletAddress) } catch { throw new Error('Datos de unión inválidos') }
       if (wallet.protocol !== 'https:' || wallet.username || wallet.password || wallet.search || wallet.hash ||
           !input.name?.trim() || !/^[1-9]\d*$/.test(input.cap.value) ||
           !Number.isInteger(input.cap.assetScale) || input.cap.assetScale < 0 ||
@@ -99,7 +100,8 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
           entry.unavailable || entry.revoking || now() >= entry.tokenExpiresAt) throw new Error('Miembro o sesión no utilizable')
       permissionPeriod(entry.member.interval, now())
       const input = structuredClone(request)
-      const receiver = new URL(input.incomingPaymentUrl)
+      let receiver: URL
+      try { receiver = new URL(input.incomingPaymentUrl) } catch { throw new Error('Permiso específico inválido') }
       // Fuente: esquema oficial incluido en SDK 7.4.0, auth-server.yaml,
       // components.schemas.receiver y limits-outgoing; base grant-outgoing-payment.ts.
       if (receiver.protocol !== 'https:' || receiver.username || receiver.password || receiver.search || receiver.hash ||

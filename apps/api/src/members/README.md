@@ -343,6 +343,27 @@ No se incorporó una infraestructura de persistencia sin acuerdo del equipo.
 
 R1 no se declara completo mientras sigan pendientes estas integraciones y pruebas.
 
+Validación final después de incorporar `origin/main` (`fa86876`) sin conflictos
+mediante merge en `r1-miembros`:
+
+| Comando | Resultado |
+|---|---|
+| `git fetch origin` | Novedades descargadas; main local no modificado |
+| `git merge --no-edit origin/r1-miembros` | Ya actualizado |
+| `git merge --no-edit origin/main` | Merge `b90e97a`, sin conflictos |
+| `npm test -- apps/api/src/members demo` | 92 pruebas, 6 archivos, todas pasan |
+| `npm test` | 330 pruebas, 27 archivos, todas pasan |
+| `npm run typecheck` | Sin errores |
+| `git diff --check` y contra `origin/main` | Sin errores de formato |
+| `git check-ignore .env private.key` | Ambos ignorados |
+| `git ls-files -- .env private.key` | Sin resultados: no versionados |
+
+Se revisaron los archivos propios contra los valores sensibles locales y el
+contenido de la llave sin imprimirlos: cero coincidencias. El diff propio queda
+limitado a las carpetas de R1 y su registro de prompts. Los cambios de R3/R4
+entran por merge, sin ediciones propias en sus archivos. Las comprobaciones
+automatizadas no se presentan como una nueva autorización real.
+
 Mensaje para R3: «Comparte un `createMembersStore()` entre las instancias de sesión
 de `createMembersJoinService` y R2. Conecta sesiones, callback con parámetros
 únicos y eventos sin secretos; nunca serialices `tokenFor` ni el token P2.
