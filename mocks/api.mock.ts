@@ -1,7 +1,7 @@
 // Simulado de la API web (R4). Primer paso sin depender de nadie: api.mock con datos
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
-import type { Money, SharedWallet, Spend } from '../contracts/index.js'
+import type { Money, SharedWallet, Spend, WalletEvent } from '../contracts/index.js'
 import { cuidadoDeMama, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
@@ -80,7 +80,30 @@ export function getSpends(walletId: string): Spend[] {
   return structuredClone(spends[walletId] ?? [])
 }
 
+const listeners: Record<string, Set<(e: WalletEvent) => void>> = {}
+let timers: ReturnType<typeof setTimeout>[] = []
+
 export function resetMock(): void {
   wallets = structuredClone(WALLETS_INICIALES)
   spends = structuredClone(SPENDS_INICIALES)
+  for (const id of timers) clearTimeout(id)
+  timers = []
 }
+
+export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => void {
+  const deLaBilletera = (listeners[walletId] ??= new Set())
+  deLaBilletera.add(cb)
+  return () => deLaBilletera.delete(cb)
+}
+
+function emitir(e: Omit<WalletEvent, 'ts'>): void {
+  const evento: WalletEvent = { ...e, ts: Date.now() }
+  for (const cb of listeners[e.walletId] ?? []) cb(structuredClone(evento))
+}
+
+function programar(ms: number, fn: () => void): void {
+  timers.push(setTimeout(fn, ms))
+}
+
+export const _testEmitir = emitir
+export const _testProgramar = programar
