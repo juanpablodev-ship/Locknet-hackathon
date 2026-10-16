@@ -77,6 +77,26 @@ describe('addMember: unirse sin depositar', () => {
   })
 })
 
+describe('refreshCapacity: cupo real con available()', () => {
+  it('usa lo que le queda a cada miembro y emite capacity-updated', async () => {
+    const quedan: Record<string, number> = { 'm-bogota': 60_000, 'm-medellin': 100_000 }
+    const w = await engine.refreshCapacity('w-mama', async (id) =>
+      id === 'm-madrid' ? { value: '2200', assetCode: 'EUR', assetScale: 2 } : cop(quedan[id]))
+    expect(w.members.map((m) => m.available?.value)).toEqual(['6000000', '10000000', '2200'])
+    expect(w.authorizedCapacity).toEqual(cop(160_000))   // EUR no se suma sin conversión
+    expect(events.at(-1)).toMatchObject({ type: 'capacity-updated', amount: cop(160_000) })
+  })
+
+  it('si available() falla para un miembro, conserva su último valor', async () => {
+    const w = await engine.refreshCapacity('w-mama', async (id) => {
+      if (id === 'm-bogota') throw new Error('No se pudo consultar el cupo autorizado')
+      return id === 'm-madrid' ? { value: '2200', assetCode: 'EUR', assetScale: 2 } : cop(10_000)
+    })
+    expect(w.members[0].available).toEqual(cop(100_000))
+    expect(w.authorizedCapacity).toEqual(cop(110_000))
+  })
+})
+
 describe('reset: reinicio de demo', () => {
   it('reemplaza las billeteras y borra los gastos', () => {
     engine.requestSpend('w-mama', farmacia, cop(120_000))

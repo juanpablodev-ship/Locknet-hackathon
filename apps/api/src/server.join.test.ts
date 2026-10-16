@@ -55,7 +55,8 @@ beforeEach(async () => {
     seeds: () => [{ ...structuredClone(cuidadoDeMama), members: [], authorizedCapacity: cop(0) }],
     resetStore: () => { log.push('resetStore') },
   }
-  server = createApp({ engine, bus, join, demo }).listen(0)
+  const available = async () => cop(70_000)   // R1: lo que le queda a cada miembro
+  server = createApp({ engine, bus, join, demo, available }).listen(0)
   await new Promise((r) => server.once('listening', r))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
@@ -117,8 +118,18 @@ describe('GET /api/join/finish', () => {
     expect(res.headers.get('location')).toBe(`${WEB}#/inicio?union=ok`)
     const wallet = await (await fetch(`${base}/api/wallets/w-mama`)).json()
     expect(wallet.members.map((m: Member) => m.name)).toEqual(['bogota'])
-    expect(wallet.authorizedCapacity).toEqual(cop(100_000))
-    expect(events.map((e) => e.type)).toEqual(['member-active', 'capacity-updated'])
+    expect(events.map((e) => e.type)).toEqual(['member-active', 'capacity-updated', 'capacity-updated'])
+    // primero el tope, luego el cupo real consultado con available()
+    expect(events[1].amount).toEqual(cop(100_000))
+    expect(events[2].amount).toEqual(cop(70_000))
+  })
+
+  it('POST /api/wallets/:id/capacity/refresh devuelve el cupo real', async () => {
+    const { state, cookie } = await start('bogota')
+    await finish(`interact_ref=ref&hash=hash-bueno&state=${state}`, cookie)
+    const res = await fetch(`${base}/api/wallets/w-mama/capacity/refresh`, { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect((await res.json()).authorizedCapacity).toEqual(cop(70_000))
   })
 
   it('hash inválido → union=error y nadie se une', async () => {

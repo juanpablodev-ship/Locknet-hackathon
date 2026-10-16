@@ -18,6 +18,7 @@ export interface EngineDeps {
   pollMs?: number                        // espera entre consultas de track()
   maxPolls?: number                      // intentos antes de dar el aporte por fallido
   sleep?: (ms: number) => Promise<void>
+  incomingPerShare?: boolean             // plan B: un cobro por aporte en vez de uno compartido
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -128,18 +129,30 @@ export function createEngine(deps: EngineDeps) {
     return spend
   }
 
-  async function payShares(wallet: SharedWallet, spend: Spend, shares: Share[], amount: Money): Promise<Spend> {
-    let url: string
+  // Justo antes de pagar: los cobros vencen. Si no se puede crear, fallan los aportes que dependían de él.
+  async function newIncoming(wallet: SharedWallet, spend: Spend, shares: Share[], amount: Money): Promise<string | undefined> {
     try {
-      // Justo antes de pagar: los cobros vencen.
-      url = (await deps.payments.createIncoming(spend.destination.walletAddress, amount)).incomingPaymentUrl
+      const url = (await deps.payments.createIncoming(spend.destination.walletAddress, amount)).incomingPaymentUrl
+      incomings.set(spend.id, [...(incomings.get(spend.id) ?? []), url])
+      return url
     } catch (e) {
       const reason = `No se pudo crear el cobro: ${e instanceof Error ? e.message : String(e)}`
       shares.forEach((s) => failShare(wallet, spend, s, reason))
-      return finish(wallet, spend)
+      return undefined
     }
-    incomings.set(spend.id, [...(incomings.get(spend.id) ?? []), url])
-    for (const share of shares) await payOne(wallet, spend, share, url)  // en orden: "1 de 3", "2 de 3"…
+  }
+
+  async function payShares(wallet: SharedWallet, spend: Spend, shares: Share[], amount: Money): Promise<Spend> {
+    if (deps.incomingPerShare) {
+      // Plan B: cada aporte paga su propio cobro (probado con un pagador en la Test Wallet).
+      for (const share of shares) {
+        const url = await newIncoming(wallet, spend, [share], share.share)
+        if (url) await payOne(wallet, spend, share, url)
+      }
+    } else {
+      const url = await newIncoming(wallet, spend, shares, amount)
+      if (url) for (const share of shares) await payOne(wallet, spend, share, url)  // en orden: "1 de 3", "2 de 3"…
+    }
     return finish(wallet, spend)
   }
 
@@ -150,6 +163,19 @@ export function createEngine(deps: EngineDeps) {
 
     listWallets(): SharedWallet[] {
       return [...wallets.values()]
+    },
+
+    // Cupo real (plan 12.2): lo que le queda a cada miembro según MembersService.available() de R1.
+    // Si la consulta de un miembro falla, se conserva su último valor y se sigue con los demás.
+    async refreshCapacity(walletId: string, available: (memberId: string) => Promise<Money>): Promise<SharedWallet> {
+      const wallet = walletOf(walletId)
+      for (const m of activeMembers(wallet)) {
+        try { m.available = await available(m.id) } catch { /* último valor conocido */ }
+      }
+      recomputeCapacity(wallet)
+      emit({ walletId, type: 'capacity-updated', amount: wallet.authorizedCapacity,
+             message: 'Cupo autorizado del grupo actualizado.' })
+      return wallet
     },
 
     // Reinicio de demo: reemplaza billeteras y borra gastos y cobros. No revoca permisos externos.
