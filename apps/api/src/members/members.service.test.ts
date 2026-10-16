@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AuthenticatedClient, GrantWithAccessToken, PendingGrant, WalletAddress } from '@interledger/open-payments'
+import { OpenPaymentsClientError, type AuthenticatedClient, type GrantWithAccessToken, type PendingGrant, type WalletAddress } from '@interledger/open-payments'
 import type { Member, MembersService } from '../../../../contracts/index'
 import { guardian } from '../../../../packages/guardian/src/index.js'
 import { createMembersJoinService } from './members.service'
+import { createMemberOperations, createMembersStore, listMembers, membersState, permissionPeriod, remainingCapacity, resetMembersStore } from './member-operations'
 
 // Open Sentinels NO se simula. Solo las llamadas de red del SDK.
 afterEach(() => { vi.restoreAllMocks() })
@@ -24,12 +25,15 @@ function setup() {
   const get = vi.fn().mockResolvedValue(wallet)
   const request = vi.fn<AuthenticatedClient['grant']['request']>().mockResolvedValue(pending)
   const continuation = vi.fn<AuthenticatedClient['grant']['continue']>().mockResolvedValue(final)
-  const client = { walletAddress: { get }, grant: { request, continue: continuation, cancel: vi.fn() } } as unknown as AuthenticatedClient
+  const spent = vi.fn().mockResolvedValue({ spentDebitAmount: { ...member.cap, value: '100' }, spentReceiveAmount: null })
+  const cancel = vi.fn().mockResolvedValue(undefined)
+  const client = { walletAddress: { get }, grant: { request, continue: continuation, cancel },
+    outgoingPayment: { getGrantSpentAmounts: spent } } as unknown as AuthenticatedClient
   const session = { current: 'server-session', time: Date.now() }
   const options = { finishUri: 'https://app.example/finish', policy: { maxCap: { ...member.cap } },
-    sessionId: session.current, currentSessionId: () => session.current, now: () => session.time }
-  const service: Pick<MembersService, 'startJoin' | 'finishJoin'> = createMembersJoinService(client, options)
-  return { service, client, get, request, continuation, member, wallet, pending, final, session, options }
+    sessionId: session.current, currentSessionId: () => session.current, now: () => session.time, store: createMembersStore() }
+  const service = createMembersJoinService(client, options)
+  return { service, client, get, request, continuation, member, wallet, pending, final, session, options, spent, cancel }
 }
 
 async function begin(f: ReturnType<typeof setup>, encoding: 'base64' | 'base64url' = 'base64') {
@@ -40,6 +44,89 @@ async function begin(f: ReturnType<typeof setup>, encoding: 'base64' | 'base64ur
   const hash = createHash('sha256').update([finish.nonce, f.pending.interact.finish, interactRef, f.wallet.authServer].join('\n'), 'ascii').digest(encoding)
   return { result, p: { state, interactRef, hash }, finish }
 }
+
+async function beginSpecific() {
+  const f = setup(); const joined = await begin(f); const { member } = await f.service.finishJoin(joined.p)
+  const debit = { ...member.cap, value: '125' }
+  const receiver = 'https://receiver.example/incoming-payments/example'
+  await f.service.startWalletConfirm(member.id, { incomingPaymentUrl: receiver, debit })
+  const finish = f.request.mock.calls[1][1].interact!.finish!
+  const interactRef = randomBytes(16).toString('hex')
+  const p = { state: new URL(finish.uri).searchParams.get('state')!, interactRef,
+    hash: createHash('sha256').update([finish.nonce, f.pending.interact.finish, interactRef, f.wallet.authServer].join('\n')).digest('base64') }
+  const specific = structuredClone(f.final)
+  specific.access_token.value = randomBytes(32).toString('hex')
+  specific.continue = { uri: 'https://auth.example/specific', access_token: { value: randomBytes(32).toString('hex') } }
+  const access = specific.access_token.access[0]
+  if (access.type !== 'outgoing-payment') throw new Error('fixture inválido')
+  access.limits = { receiver, debitAmount: debit }
+  f.continuation.mockResolvedValue(specific)
+  f.continuation.mockClear()
+  return { ...f, memberId: member.id, debit, receiver, specific, p }
+}
+
+describe('P2: concesión independiente con destinatario fijo; guardián real y SDK simulado', () => {
+  it('solicita receiver y monto exactos sin intervalo, verifica hash y no reutiliza el token mensual', async () => {
+    const f = await beginSpecific()
+    expect(f.request.mock.calls[1][1].access_token).toEqual({ access: [{ type: 'outgoing-payment', identifier: f.wallet.id,
+      actions: ['read', 'create'], limits: { receiver: f.receiver, debitAmount: f.debit } }] })
+    const verify = vi.spyOn(guardian, 'verifyInteractionHash')
+    const result = await f.service.finishWalletConfirm(f.p)
+    expect(result).toMatchObject({ memberId: f.memberId, approved: true, token: f.specific.access_token.value, hashVerdict: { status: 'pass' } })
+    expect(result.token).not.toBe(f.final.access_token.value)
+    expect(verify.mock.invocationCallOrder[0]).toBeLessThan(f.continuation.mock.invocationCallOrder[0])
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+    expect(f.continuation).toHaveBeenCalledTimes(1)
+    await f.service.revoke(f.memberId)
+    expect(f.cancel.mock.calls.map(call => call[0].url)).toEqual([f.specific.continue.uri, f.final.continue.uri])
+  })
+  it.each(['hash', 'session', 'expired', 'revoked'] as const)('rechaza %s sin continuar la concesión', async failure => {
+    const f = await beginSpecific()
+    if (failure === 'hash') { const bytes = Buffer.from(f.p.hash, 'base64'); bytes[0] ^= 1; f.p.hash = bytes.toString('base64') }
+    if (failure === 'session') f.session.current = 'other'
+    if (failure === 'expired') f.session.time += 600_001
+    if (failure === 'revoked') await f.service.revoke(f.memberId)
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+    expect(f.continuation).not.toHaveBeenCalled()
+  })
+  it.each(['receiver', 'amount', 'interval', 'monthly-token', 'provider'] as const)('rechaza resultado %s y no devuelve aprobación', async failure => {
+    const f = await beginSpecific(); const access = f.specific.access_token.access[0]
+    if (access.type !== 'outgoing-payment' || !access.limits || !('debitAmount' in access.limits)) throw new Error('fixture inválido')
+    if (failure === 'receiver') access.limits.receiver = 'https://receiver.example/incoming-payments/other'
+    if (failure === 'amount') access.limits.debitAmount.value = '126'
+    if (failure === 'interval') access.limits.interval = f.member.interval
+    if (failure === 'monthly-token') f.specific.access_token.value = f.final.access_token.value
+    if (failure === 'provider') f.continuation.mockRejectedValue(new Error('synthetic'))
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow('confirmar')
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+  })
+  it('rechaza destinatarios inválidos, miembro desconocido y solicitudes pendientes sin otro grant', async () => {
+    const f = await beginSpecific()
+    await expect(f.service.startWalletConfirm(f.memberId, { incomingPaymentUrl: f.receiver, debit: f.debit })).rejects.toThrow('pendiente')
+    await expect(f.service.startWalletConfirm(f.memberId, { incomingPaymentUrl: 'http://example.invalid', debit: f.debit })).rejects.toThrow()
+    await expect(f.service.startWalletConfirm(f.memberId, { incomingPaymentUrl: 'not-a-url', debit: f.debit })).rejects.toThrow('Permiso específico inválido')
+    await expect(f.service.startWalletConfirm('missing', { incomingPaymentUrl: f.receiver, debit: f.debit })).rejects.toThrow()
+    expect(f.request).toHaveBeenCalledTimes(2)
+  })
+  it('un callback concurrente no duplica la continuación específica', async () => {
+    const f = await beginSpecific()
+    let release!: (grant: GrantWithAccessToken) => void
+    f.continuation.mockReturnValue(new Promise(resolve => { release = resolve }))
+    const first = f.service.finishWalletConfirm(f.p)
+    await expect(f.service.finishWalletConfirm(f.p)).rejects.toThrow()
+    expect(f.continuation).toHaveBeenCalledTimes(1)
+    release(f.specific)
+    await expect(first).resolves.toMatchObject({ approved: true })
+  })
+  it('si falla la cancelación mensual después de cancelar P2, reintenta solo lo pendiente', async () => {
+    const f = await beginSpecific(); await f.service.finishWalletConfirm(f.p)
+    f.cancel.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('synthetic'))
+    await expect(f.service.revoke(f.memberId)).rejects.toThrow('local bloqueado')
+    await expect(f.service.tokenFor(f.memberId)).rejects.toThrow('no utilizable')
+    await f.service.revoke(f.memberId)
+    expect(f.cancel.mock.calls.map(call => call[0].url)).toEqual([f.specific.continue.uri, f.final.continue.uri, f.final.continue.uri])
+  })
+})
 
 describe('unión con Open Sentinels real', () => {
   it.each(['base64', 'base64url'] as const)('startJoin → finishJoin valida %s y activa solo tras continuar', async encoding => {
@@ -152,6 +239,105 @@ describe('unión con Open Sentinels real', () => {
   })
 })
 
+describe('tokenFor, available y revoke con SDK simulado y almacenamiento compartido', () => {
+  it('entrega el token solo en la operación interna y consulta el período actual del proveedor', async () => {
+    const f = setup(); const { p } = await begin(f); const joined = await f.service.finishJoin(p)
+    const r2 = createMemberOperations(f.client, f.options.store, () => f.session.time)
+    expect(await r2.tokenFor(joined.member.id)).toBe(f.final.access_token.value)
+    expect(f.spent).toHaveBeenCalledWith({ url: f.wallet.resourceServer, accessToken: f.final.access_token.value })
+    const publicData = JSON.stringify([joined, listMembers(f.options.store), f.options.store, r2])
+    expect(publicData).not.toContain(f.final.access_token.value)
+    expect(publicData).not.toContain(f.final.continue.access_token.value)
+    await expect(r2.tokenFor('unknown')).rejects.toThrow('no utilizable')
+  })
+  it('cupo agotado, moneda incompatible, proveedor malformado y red no entregan token', async () => {
+    const f = setup(); const { p } = await begin(f); const { member } = await f.service.finishJoin(p)
+    f.spent.mockResolvedValueOnce({ spentDebitAmount: { ...member.cap }, spentReceiveAmount: null })
+    await expect(f.service.tokenFor(member.id)).rejects.toThrow('agotado')
+    f.spent.mockResolvedValueOnce({ spentDebitAmount: { ...member.cap, assetCode: 'EUR' } })
+    await expect(f.service.available(member.id)).rejects.toThrow('consultar')
+    f.spent.mockResolvedValueOnce({})
+    await expect(f.service.available(member.id)).rejects.toThrow('consultar')
+    f.spent.mockRejectedValueOnce(new Error(f.final.access_token.value))
+    await expect(f.service.tokenFor(member.id)).rejects.toThrow('No se pudo consultar el cupo autorizado')
+  })
+  it('una renovación consulta gastos nuevos y no conserva el agotamiento local del período previo', async () => {
+    const f = setup(); const { p } = await begin(f); const { member } = await f.service.finishJoin(p)
+    f.spent.mockResolvedValueOnce({ spentDebitAmount: { ...member.cap } })
+    expect((await f.service.available(member.id)).value).toBe('0')
+    f.session.time = Date.parse('2026-11-16T00:00:00Z')
+    f.spent.mockResolvedValueOnce({ spentDebitAmount: null })
+    expect((await f.service.available(member.id)).value).toBe(member.cap.value)
+    expect(f.spent).toHaveBeenCalledTimes(2)
+  })
+  it('no usa una respuesta que cruzó el límite de período durante la consulta', async () => {
+    const f = setup(); const { p } = await begin(f); const { member } = await f.service.finishJoin(p)
+    f.spent.mockImplementationOnce(async () => {
+      f.session.time = Date.parse('2026-11-16T00:00:00Z'); return { spentDebitAmount: null }
+    })
+    await expect(f.service.available(member.id)).rejects.toThrow('consultar')
+  })
+  it('rechaza expiración del token, intervalo terminado y revocación externa detectada', async () => {
+    const f = setup(); f.final.access_token.expires_in = 10
+    const { p } = await begin(f); const { member } = await f.service.finishJoin(p)
+    f.session.time += 10_001
+    await expect(f.service.tokenFor(member.id)).rejects.toThrow('vencido')
+    expect(listMembers(f.options.store)[0].status).toBe('expired')
+    const g = setup(); const next = await begin(g); const joined = await g.service.finishJoin(next.p)
+    g.spent.mockRejectedValueOnce(new OpenPaymentsClientError('synthetic', { description: 'synthetic', status: 403 }))
+    await expect(g.service.available(joined.member.id)).rejects.toThrow('consultar')
+    await expect(g.service.tokenFor(joined.member.id)).rejects.toThrow('no utilizable')
+    expect(g.spent).toHaveBeenCalledTimes(1)
+    expect(() => permissionPeriod(g.member.interval, Date.parse('2027-01-16T00:00:00Z'))).toThrow('vigencia')
+  })
+  it('revoca con los datos de continuación finales; las llamadas concurrentes y repetidas no duplican cancel', async () => {
+    const f = setup(); f.final.continue = { uri: 'https://auth.example/final-continuation', access_token: { value: randomBytes(32).toString('hex') } }
+    const { p } = await begin(f); const { member } = await f.service.finishJoin(p)
+    await Promise.all([f.service.revoke(member.id), f.service.revoke(member.id)])
+    await f.service.revoke(member.id)
+    expect(f.cancel).toHaveBeenCalledTimes(1)
+    expect(f.cancel).toHaveBeenCalledWith({ url: f.final.continue.uri, accessToken: f.final.continue.access_token.value })
+    await expect(f.service.tokenFor(member.id)).rejects.toThrow('no utilizable')
+    expect(listMembers(f.options.store)[0].status).toBe('revoked')
+    await expect(f.service.revoke('unknown')).rejects.toThrow('no encontrado')
+  })
+  it('un error de revocación bloquea tokenFor, no finge éxito externo y permite reintento explícito', async () => {
+    const f = setup(); const { p } = await begin(f); const { member } = await f.service.finishJoin(p)
+    f.cancel.mockRejectedValueOnce(new Error(f.final.access_token.value))
+    await expect(f.service.revoke(member.id)).rejects.toThrow('permiso local bloqueado')
+    expect(listMembers(f.options.store)[0].status).toBe('active')
+    await expect(f.service.tokenFor(member.id)).rejects.toThrow('no utilizable')
+    await f.service.revoke(member.id)
+    expect(listMembers(f.options.store)[0].status).toBe('revoked')
+  })
+  it('el reset solo borra estado local, invalida callbacks y operaciones en vuelo, y no cancela permisos', async () => {
+    const f = setup(); const { p } = await begin(f)
+    resetMembersStore(f.options.store)
+    await expect(f.service.finishJoin(p)).rejects.toThrow('inexistente')
+    expect(f.cancel).not.toHaveBeenCalled()
+    expect(listMembers(f.options.store)).toEqual([])
+    expect(() => membersState({ kind: 'members-memory' })).toThrow('inválido')
+  })
+})
+
+describe('aritmética de cupo y períodos', () => {
+  it('usa BigInt, respeta escalas diferentes y redondea el cupo hacia abajo', () => {
+    const cap = { value: '9007199254740993', assetCode: 'COP', assetScale: 2 }
+    expect(remainingCapacity(cap, { ...cap, value: '1' }).value).toBe('9007199254740992')
+    expect(remainingCapacity({ ...cap, value: '100' }, { ...cap, value: '1', assetScale: 3 }).value).toBe('99')
+    expect(remainingCapacity({ ...cap, value: '100' }, { ...cap, value: '1', assetScale: 0 }).value).toBe('0')
+    expect(remainingCapacity(cap, null)).toEqual(cap)
+    expect(() => remainingCapacity(cap, { ...cap, value: '-1' })).toThrow()
+  })
+  it('reconoce límites diarios, mensuales y repetición indefinida; rechaza formas no soportadas', () => {
+    expect(permissionPeriod('R2/2026-10-16T00:00:00Z/P1D', Date.parse('2026-10-17T00:00:00Z'))).toBe('1')
+    expect(permissionPeriod('R/2026-10-16T00:00:00Z/P1M', Date.parse('2027-10-16T00:00:00Z'))).toBe('12')
+    expect(() => permissionPeriod('R2/2026-10-16T00:00:00Z/P1D', Date.parse('2026-10-18T00:00:00Z'))).toThrow()
+    expect(() => permissionPeriod('R2/2026-10-31T00:00:00Z/P1M', Date.parse('2026-11-01T00:00:00Z'))).toThrow('no soportado')
+    expect(() => permissionPeriod(undefined, Date.now())).toThrow()
+  })
+})
+
 describe('validación y aislamiento de startJoin', () => {
   it('rechaza una sesión inválida y una segunda solicitud sin sobrescribir la original', async () => {
     const f = setup()
@@ -203,6 +389,7 @@ describe('validación y aislamiento de startJoin', () => {
     expect(() => createMembersJoinService(f.client, { ...f.options, finishUri: 'http://app.example/finish' })).toThrow()
     expect(() => createMembersJoinService(f.client, { ...f.options, policy: { maxCap: { ...f.member.cap, value: '0' } } })).toThrow()
     await expect(f.service.startJoin('', f.member)).rejects.toThrow()
+    await expect(f.service.startJoin('group-1', { ...f.member, walletAddress: 'not-a-url' })).rejects.toThrow('Datos de unión inválidos')
     await expect(f.service.startJoin('group-1', { ...f.member, interval: undefined })).rejects.toThrow()
     expect(f.request).not.toHaveBeenCalled()
   })
