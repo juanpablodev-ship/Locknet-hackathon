@@ -1,8 +1,14 @@
 import { createAuthenticatedClient, isFinalizedGrantWithAccessToken } from '@interledger/open-payments'
+import { assertNoSmokeState, createSmokeState, inspectStoredPayment, readSmokeState,
+  requireCompleteSmokeState, saveSmokeState, smokeStateFile } from './smoke-state'
 
 // Script aislado: no importar desde el servidor ni ejecutar sin autorización expresa.
 // Cargar .env local con el comando existente `npm run op -- ... --execute-smoke` SOLO
 // después de aprobar un pago de prueba. Este archivo no carga ni registra secretos.
+// Guarda solo IDs, fecha, monto esperado y estado en `.env.r2-smoke-state.json`,
+// ignorado por la regla `.env.*` de Git. Si ya existe, no inicia otro smoke.
+// `--status-only` nunca crea recursos; para leer el incoming autenticado tras
+// el outgoing se necesita INCOMING_PAYMENT_ACCESS_TOKEN en el entorno local.
 // Fuentes del SDK:
 // https://openpayments.dev/sdk/incoming-create/
 // https://openpayments.dev/sdk/quote-create/
@@ -24,7 +30,62 @@ const required = [
   'SMOKE_ASSET_CODE', 'SMOKE_ASSET_SCALE',
 ] as const
 
+// Fuentes oficiales para la ruta de solo lectura:
+// https://openpayments.dev/sdk/outgoing-get/
+// https://openpayments.dev/sdk/incoming-get/ (lectura autenticada por ID)
+async function statusOnly(): Promise<void> {
+  let step = 'lectura del estado local'
+  try {
+    const state = await readSmokeState(smokeStateFile)
+    requireCompleteSmokeState(state) // Ninguna llamada de red si falta un ID exacto.
+    const needed = ['WALLET_ADDRESS', 'KEY_ID', 'PRIVATE_KEY_PATH', 'OUTGOING_PAYMENT_ACCESS_TOKEN'] as const
+    const missing = needed.filter((name) => !process.env[name]?.trim())
+    if (missing.length) {
+      for (const name of missing) console.error(`FALTA: ${name}`)
+      process.exitCode = 1
+      return
+    }
+    step = 'cliente autenticado'
+    const client = await createAuthenticatedClient({
+      walletAddressUrl: process.env.WALLET_ADDRESS!,
+      privateKey: process.env.PRIVATE_KEY_PATH!,
+      keyId: process.env.KEY_ID!,
+    })
+    step = 'consulta del outgoing payment'
+    const status = await inspectStoredPayment(state,
+      (id) => client.outgoingPayment.get({ url: id, accessToken: process.env.OUTGOING_PAYMENT_ACCESS_TOKEN! }),
+      (id) => {
+        step = 'consulta del incoming payment'
+        const incomingToken = process.env.INCOMING_PAYMENT_ACCESS_TOKEN
+        if (!incomingToken) {
+          console.error('FALTA: INCOMING_PAYMENT_ACCESS_TOKEN')
+          return Promise.resolve({})
+        }
+        return client.incomingPayment.get({ url: id, accessToken: incomingToken })
+      },
+    )
+    step = 'persistencia del estado consultado'
+    await saveSmokeState(smokeStateFile, { ...state, status })
+    console.log(`Estado conocido: ${status}`)
+    if (status !== 'amount-matched') process.exitCode = 1
+  } catch (error) {
+    const safe = error instanceof Error && ['Estado local ausente', 'Estado local inválido', 'Faltan IDs exactos'].includes(error.message)
+      ? error.message : `Falló en: ${step}`
+    console.error(`Estado no verificado: ${safe}`)
+    process.exitCode = 1
+  }
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes('--status-only')) {
+    if (process.argv.includes('--execute-smoke')) {
+      console.error('Modos incompatibles.')
+      process.exitCode = 1
+      return
+    }
+    await statusOnly()
+    return
+  }
   if (!process.argv.includes('--execute-smoke')) {
     console.error('Smoke desactivado: falta autorización explícita de ejecución.')
     process.exitCode = 1
@@ -51,8 +112,12 @@ async function main(): Promise<void> {
   }
 
   const amount = { value: env.SMOKE_RECEIVE_AMOUNT, assetCode: env.SMOKE_ASSET_CODE, assetScale: scale }
+  let state = createSmokeState(amount)
   let step = 'inicialización del cliente autenticado'
   try {
+    step = 'comprobación del estado local previo'
+    await assertNoSmokeState(smokeStateFile)
+    step = 'inicialización del cliente autenticado'
     const client = await createAuthenticatedClient({
       walletAddressUrl: env.WALLET_ADDRESS,
       privateKey: env.PRIVATE_KEY_PATH,
@@ -85,6 +150,9 @@ async function main(): Promise<void> {
       { url: receiver.resourceServer, accessToken: incomingGrant.access_token.value },
       { walletAddress: env.RECEIVER_WALLET_ADDRESS, incomingAmount: amount, expiresAt },
     )
+    step = 'persistencia del incoming payment'
+    state = { ...state, incomingPaymentId: incoming.id, status: 'incoming-created' }
+    await saveSmokeState(smokeStateFile, state)
 
     step = 'grant de cotización; si requiere interacción, debe finalizarse antes de continuar'
     const quoteGrant = await client.grant.request(
@@ -101,6 +169,9 @@ async function main(): Promise<void> {
       { url: payer.resourceServer, accessToken: quoteGrant.access_token.value },
       { method: 'ilp', walletAddress: env.PAYER_WALLET_ADDRESS, receiver: incoming.id, receiveAmount: amount },
     )
+    step = 'persistencia de la quote'
+    state = { ...state, quoteId: quote.id, status: 'quote-created' }
+    await saveSmokeState(smokeStateFile, state)
     if (quote.receiveAmount.value !== amount.value || quote.receiveAmount.assetCode !== amount.assetCode ||
         quote.receiveAmount.assetScale !== amount.assetScale) {
       step = 'validación de receiveAmount de la quote'
@@ -119,6 +190,9 @@ async function main(): Promise<void> {
       { url: payer.resourceServer, accessToken: env.OUTGOING_PAYMENT_ACCESS_TOKEN },
       { walletAddress: env.PAYER_WALLET_ADDRESS, quoteId: quote.id },
     )
+    step = 'persistencia del outgoing payment'
+    state = { ...state, outgoingPaymentId: outgoing.id, status: 'outgoing-created' }
+    await saveSmokeState(smokeStateFile, state)
 
     step = 'consulta del outgoing payment; el token debe incluir permiso read'
     const outgoingState = await client.outgoingPayment.get({
@@ -126,14 +200,17 @@ async function main(): Promise<void> {
     })
     if (outgoingState.failed) {
       step = 'outgoing payment fallido'
+      await saveSmokeState(smokeStateFile, { ...state, status: 'outgoing-failed' })
       throw new Error('outgoing payment fallido')
     }
     if (outgoingState.sentAmount.assetCode !== outgoingState.debitAmount.assetCode ||
         outgoingState.sentAmount.assetScale !== outgoingState.debitAmount.assetScale ||
         BigInt(outgoingState.sentAmount.value) < BigInt(outgoingState.debitAmount.value)) {
       step = 'outgoing payment pendiente; no se reintenta automáticamente'
+      await saveSmokeState(smokeStateFile, { ...state, status: 'outgoing-pending' })
       throw new Error('outgoing payment pendiente; no se reintenta automáticamente')
     }
+    await saveSmokeState(smokeStateFile, { ...state, status: 'outgoing-sent' })
 
     step = 'consulta del incoming payment'
     const incomingState = await client.incomingPayment.get({
@@ -145,14 +222,17 @@ async function main(): Promise<void> {
     }
     if (!incomingState.completed) {
       step = 'incoming payment pendiente de completarse'
+      await saveSmokeState(smokeStateFile, { ...state, status: 'incoming-unavailable' })
       throw new Error('incoming payment pendiente')
     }
     if (incomingState.receivedAmount.value !== amount.value ||
         incomingState.receivedAmount.assetCode !== amount.assetCode ||
         incomingState.receivedAmount.assetScale !== amount.assetScale) {
       step = 'conciliación; monto recibido distinto del esperado'
+      await saveSmokeState(smokeStateFile, { ...state, status: 'amount-mismatch' })
       throw new Error('monto recibido distinto del esperado')
     }
+    await saveSmokeState(smokeStateFile, { ...state, status: 'reconciled' })
 
     // No se muestran IDs, URLs, respuestas del SDK ni detalles del grant.
     console.log('Smoke verificado: pago saliente confirmado y monto recibido coincidente.')
