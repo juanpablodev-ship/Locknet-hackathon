@@ -1,7 +1,7 @@
 // Simulado de la API web (R4). Primer paso sin depender de nadie: api.mock con datos
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
-import type { Money, SharedWallet, Spend, Verdict, WalletEvent } from '../contracts/index.js'
+import type { Member, Money, SharedWallet, Spend, Verdict, WalletEvent } from '../contracts/index.js'
 import { ataque, cuidadoDeMama, destinoParecido, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
@@ -83,6 +83,9 @@ export function getSpends(walletId: string): Spend[] {
 const listeners: Record<string, Set<(e: WalletEvent) => void>> = {}
 let timers: ReturnType<typeof setTimeout>[] = []
 let falloMemberId: string | null = null
+let joinCounter = 0
+let hashInvalido = false
+const joinsPendientes = new Map<string, { walletId: string; member: Member }>()
 
 export function resetMock(): void {
   wallets = structuredClone(WALLETS_INICIALES)
@@ -90,10 +93,115 @@ export function resetMock(): void {
   for (const id of timers) clearTimeout(id)
   timers = []
   falloMemberId = null
+  joinCounter = 0
+  hashInvalido = false
+  joinsPendientes.clear()
 }
 
 export function setFalloAporte(memberId: string | null): void {
   falloMemberId = memberId
+}
+
+export function setHashInvalido(invalido: boolean): void {
+  hashInvalido = invalido
+}
+
+function formatCap(cap: Money): string {
+  const value = Number(cap.value) / 10 ** cap.assetScale
+  const decimals = cap.assetCode === 'COP' ? 0 : 2
+  const number = new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value)
+  const symbol = cap.assetCode === 'COP' ? '$' : cap.assetCode === 'EUR' ? '€' : cap.assetCode === 'USD' ? 'US$' : `${cap.assetCode} `
+  return `${symbol}${number}`
+}
+
+function excedeTopeCOP(cap: Money): boolean {
+  const scale = 10n ** BigInt(cap.assetScale)
+  if (cap.assetCode === 'COP') return BigInt(cap.value) > 1_000_000n * scale
+  if (cap.assetCode === 'EUR') return BigInt(cap.value) > 230n * scale
+  return cap.assetCode !== 'COP'
+}
+
+export function startJoin(
+  walletId: string,
+  member: Omit<Member, 'id' | 'status'>,
+): { redirectUrl: string; grantWarning: Verdict } {
+  const wallet = wallets.find((item) => item.id === walletId)
+  if (!wallet) throw new Error('Billetera no encontrada')
+  if (member.cap.assetCode !== wallet.currency) {
+    throw new Error('El tope debe estar en la moneda de la billetera')
+  }
+
+  const id = `m-nuevo-${++joinCounter}`
+  const nuevo: Member = { ...structuredClone(member), id, status: 'active' }
+  joinsPendientes.set(id, { walletId, member: nuevo })
+
+  const superaTope = excedeTopeCOP(member.cap)
+  const sinIntervalo = !member.interval
+  const grantWarning: Verdict = superaTope || sinIntervalo
+    ? {
+        check: 'grant',
+        status: 'warn',
+        riskPoints: 60,
+        userMessage: `Esta billetera te pide autorizar hasta ${formatCap(member.cap)} sin límite de tiempo. Es mucho más de lo normal.`,
+        reasons: [
+          ...(superaTope ? ['El tope supera $1.000.000 COP equivalentes.'] : []),
+          ...(sinIntervalo ? ['No se indicó un límite de tiempo.'] : []),
+        ],
+      }
+    : {
+        check: 'grant',
+        status: 'pass',
+        riskPoints: 0,
+        userMessage: 'El tope y su intervalo están dentro de lo esperado.',
+        reasons: [],
+      }
+
+  return {
+    redirectUrl: hashInvalido
+      ? '#/unirse/volver?ok=0'
+      : `#/unirse/volver?ok=1&miembro=${encodeURIComponent(id)}`,
+    grantWarning,
+  }
+}
+
+export function finishJoin({ ok, memberId }: { ok: boolean; memberId: string }): Member | Verdict {
+  const pendiente = joinsPendientes.get(memberId)
+  if (!pendiente) throw new Error('Invitación no encontrada')
+  joinsPendientes.delete(memberId)
+
+  if (!ok) {
+    return {
+      check: 'consent-hash',
+      status: 'block',
+      riskPoints: 100,
+      userMessage: 'No pudimos confirmar que vienes de tu banco. No te uniste.',
+      reasons: ['La confirmación del banco no es válida.'],
+    }
+  }
+
+  const wallet = wallets.find((item) => item.id === pendiente.walletId)
+  if (!wallet) throw new Error('Billetera no encontrada')
+  wallet.members.push(pendiente.member)
+  wallet.authorizedCapacity = {
+    ...wallet.authorizedCapacity,
+    value: (BigInt(wallet.authorizedCapacity.value) + BigInt(pendiente.member.cap.value)).toString(),
+  }
+  emitir({
+    walletId: wallet.id,
+    type: 'member-active',
+    memberId: pendiente.member.id,
+    message: `${pendiente.member.name} se unió al grupo`,
+  })
+  emitir({
+    walletId: wallet.id,
+    type: 'capacity-updated',
+    amount: wallet.authorizedCapacity,
+    message: 'Cupo del grupo actualizado tras unirse un miembro.',
+  })
+  return structuredClone(pendiente.member)
 }
 
 export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => void {
