@@ -128,6 +128,13 @@ describe('api.ts en modo live', () => {
     await expect(api.castApproval('s-medicina', 'm1', true)).rejects.toThrow('Ya votó: m1')
   })
 
+  it('explica que no se puede reiniciar mientras hay un pago en curso', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(409, { error: 'No se puede reiniciar con un pago en curso' }))
+
+    await expect(api.resetDemo()).rejects.toThrow('No se puede reiniciar con un pago en curso')
+    expectRequest('/api/demo/reset', 'POST')
+  })
+
   it('traduce un fallo de red al mensaje acordado', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
 

@@ -39,6 +39,9 @@ async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown):
   }
 
   if (!respuesta.ok) {
+    if (metodo === 'POST' && ruta === '/api/demo/reset' && respuesta.status === 409) {
+      throw new Error('No se puede reiniciar con un pago en curso')
+    }
     const error = (await respuesta.json()) as { error?: unknown }
     if (typeof error.error !== 'string') throw new Error(`Error HTTP ${respuesta.status}`)
     throw new Error(error.error)
