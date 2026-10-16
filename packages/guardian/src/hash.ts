@@ -22,6 +22,11 @@ function expectedHashes(p: Params): string[] {
   return [digest.toString('base64url'), digest.toString('base64')]
 }
 
+// SHA-256 son 32 bytes: 43 caracteres en Base64 URL sin relleno, 44 (con un "=") en Base64 estándar.
+const ACCEPTED_FORMATS = [/^[A-Za-z0-9_-]{43}$/, /^[A-Za-z0-9+/]{43}=$/]
+const FORMAT_REASON =
+  'formato de hash no reconocido: se acepta Base64 URL sin relleno o Base64 estándar con relleno (revisar cómo se lee el parámetro de la URL)'
+
 function matches(p: Params, received: string): boolean {
   const got = Buffer.from(received, 'ascii')
   return expectedHashes(p).some((candidate) => {
@@ -37,6 +42,7 @@ export function verifyInteractionHash(p: Params): Verdict {
   // Rafiki codifica el hash en la URL (%2B, %3D) y URLSearchParams lo decodifica bien:
   // un espacio significa una URL mal procesada, así que no se "arregla"; se rechaza.
   const received = p.hash
+  if (!ACCEPTED_FORMATS.some((format) => format.test(received))) return block(FORMAT_REASON)
   if (matches(p, received)) return verdict('pass', 0, OK_MESSAGE, ['el hash coincide con el calculado'])
 
   const otherUri = p.grantUri.endsWith('/') ? p.grantUri.slice(0, -1) : p.grantUri + '/'

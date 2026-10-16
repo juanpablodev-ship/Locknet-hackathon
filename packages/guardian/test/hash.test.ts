@@ -133,3 +133,47 @@ describe('verifyInteractionHash — formato real de la Test Wallet (Rafiki)', ()
     expect(verifyInteractionHash({ ...official, hash: sha256(fields.join('\n')).toString('base64') }).status).toBe('pass')
   })
 })
+
+describe('verifyInteractionHash — reasons distingue formato de coincidencia', () => {
+  const FORMAT = 'formato de hash no reconocido: se acepta Base64 URL sin relleno o Base64 estándar con relleno (revisar cómo se lee el parámetro de la URL)'
+  const NO_MATCH = 'el hash no coincide con el calculado'
+  const standard = Buffer.from(official.hash, 'base64url').toString('base64')
+
+  it('hash con espacio → reason de formato', () => {
+    const v = verifyInteractionHash({ ...official, hash: standard.replace('+', ' ') })
+    expect(v.status).toBe('block')
+    expect(v.reasons).toEqual([FORMAT])
+  })
+
+  it('estándar sin relleno → reason de formato', () => {
+    expect(verifyInteractionHash({ ...official, hash: standard.replace(/=+$/, '') }).reasons).toEqual([FORMAT])
+  })
+
+  it('sin decodificar (%2B%3D) y base64url con "=" → reason de formato', () => {
+    expect(verifyInteractionHash({ ...official, hash: encodeURIComponent(standard) }).reasons).toEqual([FORMAT])
+    expect(verifyInteractionHash({ ...official, hash: official.hash + '=' }).reasons).toEqual([FORMAT])
+  })
+
+  it('carácter cambiado en un hash bien formado → "no coincide", no formato', () => {
+    const changed = official.hash.slice(0, -1) + 'Z'
+    expect(verifyInteractionHash({ ...official, hash: changed }).reasons).toEqual([NO_MATCH])
+    const changedStandard = standard.slice(0, 5) + (standard[5] === 'a' ? 'b' : 'a') + standard.slice(6)
+    expect(verifyInteractionHash({ ...official, hash: changedStandard }).reasons).toEqual([NO_MATCH])
+  })
+
+  it('hash válido → no menciona formato', () => {
+    expect(verifyInteractionHash(official).reasons.join(' ')).not.toContain('formato')
+  })
+
+  it('userMessage es el mismo en ambos casos y reasons no filtra hash ni nonces', () => {
+    const a = verifyInteractionHash({ ...official, hash: standard.replace('+', ' ') })
+    const b = verifyInteractionHash({ ...official, hash: official.hash.slice(0, -1) + 'Z' })
+    expect(a.userMessage).toBe('No pudimos confirmar que vienes de tu banco. No te uniste.')
+    expect(b.userMessage).toBe(a.userMessage)
+    for (const text of [JSON.stringify(a.reasons), JSON.stringify(b.reasons)]) {
+      for (const secret of [official.hash, standard, official.clientNonce, official.interactNonce, official.interactRef]) {
+        expect(text).not.toContain(secret)
+      }
+    }
+  })
+})
