@@ -4,10 +4,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:live": "vite --mode live",
     "build": "vite build",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.5",
     "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

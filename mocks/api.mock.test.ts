@@ -6,6 +6,7 @@ import {
   _testProgramar,
   castApproval,
   executeSpend,
+  finishJoin,
   getSpends,
   getWallet,
   getWallets,
@@ -16,6 +17,8 @@ import {
   resetMock,
   retryShare,
   setFalloAporte,
+  setHashInvalido,
+  startJoin,
 } from './api.mock.js'
 
 describe('getWallets', () => {
@@ -303,6 +306,80 @@ const FARMACIA_CONOCIDA = { name: 'Farmacia Medellín', walletAddress: 'https://
 const FARMACIA_PARECIDA = { name: 'Farmacia (cuenta nueva)', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medel1in' }
 const CUENTA_NUEVA = { name: 'Supermercado', walletAddress: 'https://ilp.interledger-test.dev/super-mercado' }
 const MONTO_120K = { value: '12000000', assetCode: 'COP', assetScale: 2 }
+const NUEVO_MIEMBRO = {
+  name: 'Persona nueva',
+  walletAddress: 'https://ilp.interledger-test.dev/persona-nueva',
+  assetCode: 'COP',
+  cap: { value: '5000000', assetCode: 'COP', assetScale: 2 },
+  interval: 'R12/2026-10-16T00:00:00Z/P1M',
+}
+
+describe('startJoin y finishJoin', () => {
+  beforeEach(() => resetMock())
+  afterEach(() => resetMock())
+
+  it('un tope normal con intervalo recibe un grant pass', () => {
+    const resultado = startJoin('w-mama', NUEVO_MIEMBRO)
+
+    expect(resultado.grantWarning.status).toBe('pass')
+    expect(resultado.redirectUrl).toMatch(/^#\/unirse\/volver\?ok=1&miembro=/)
+  })
+
+  it('un tope de $5.000.000 recibe la advertencia especificada', () => {
+    const resultado = startJoin('w-mama', {
+      ...NUEVO_MIEMBRO,
+      cap: { value: '500000000', assetCode: 'COP', assetScale: 2 },
+    })
+
+    expect(resultado.grantWarning.status).toBe('warn')
+    expect(resultado.grantWarning.userMessage).toBe(
+      'Esta billetera te pide autorizar hasta $5.000.000 sin límite de tiempo. Es mucho más de lo normal.'
+    )
+  })
+
+  it('sin intervalo advierte aunque el tope sea normal', () => {
+    const { interval: _interval, ...sinIntervalo } = NUEVO_MIEMBRO
+
+    expect(startJoin('w-mama', sinIntervalo).grantWarning.status).toBe('warn')
+  })
+
+  it('una confirmación válida agrega el miembro y emite los dos eventos', () => {
+    const { redirectUrl } = startJoin('w-mama', NUEVO_MIEMBRO)
+    const memberId = new URLSearchParams(redirectUrl.split('?')[1]).get('miembro')
+    expect(memberId).not.toBeNull()
+
+    const eventos: WalletEvent[] = []
+    const dejarDeEscuchar = onEvents('w-mama', (evento) => eventos.push(evento))
+    const member = finishJoin({ ok: true, memberId: memberId! })
+    dejarDeEscuchar()
+
+    expect('id' in member && member.status).toBe('active')
+    expect(getWallet('w-mama').members).toHaveLength(4)
+    expect(getWallet('w-mama').authorizedCapacity.value).toBe('35000000')
+    expect(eventos.map((evento) => evento.type)).toEqual(['member-active', 'capacity-updated'])
+    expect(eventos[1].amount?.value).toBe('35000000')
+  })
+
+  it('una confirmación inválida devuelve block sin agregar al miembro', () => {
+    const { redirectUrl } = startJoin('w-mama', NUEVO_MIEMBRO)
+    const memberId = new URLSearchParams(redirectUrl.split('?')[1]).get('miembro')
+
+    const verdict = finishJoin({ ok: false, memberId: '' })
+
+    expect('check' in verdict && verdict.status).toBe('block')
+    expect('check' in verdict && verdict.userMessage).toBe(
+      'No pudimos confirmar que vienes de tu banco. No te uniste.'
+    )
+    expect(getWallet('w-mama').members).toHaveLength(3)
+    expect(() => finishJoin({ ok: true, memberId: memberId! })).toThrow('Invitación no encontrada')
+  })
+
+  it('el modo de desarrollo puede simular un hash inválido', () => {
+    setHashInvalido(true)
+
+    expect(startJoin('w-mama', NUEVO_MIEMBRO).redirectUrl).toBe('#/unirse/volver?ok=0')
+  })
+})
 
 describe('requestSpend', () => {
   beforeEach(() => {

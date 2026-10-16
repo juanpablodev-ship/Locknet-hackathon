@@ -47,7 +47,7 @@ function cuerpoEsperandoAprobacion(spend: Spend, wallet: SharedWallet, votaComo?
     ${peor ? `<p class="advertencia">⚠ ${escapeHtml(peor.userMessage)}</p>` : ''}
     ${peor ? `<p class="motivos">${peor.reasons.map(escapeHtml).join(' · ')}</p>` : ''}
     <p class="destino">${escapeHtml(spend.destination.name)} · <code>${escapeHtml(spend.destination.walletAddress)}</code></p>
-    <p class="monto">${formatMoney(spend.amount)}</p>
+    <p class="monto">${escapeHtml(formatMoney(spend.amount))}</p>
     <p>Esto necesita aprobación del grupo: ${requeridos} de ${activos.length}</p>
     <p class="conteo-votos">A favor: ${aFavor} de ${requeridos} · En contra: ${enContra} de ${votosParaRechazar}</p>
     <div class="votos">${spend.approvals.map((a) => renderVoto(a, wallet)).join('')}</div>
@@ -74,8 +74,8 @@ function renderAporte(share: Share, wallet: SharedWallet): string {
   return `
     <div class="aporte">
       <p class="aporte-nombre">${nombre}</p>
-      <p>Aporta: ${share.debit ? formatMoney(share.debit) : '—'}</p>
-      <p>Llegó: ${share.received ? formatMoney(share.received) : '—'}</p>
+      <p>Aporta: ${share.debit ? escapeHtml(formatMoney(share.debit)) : '—'}</p>
+      <p>Llegó: ${share.received ? escapeHtml(formatMoney(share.received)) : '—'}</p>
       <p class="estado estado-${estado.tono}">${estado.texto}</p>
     </div>
   `

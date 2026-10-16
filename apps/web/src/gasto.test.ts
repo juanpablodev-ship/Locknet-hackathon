@@ -81,6 +81,13 @@ describe('renderGasto - awaiting-approval', () => {
     expect(html).not.toContain('<script>alert')
     expect(html).toContain('&lt;script&gt;')
   })
+
+  it('escapa el código monetario del gasto', () => {
+    const spend = structuredClone(ataque)
+    spend.amount.assetCode = '<img src=x>'
+
+    expect(renderGasto(spend, cuidadoDeMama)).not.toContain('<img')
+  })
 })
 
 describe('renderGasto - otros estados', () => {
