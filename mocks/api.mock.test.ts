@@ -5,13 +5,17 @@ import {
   _testEmitir,
   _testProgramar,
   castApproval,
+  executeSpend,
   getSpends,
   getWallet,
   getWallets,
   onEvents,
   playEscenario1,
   playEscenario3,
+  requestSpend,
   resetMock,
+  retryShare,
+  setFalloAporte,
 } from './api.mock.js'
 
 describe('getWallets', () => {
@@ -292,5 +296,126 @@ describe('castApproval', () => {
 
   it('votar con un miembro inexistente lanza "No es miembro activo"', () => {
     expect(() => castApproval('s-ataque', 'm-fantasma', true)).toThrow('No es miembro activo')
+  })
+})
+
+const FARMACIA_CONOCIDA = { name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }
+const FARMACIA_PARECIDA = { name: 'Farmacia (cuenta nueva)', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medel1in' }
+const CUENTA_NUEVA = { name: 'Supermercado', walletAddress: 'https://ilp.interledger-test.dev/super-mercado' }
+const MONTO_120K = { value: '12000000', assetCode: 'COP', assetScale: 2 }
+
+describe('requestSpend', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('a la farmacia conocida con $120.000 queda approved con risk 5 y 3 shares de $40.000', () => {
+    const spend = requestSpend('w-mama', FARMACIA_CONOCIDA, MONTO_120K)
+    expect(spend.status).toBe('approved')
+    expect(spend.risk).toBe(5)
+    expect(spend.shares).toHaveLength(3)
+    expect(spend.shares.every((s) => s.share.value === '4000000')).toBe(true)
+  })
+
+  it('a la farmacia parecida (1→l) queda awaiting-approval con risk 94', () => {
+    const spend = requestSpend('w-mama', FARMACIA_PARECIDA, MONTO_120K)
+    expect(spend.status).toBe('awaiting-approval')
+    expect(spend.risk).toBe(94)
+  })
+
+  it('a una cuenta totalmente nueva queda awaiting-approval con risk 45', () => {
+    const spend = requestSpend('w-mama', CUENTA_NUEVA, MONTO_120K)
+    expect(spend.status).toBe('awaiting-approval')
+    expect(spend.risk).toBe(45)
+  })
+
+  it('$250.000 a la farmacia conocida queda awaiting-approval por el monto', () => {
+    const monto250 = { value: '25000000', assetCode: 'COP', assetScale: 2 }
+    const spend = requestSpend('w-mama', FARMACIA_CONOCIDA, monto250)
+    expect(spend.status).toBe('awaiting-approval')
+    expect(spend.risk).toBe(5)
+  })
+})
+
+describe('executeSpend y retryShare', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('feliz: paga los 3 aportes, el gasto queda paid y la capacidad baja a $180.000', () => {
+    const spend = requestSpend('w-mama', FARMACIA_CONOCIDA, MONTO_120K)
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    executeSpend(spend.id)
+    vi.advanceTimersByTime(4500)
+
+    expect(eventos.map((e) => e.type)).toEqual([
+      'share-paid',
+      'share-paid',
+      'share-paid',
+      'spend-paid',
+      'capacity-updated',
+    ])
+    expect(getWallet('w-mama').authorizedCapacity.value).toBe('18000000')
+  })
+
+  it('con setFalloAporte en m-madrid, falla su aporte y el gasto queda incomplete sin spend-paid', () => {
+    const spend = requestSpend('w-mama', FARMACIA_CONOCIDA, MONTO_120K)
+    setFalloAporte('m-madrid')
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    executeSpend(spend.id)
+    vi.advanceTimersByTime(4500)
+
+    expect(eventos.some((e) => e.type === 'share-failed')).toBe(true)
+    expect(eventos.some((e) => e.type === 'spend-paid')).toBe(false)
+
+    const gasto = getSpends('w-mama').find((s) => s.id === spend.id)
+    expect(gasto?.status).toBe('incomplete')
+  })
+
+  it('retryShare reintenta el aporte fallido y el gasto termina paid', () => {
+    const spend = requestSpend('w-mama', FARMACIA_CONOCIDA, MONTO_120K)
+    setFalloAporte('m-madrid')
+
+    executeSpend(spend.id)
+    vi.advanceTimersByTime(4500)
+
+    retryShare(spend.id)
+    vi.advanceTimersByTime(1500)
+
+    const gasto = getSpends('w-mama').find((s) => s.id === spend.id)
+    expect(gasto?.status).toBe('paid')
+  })
+
+  it('executeSpend en un gasto awaiting-approval lanza error', () => {
+    const spend = requestSpend('w-mama', FARMACIA_PARECIDA, MONTO_120K)
+    expect(() => executeSpend(spend.id)).toThrow('no está aprobado')
+  })
+
+  it('resetMock cancela los timers pendientes de executeSpend', () => {
+    const spend = requestSpend('w-mama', FARMACIA_CONOCIDA, MONTO_120K)
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    executeSpend(spend.id)
+    resetMock()
+    vi.advanceTimersByTime(10_000)
+
+    expect(eventos).toHaveLength(0)
   })
 })
