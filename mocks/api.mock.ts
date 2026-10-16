@@ -323,16 +323,16 @@ function convertirAEur(montoCop: Money): Money {
   return { value: String(centavosEur), assetCode: 'EUR', assetScale: 2 }
 }
 
-function terminarPago(wallet: SharedWallet, spend: Spend): void {
+// Fija el status final del gasto (y, si quedó pagado, reduce cupo/disponible) ANTES de
+// notificar el último aporte, para que quien escuche el evento ya vea el resultado final.
+function resolverPago(wallet: SharedWallet, spend: Spend): boolean {
   const huboFallos = spend.shares.some((s) => s.status === 'failed')
   if (huboFallos) {
     spend.status = 'incomplete'
-    return
+    return false
   }
 
   spend.status = 'paid'
-  emitir({ walletId: wallet.id, type: 'spend-paid', spendId: spend.id, amount: spend.amount, message: 'Gasto verificado' })
-
   wallet.authorizedCapacity = {
     ...wallet.authorizedCapacity,
     value: (BigInt(wallet.authorizedCapacity.value) - BigInt(spend.amount.value)).toString(),
@@ -346,6 +346,11 @@ function terminarPago(wallet: SharedWallet, spend: Spend): void {
       }
     }
   }
+  return true
+}
+
+function emitirCierre(wallet: SharedWallet, spend: Spend): void {
+  emitir({ walletId: wallet.id, type: 'spend-paid', spendId: spend.id, amount: spend.amount, message: 'Gasto verificado' })
   emitir({
     walletId: wallet.id,
     type: 'capacity-updated',
@@ -362,6 +367,23 @@ function pagarAportes(wallet: SharedWallet, spend: Spend, shares: Spend['shares'
         share.status = 'failed'
         share.failReason = 'cupo insuficiente'
         falloMemberId = null
+      } else {
+        const miembro = wallet.members.find((m) => m.id === share.memberId)
+        share.debit = miembro?.assetCode === 'EUR' ? convertirAEur(share.share) : structuredClone(share.share)
+        share.received = structuredClone(share.share)
+        share.status = 'paid'
+        delete share.failReason
+      }
+
+      spend.progress = {
+        confirmed: spend.shares.filter((s) => s.status === 'paid').length,
+        total: spend.shares.length,
+      }
+
+      const todosListos = spend.shares.every((s) => s.status === 'paid' || s.status === 'failed')
+      const quedoPagado = todosListos && resolverPago(wallet, spend)
+
+      if (share.status === 'failed') {
         emitir({
           walletId: wallet.id,
           type: 'share-failed',
@@ -371,11 +393,6 @@ function pagarAportes(wallet: SharedWallet, spend: Spend, shares: Spend['shares'
           message: `Falló el aporte de ${nombreDe(wallet, share.memberId)}: cupo insuficiente`,
         })
       } else {
-        const miembro = wallet.members.find((m) => m.id === share.memberId)
-        share.debit = miembro?.assetCode === 'EUR' ? convertirAEur(share.share) : structuredClone(share.share)
-        share.received = structuredClone(share.share)
-        share.status = 'paid'
-        delete share.failReason
         emitir({
           walletId: wallet.id,
           type: 'share-paid',
@@ -386,13 +403,7 @@ function pagarAportes(wallet: SharedWallet, spend: Spend, shares: Spend['shares'
         })
       }
 
-      spend.progress = {
-        confirmed: spend.shares.filter((s) => s.status === 'paid').length,
-        total: spend.shares.length,
-      }
-
-      const todosListos = spend.shares.every((s) => s.status === 'paid' || s.status === 'failed')
-      if (todosListos) terminarPago(wallet, spend)
+      if (quedoPagado) emitirCierre(wallet, spend)
     })
   })
 }
