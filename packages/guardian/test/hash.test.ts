@@ -21,12 +21,17 @@ describe('verifyInteractionHash', () => {
     expect(verifyInteractionHash({ ...official, hash: 'x+gguKWTj8rQf7d7i3w3UhzvuJ5bpOlKyAlVpLxBffY=' }).status).toBe('pass')
   })
 
-  it('base64 estándar sin relleno → pass', () => {
-    expect(verifyInteractionHash({ ...official, hash: 'x+gguKWTj8rQf7d7i3w3UhzvuJ5bpOlKyAlVpLxBffY' }).status).toBe('pass')
+  it('base64 estándar SIN relleno → block (solo se aceptan los dos formatos con respaldo)', () => {
+    expect(verifyInteractionHash({ ...official, hash: 'x+gguKWTj8rQf7d7i3w3UhzvuJ5bpOlKyAlVpLxBffY' }).status).toBe('block')
   })
 
-  it("' ' en lugar de '+' → pass", () => {
-    expect(verifyInteractionHash({ ...official, hash: 'x gguKWTj8rQf7d7i3w3UhzvuJ5bpOlKyAlVpLxBffY=' }).status).toBe('pass')
+  it("' ' en lugar de '+' → block (URL mal procesada)", () => {
+    expect(verifyInteractionHash({ ...official, hash: 'x gguKWTj8rQf7d7i3w3UhzvuJ5bpOlKyAlVpLxBffY=' }).status).toBe('block')
+  })
+
+  it('espacio al inicio o al final del hash → block', () => {
+    expect(verifyInteractionHash({ ...official, hash: ' ' + official.hash }).status).toBe('block')
+    expect(verifyInteractionHash({ ...official, hash: official.hash + ' ' }).status).toBe('block')
   })
 
   it('un carácter cambiado → block', () => {
