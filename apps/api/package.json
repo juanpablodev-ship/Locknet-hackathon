@@ -1,0 +1,11 @@
+{
+  "name": "@billetera/api",
+  "private": true,
+  "dependencies": {
+    "@interledger/open-payments": "7.4.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21"
+  }
+}
