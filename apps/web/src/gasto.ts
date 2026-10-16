@@ -54,9 +54,41 @@ function cuerpoEsperandoAprobacion(spend: Spend, wallet: SharedWallet, votaComo?
   `
 }
 
+function cuerpoBloqueado(spend: Spend): string {
+  const bloqueante = spend.verdicts.find((v) => v.status === 'block') ?? peorVerdict(spend.verdicts)
+  return `
+    <div class="panel panel-rojo">
+      <p class="panel-titulo">Gasto bloqueado</p>
+      ${bloqueante ? `<p>${escapeHtml(bloqueante.userMessage)}</p>` : ''}
+      ${bloqueante ? `<p class="motivos">${bloqueante.reasons.map(escapeHtml).join(' · ')}</p>` : ''}
+    </div>
+  `
+}
+
 function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string): string {
-  if (spend.status === 'awaiting-approval') return cuerpoEsperandoAprobacion(spend, wallet, votaComo)
-  return `<h1>${statusLabel(spend.status)}</h1>`
+  switch (spend.status) {
+    case 'requested':
+      return `<p class="revisando">Revisando el gasto con ${NOMBRE_GUARDIAN}…</p>`
+    case 'awaiting-approval':
+      return cuerpoEsperandoAprobacion(spend, wallet, votaComo)
+    case 'approved':
+      return `
+        <div class="panel panel-verde">
+          <p class="panel-titulo">El grupo aprobó el gasto.</p>
+        </div>
+      `
+    case 'rejected':
+      return `
+        <div class="panel panel-rojo">
+          <p class="panel-titulo">Rechazado por el grupo</p>
+          <p>El gasto no salió. Nadie pagó nada.</p>
+        </div>
+      `
+    case 'blocked':
+      return cuerpoBloqueado(spend)
+    default:
+      return `<h1>${statusLabel(spend.status)}</h1>`
+  }
 }
 
 export function renderGasto(spend: Spend, wallet: SharedWallet, votaComo?: string): string {

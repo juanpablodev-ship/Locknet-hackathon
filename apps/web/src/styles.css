@@ -208,3 +208,31 @@ body {
   color: var(--rojo);
   font-weight: 700;
 }
+
+.revisando {
+  font-size: 24px;
+}
+
+.panel {
+  margin-top: 16px;
+  padding: 24px;
+  border-radius: 12px;
+}
+
+.panel-titulo {
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.panel-rojo {
+  background: #fdecea;
+  border: 2px solid var(--rojo);
+  color: var(--rojo);
+}
+
+.panel-verde {
+  background: #e8f5e9;
+  border: 2px solid var(--verde);
+  color: var(--verde);
+}

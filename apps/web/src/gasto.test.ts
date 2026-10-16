@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ataque, cuidadoDeMama, destinoParecido } from '../../../contracts/ejemplo.js'
+import { statusLabel } from './format.js'
 import { renderGasto } from './gasto.js'
 
 describe('renderGasto - awaiting-approval', () => {
@@ -55,5 +56,48 @@ describe('renderGasto - awaiting-approval', () => {
     const html = renderGasto(spend, cuidadoDeMama)
     expect(html).not.toContain('<script>alert')
     expect(html).toContain('&lt;script&gt;')
+  })
+})
+
+describe('renderGasto - otros estados', () => {
+  it('requested muestra que se está revisando con el guardián', () => {
+    const spend = { ...ataque, status: 'requested' as const }
+    expect(renderGasto(spend, cuidadoDeMama)).toContain('Revisando el gasto con Open Sentinels')
+  })
+
+  it('rejected muestra el panel rojo y no tiene botones', () => {
+    const spend = { ...ataque, status: 'rejected' as const }
+    const html = renderGasto(spend, cuidadoDeMama)
+    expect(html).toContain('Rechazado por el grupo')
+    expect(html).toContain('El gasto no salió. Nadie pagó nada.')
+    expect(html).not.toContain('data-accion')
+  })
+
+  it('approved muestra el panel verde', () => {
+    const spend = { ...ataque, status: 'approved' as const }
+    expect(renderGasto(spend, cuidadoDeMama)).toContain('El grupo aprobó el gasto.')
+  })
+
+  it('blocked muestra el panel rojo con el verdict que bloquea', () => {
+    const spend = {
+      ...ataque,
+      status: 'blocked' as const,
+      verdicts: [{ ...destinoParecido, status: 'block' as const }],
+    }
+    const html = renderGasto(spend, cuidadoDeMama)
+    expect(html).toContain('Gasto bloqueado')
+    expect(html).toContain(destinoParecido.userMessage)
+  })
+
+  it('paying, paid e incomplete muestran solo el statusLabel', () => {
+    for (const status of ['paying', 'paid', 'incomplete'] as const) {
+      const html = renderGasto({ ...ataque, status }, cuidadoDeMama)
+      expect(html).toContain(statusLabel(status))
+    }
+  })
+
+  it('paid no muestra la palabra "verificado"', () => {
+    const html = renderGasto({ ...ataque, status: 'paid' }, cuidadoDeMama).toLowerCase()
+    expect(html).not.toContain('verificado')
   })
 })
