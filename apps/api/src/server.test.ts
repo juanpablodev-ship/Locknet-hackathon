@@ -91,6 +91,11 @@ describe('API REST', () => {
     expect((await res.json()).error).toMatch(/no encontrado/)
   })
 
+  it('sin modo de demo configurado: /api/mode es live y el reinicio no existe', async () => {
+    expect(await (await fetch(`${base}/api/mode`)).json()).toEqual({ mode: 'live' })
+    expect((await post('/api/demo/reset', {})).status).toBe(404)
+  })
+
   it('billetera inexistente → 404', async () => {
     const res = await fetch(`${base}/api/wallets/no-existe`)
     expect(res.status).toBe(404)

@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "op": "tsx --env-file=.env",
-    "dev:api": "tsx --env-file=.env apps/api/src/main.ts"
+    "dev:api": "tsx --env-file=.env apps/api/src/main.ts",
+    "demo:reset": "tsx demo/reset.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

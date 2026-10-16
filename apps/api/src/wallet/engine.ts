@@ -152,6 +152,17 @@ export function createEngine(deps: EngineDeps) {
       return [...wallets.values()]
     },
 
+    // Reinicio de demo: reemplaza billeteras y borra gastos y cobros. No revoca permisos externos.
+    reset(next: SharedWallet[]): void {
+      if ([...spends.values()].some((s) => s.status === 'paying')) {
+        throw new Error('No se puede reiniciar con un pago en curso')
+      }
+      wallets.clear()
+      spends.clear()
+      incomings.clear()
+      for (const w of next) wallets.set(w.id, structuredClone(w))
+    },
+
     // Un miembro que terminó de unirse (MembersService.finishJoin de R1). No deposita nada.
     addMember(walletId: string, member: Member): SharedWallet {
       const wallet = walletOf(walletId)

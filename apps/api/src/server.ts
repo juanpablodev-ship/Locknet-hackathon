@@ -3,7 +3,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import express, { type NextFunction, type Request, type Response } from 'express'
-import type { Member, MembersService, Money, WalletEvent } from '../../../contracts'
+import type { Member, MembersService, Money, SharedWallet, WalletEvent } from '../../../contracts'
 import type { Engine } from './wallet/engine'
 
 // ---------- Unirse: una instancia de MembersService (R1) por sesión del navegador ----------
@@ -11,6 +11,15 @@ export interface JoinDeps {
   // R1 exige: sessionId fijo por instancia y currentSessionId leído del contexto de cada petición.
   createService(sessionId: string, currentSessionId: () => string | undefined, assetCode: string): MembersService
   webUrl: string   // a dónde vuelve el navegador después del callback
+}
+
+// ---------- Modo de demo y reinicio (R1: demo/reset.ts y demo/members-backup.ts) ----------
+export interface DemoDeps {
+  mode: 'live' | 'fixtures'
+  label?: string          // R4 la muestra COMPLETA cuando existe ("Modo respaldo — …")
+  recordedAt?: string
+  seeds(): SharedWallet[] // billeteras con las que arranca de nuevo
+  resetStore(): void      // invalida interacciones locales; no revoca permisos externos
 }
 
 const SESSION_COOKIE = 'sid'
@@ -71,7 +80,7 @@ const wrap = (h: Handler) => (req: Request, res: Response, next: NextFunction) =
   Promise.resolve().then(() => h(req, res)).catch(next)
 }
 
-export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: number; join?: JoinDeps }) {
+export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: number; join?: JoinDeps; demo?: DemoDeps }) {
   const { engine, bus } = deps
   const heartbeatMs = deps.heartbeatMs ?? 15_000
   const app = express()
@@ -133,6 +142,23 @@ export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: n
   }
   app.post('/api/spends/:id/execute', wrap(background('approved', (id) => engine.executeSpend(id))))
   app.post('/api/spends/:id/retry', wrap(background('incomplete', (id) => engine.retryShare(id))))
+
+  // ---------- Modo y reinicio de demo ----------
+  app.get('/api/mode', (_req, res) => {
+    const d = deps.demo
+    res.json(d ? { mode: d.mode, label: d.label, recordedAt: d.recordedAt } : { mode: 'live' })
+  })
+
+  app.post('/api/demo/reset', wrap((_req, res) => {
+    const d = deps.demo
+    if (!d) throw new Error('Reinicio de demo no encontrado en este servidor')
+    const next = d.seeds()
+    engine.reset(next)          // 409 si hay un pago en curso; nada se toca antes de esto
+    d.resetStore()
+    sessions.clear()            // las uniones pendientes dejan de servir
+    issued.clear()
+    res.json({ mode: d.mode, label: d.label, wallets: next.map((w) => w.id) })
+  }))
 
   // ---------- Unirse (plan 12.1): inicio y callback del banco ----------
   app.post('/api/wallets/:id/join', wrap(async (req, res) => {

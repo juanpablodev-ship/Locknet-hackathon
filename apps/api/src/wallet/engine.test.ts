@@ -77,6 +77,28 @@ describe('addMember: unirse sin depositar', () => {
   })
 })
 
+describe('reset: reinicio de demo', () => {
+  it('reemplaza las billeteras y borra los gastos', () => {
+    engine.requestSpend('w-mama', farmacia, cop(120_000))
+    engine.reset([{ ...structuredClone(cuidadoDeMama), members: [] }])
+    expect(engine.listSpends('w-mama')).toEqual([])
+    expect(engine.getWallet('w-mama').members).toEqual([])
+  })
+
+  it('se niega con un pago en curso', async () => {
+    const lento = createEngine({
+      guardian: fakeGuardian, emit: () => {}, pollMs: 0, maxPolls: 1000, sleep: () => new Promise((r) => setTimeout(r, 5)),
+      payments: fakePayments({ trackAs: { 'm-bogota': 'pending' } }).svc,
+    })
+    lento.addWallet(structuredClone(cuidadoDeMama))
+    const { id } = lento.requestSpend('w-mama', farmacia, cop(120_000))
+    void lento.executeSpend(id)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(lento.getSpend(id).status).toBe('paying')
+    expect(() => lento.reset([])).toThrow(/pago en curso/)
+  })
+})
+
 describe('castApproval: aprobación del grupo (2 de 3)', () => {
   it('dos sí → approved', () => {
     const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))

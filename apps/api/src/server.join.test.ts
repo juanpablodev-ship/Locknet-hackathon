@@ -50,7 +50,12 @@ beforeEach(async () => {
   const engine = createEngine({ guardian: fakeGuardian, payments: fakePayments().svc, emit: bus.emit })
   engine.addWallet({ ...structuredClone(cuidadoDeMama), members: [], authorizedCapacity: cop(0) })
   const join = { webUrl: WEB, createService: (sid: string, current: () => string | undefined) => fakeMembers(sid, current, log) }
-  server = createApp({ engine, bus, join }).listen(0)
+  const demo = {
+    mode: 'fixtures' as const, label: 'Modo respaldo — datos simulados', recordedAt: '2026-10-16T21:13:45.876Z',
+    seeds: () => [{ ...structuredClone(cuidadoDeMama), members: [], authorizedCapacity: cop(0) }],
+    resetStore: () => { log.push('resetStore') },
+  }
+  server = createApp({ engine, bus, join, demo }).listen(0)
   await new Promise((r) => server.once('listening', r))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
@@ -94,6 +99,13 @@ describe('POST /api/wallets/:id/join', () => {
     const missing = await fetch(`${base}/api/wallets/no-existe/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(hermano('x')) })
     expect(missing.status).toBe(404)
+  })
+})
+
+describe('GET /api/mode', () => {
+  it('expone la etiqueta completa del modo respaldo', async () => {
+    expect(await (await fetch(`${base}/api/mode`)).json()).toEqual({
+      mode: 'fixtures', label: 'Modo respaldo — datos simulados', recordedAt: '2026-10-16T21:13:45.876Z' })
   })
 })
 
@@ -145,6 +157,19 @@ describe('GET /api/join/finish', () => {
     const falta = await finish(`interact_ref=ref&state=${state}`, cookie)
     expect(falta.headers.get('location')).toBe(`${WEB}#/inicio?union=error`)
     expect(log).toEqual(['start:w-mama:bogota'])
+  })
+
+  it('después de /api/demo/reset la unión pendiente ya no sirve y la billetera queda vacía', async () => {
+    const a = await start('bogota')
+    await finish(`interact_ref=ref&hash=hash-bueno&state=${a.state}`, a.cookie)
+    const b = await start('medellin')
+    const reset = await fetch(`${base}/api/demo/reset`, { method: 'POST' })
+    expect(reset.status).toBe(200)
+    expect(await reset.json()).toEqual({ mode: 'fixtures', label: 'Modo respaldo — datos simulados', wallets: ['w-mama'] })
+    expect(log).toContain('resetStore')
+    const tarde = await finish(`interact_ref=ref&hash=hash-bueno&state=${b.state}`, b.cookie)
+    expect(tarde.headers.get('location')).toBe(`${WEB}#/inicio?union=error`)
+    expect((await (await fetch(`${base}/api/wallets/w-mama`)).json()).members).toEqual([])
   })
 
   it('el miembro rechazó en su wallet → union=rechazada', async () => {
