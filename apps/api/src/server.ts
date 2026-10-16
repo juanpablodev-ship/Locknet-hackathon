@@ -1,8 +1,39 @@
 // API REST + SSE sobre el motor de la billetera (R3). R4 escucha los WalletEvent por SSE.
-// createApp no arranca nada: el arranque real (simulados o servicios reales) se conecta a las 15:00.
+// createApp no arranca nada: el arranque real está en main.ts.
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { randomBytes } from 'node:crypto'
 import express, { type NextFunction, type Request, type Response } from 'express'
-import type { Money, WalletEvent } from '../../../contracts'
+import type { Member, MembersService, Money, WalletEvent } from '../../../contracts'
 import type { Engine } from './wallet/engine'
+
+// ---------- Unirse: una instancia de MembersService (R1) por sesión del navegador ----------
+export interface JoinDeps {
+  // R1 exige: sessionId fijo por instancia y currentSessionId leído del contexto de cada petición.
+  createService(sessionId: string, currentSessionId: () => string | undefined, assetCode: string): MembersService
+  webUrl: string   // a dónde vuelve el navegador después del callback
+}
+
+const SESSION_COOKIE = 'sid'
+
+function readCookie(req: Request, name: string): string | undefined {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const [k, ...v] = part.trim().split('=')
+    if (k === name) return v.join('=')
+  }
+  return undefined
+}
+
+// Los tres parámetros del callback deben venir exactamente una vez (R1: rechazar duplicados).
+function singleParams(req: Request, names: string[]): Record<string, string> | undefined {
+  const params = new URL(req.originalUrl, 'http://localhost').searchParams
+  const out: Record<string, string> = {}
+  for (const n of names) {
+    const all = params.getAll(n)
+    if (all.length !== 1 || !all[0]) return undefined
+    out[n] = all[0]
+  }
+  return out
+}
 
 // ---------- Bus de eventos: el motor emite, cada cliente SSE se suscribe ----------
 export function createEventBus() {
@@ -40,11 +71,25 @@ const wrap = (h: Handler) => (req: Request, res: Response, next: NextFunction) =
   Promise.resolve().then(() => h(req, res)).catch(next)
 }
 
-export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: number }) {
+export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: number; join?: JoinDeps }) {
   const { engine, bus } = deps
   const heartbeatMs = deps.heartbeatMs ?? 15_000
   const app = express()
   app.use(express.json())
+
+  // Sesión del navegador: cookie sid emitida SOLO por este servidor; el contexto de cada
+  // petición vive en AsyncLocalStorage (nunca en una variable global compartida).
+  const requestContext = new AsyncLocalStorage<{ sid?: string }>()
+  const sessions = new Map<string, { service: MembersService; walletId: string; assetCode: string }>()
+  const issued = new Set<string>()
+  const currentSessionId = () => {
+    const sid = requestContext.getStore()?.sid
+    return sid && issued.has(sid) ? sid : undefined
+  }
+  app.use((req, _res, next) => {
+    const sid = readCookie(req, SESSION_COOKIE)
+    requestContext.run({ sid: sid && issued.has(sid) ? sid : undefined }, next)
+  })
   app.use((_req, res, next) => {   // la web de R4 puede correr en otro puerto
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -88,6 +133,56 @@ export function createApp(deps: { engine: Engine; bus: EventBus; heartbeatMs?: n
   }
   app.post('/api/spends/:id/execute', wrap(background('approved', (id) => engine.executeSpend(id))))
   app.post('/api/spends/:id/retry', wrap(background('incomplete', (id) => engine.retryShare(id))))
+
+  // ---------- Unirse (plan 12.1): inicio y callback del banco ----------
+  app.post('/api/wallets/:id/join', wrap(async (req, res) => {
+    const join = deps.join
+    if (!join) throw new Error('Unirse no está disponible en este servidor')
+    const walletId = engine.getWallet(req.params.id).id
+    const { name, walletAddress, cap, interval } = req.body ?? {}
+    if (typeof name !== 'string' || typeof walletAddress !== 'string' || typeof interval !== 'string' || !isMoney(cap)) {
+      throw new BadRequest('Falta { name, walletAddress, cap: Money, interval }')
+    }
+    let sid = currentSessionId()
+    if (!sid) {
+      sid = randomBytes(32).toString('base64url')
+      issued.add(sid)
+      res.setHeader('Set-Cookie',
+        `${SESSION_COOKIE}=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${req.secure ? '; Secure' : ''}`)
+    }
+    // Una instancia por sesión y moneda (la política maxCap del guardián es por moneda).
+    let session = sessions.get(sid)
+    if (!session || session.assetCode !== cap.assetCode) {
+      session = { service: join.createService(sid, currentSessionId, cap.assetCode), walletId, assetCode: cap.assetCode }
+      sessions.set(sid, session)
+    }
+    session.walletId = walletId
+    const current = session
+    const result = await requestContext.run({ sid }, () =>
+      current.service.startJoin(walletId, { name, walletAddress, assetCode: cap.assetCode, cap, interval }))
+    res.json(result)   // { redirectUrl, grantWarning }: la web muestra el aviso y luego redirige
+  }))
+
+  // El banco redirige aquí. Nunca se registran ni se reenvían hash, interact_ref ni state.
+  app.get('/api/join/finish', wrap(async (req, res) => {
+    const join = deps.join
+    if (!join) throw new Error('Unirse no está disponible en este servidor')
+    const back = (result: 'ok' | 'error' | 'rechazada') => res.redirect(303, `${join.webUrl}#/inicio?union=${result}`)
+    if (new URL(req.originalUrl, 'http://localhost').searchParams.get('result') === 'grant_rejected') return back('rechazada')
+
+    const sid = currentSessionId()
+    const session = sid ? sessions.get(sid) : undefined
+    const p = singleParams(req, ['interact_ref', 'hash', 'state'])
+    if (!session || !p) return back('error')
+    let member: Member
+    try {
+      ({ member } = await session.service.finishJoin({ interactRef: p.interact_ref, hash: p.hash, state: p.state }))
+    } catch {
+      return back('error')   // incluye hash inválido: R1 no continúa la concesión
+    }
+    engine.addMember(session.walletId, member)
+    return back('ok')
+  }))
 
   // SSE: cada WalletEvent de esta billetera, como `data: <json>`.
   app.get('/api/wallets/:id/events', wrap((req, res) => {

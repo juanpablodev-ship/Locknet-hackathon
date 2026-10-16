@@ -2,7 +2,7 @@
 // y ejecución por aportes con conciliación (12.4).
 // Los servicios llegan por parámetro: simulados ahora, reales a las 15:00, sin cambiar el motor.
 import type {
-  Guardian, Money, PaymentsService, SharedWallet, Spend, SpendStatus, WalletEvent,
+  Guardian, Member, Money, PaymentsService, SharedWallet, Spend, SpendStatus, WalletEvent,
 } from '../../../../contracts'
 import { activeMembers, add, gt, newSpend, zero } from './model'
 import { assertTransition } from './state'
@@ -50,6 +50,18 @@ export function createEngine(deps: EngineDeps) {
   function setStatus(spend: Spend, to: SpendStatus): void {
     assertTransition(spend.status, to)
     spend.status = to
+  }
+
+  // Cupo del grupo = suma de lo que le queda a cada miembro activo en la moneda de la billetera.
+  // Los miembros en otra moneda no se suman hasta tener conversión (pendiente con available()).
+  function recomputeCapacity(wallet: SharedWallet): void {
+    const scale = wallet.authorizedCapacity.assetScale
+    let total = zero({ assetCode: wallet.currency, assetScale: scale })
+    for (const m of activeMembers(wallet)) {
+      const left = m.available ?? m.cap
+      if (left.assetCode === wallet.currency && left.assetScale === scale) total = add(total, left)
+    }
+    wallet.authorizedCapacity = total
   }
 
   function memberName(wallet: SharedWallet, memberId: string): string {
@@ -138,6 +150,20 @@ export function createEngine(deps: EngineDeps) {
 
     listWallets(): SharedWallet[] {
       return [...wallets.values()]
+    },
+
+    // Un miembro que terminó de unirse (MembersService.finishJoin de R1). No deposita nada.
+    addMember(walletId: string, member: Member): SharedWallet {
+      const wallet = walletOf(walletId)
+      if (member.status !== 'active') throw new Error(`Solo se agregan miembros activos (estado: ${member.status})`)
+      if (wallet.members.some((m) => m.id === member.id)) throw new Error(`Ya es miembro: ${member.id}`)
+      wallet.members.push(structuredClone(member))
+      emit({ walletId, type: 'member-active', memberId: member.id, amount: member.cap,
+             message: `${member.name} se unió. No depositó nada.` })
+      recomputeCapacity(wallet)
+      emit({ walletId, type: 'capacity-updated', amount: wallet.authorizedCapacity,
+             message: 'Cupo autorizado del grupo actualizado.' })
+      return wallet
     },
 
     getWallet: walletOf,

@@ -8,7 +8,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "op": "tsx --env-file=.env"
+    "op": "tsx --env-file=.env",
+    "dev:api": "tsx --env-file=.env apps/api/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
