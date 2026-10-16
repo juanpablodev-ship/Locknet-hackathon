@@ -1,4 +1,4 @@
-import { createAuthenticatedClient, isFinalizedGrantWithAccessToken } from '@interledger/open-payments'
+import { createAuthenticatedClient, isFinalizedGrantWithAccessToken, OpenPaymentsClientError } from '@interledger/open-payments'
 import { amountDifference, assertNoSmokeState, createSmokeState, inspectStoredPayment, readSmokeState,
   requireCompleteSmokeState, saveSmokeState, smokeStateFile } from './smoke-state'
 import type { SmokeAmount, SmokeInspection, SmokeState } from './smoke-state'
@@ -30,6 +30,35 @@ const required = [
   'OUTGOING_PAYMENT_ACCESS_TOKEN', 'SMOKE_RECEIVE_AMOUNT',
   'SMOKE_ASSET_CODE', 'SMOKE_ASSET_SCALE',
 ] as const
+
+// Cuerpos mínimos según las guías oficiales de quote-create y outgoing-create.
+// El quoteId sale sin transformación de la respuesta de client.quote.create.
+export function quoteReceivePayload(walletAddress: string, receiver: string, receiveAmount: SmokeAmount) {
+  return { method: 'ilp' as const, walletAddress, receiver, receiveAmount }
+}
+
+export function outgoingFromQuotePayload(walletAddress: string, quoteId: string) {
+  return { walletAddress, quoteId }
+}
+
+const publicErrorCodes = new Set([
+  'invalid_request', 'invalid_client', 'invalid_token', 'unauthorized', 'forbidden',
+  'not_found', 'conflict', 'insufficient_funds', 'invalid_quote', 'quote_expired',
+  'payment_failed', 'internal_server_error',
+])
+
+export function sanitizeOutgoingCreateError(error: unknown) {
+  const sdkError = error instanceof OpenPaymentsClientError ? error : null
+  // No imprimir message, description, details, validationErrors ni response:
+  // el SDK puede incluir ahí URLs, cabeceras o credenciales.
+  return {
+    httpStatus: sdkError && Number.isInteger(sdkError.status) && sdkError.status! >= 100 && sdkError.status! <= 599
+      ? sdkError.status! : null,
+    code: sdkError?.code && publicErrorCodes.has(sdkError.code) ? sdkError.code : 'no disponible',
+    type: sdkError ? 'OpenPaymentsClientError' : 'no verificado',
+    title: 'Solicitud de outgoing rechazada',
+  }
+}
 
 function formatAmount(amount: SmokeAmount): string {
   const negative = amount.value.startsWith('-')
@@ -195,7 +224,7 @@ async function main(): Promise<void> {
     step = 'cotización con receiveAmount; la Test Wallet puede rechazar esta combinación'
     const quote = await client.quote.create(
       { url: payer.resourceServer, accessToken: quoteGrant.access_token.value },
-      { method: 'ilp', walletAddress: env.PAYER_WALLET_ADDRESS, receiver: incoming.id, receiveAmount: amount },
+      quoteReceivePayload(env.PAYER_WALLET_ADDRESS, incoming.id, amount),
     )
     step = 'persistencia de la quote'
     state = { ...state, quoteId: quote.id, quoteDebitAmount: quote.debitAmount, status: 'quote-created' }
@@ -216,8 +245,12 @@ async function main(): Promise<void> {
     step = 'pago saliente; verifica autorización del token y continuación del grant saliente'
     const outgoing = await client.outgoingPayment.create(
       { url: payer.resourceServer, accessToken: env.OUTGOING_PAYMENT_ACCESS_TOKEN },
-      { walletAddress: env.PAYER_WALLET_ADDRESS, quoteId: quote.id },
-    )
+      outgoingFromQuotePayload(env.PAYER_WALLET_ADDRESS, quote.id),
+    ).catch((error: unknown) => {
+      const safe = sanitizeOutgoingCreateError(error)
+      console.error(`outgoingPayment.create: HTTP ${safe.httpStatus ?? 'no disponible'}; código ${safe.code}; tipo ${safe.type}; ${safe.title}.`)
+      throw error
+    })
     step = 'persistencia del outgoing payment'
     state = { ...state, outgoingPaymentId: outgoing.id, status: 'outgoing-created',
       outgoingDebitAmount: outgoing.debitAmount, outgoingSentAmount: outgoing.sentAmount,
