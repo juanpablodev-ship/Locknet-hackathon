@@ -33,6 +33,11 @@ body {
   font-size: 20px;
 }
 
+.cargando {
+  font-size: 24px;
+  font-weight: 700;
+}
+
 .cupo {
   margin: 4px 0 16px;
   font-size: 72px;
