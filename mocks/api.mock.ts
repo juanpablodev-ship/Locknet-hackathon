@@ -1,8 +1,8 @@
 // Simulado de la API web (R4). Primer paso sin depender de nadie: api.mock con datos
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
-import type { Money, SharedWallet } from '../contracts/index.js'
-import { cuidadoDeMama } from '../contracts/ejemplo.js'
+import type { Money, SharedWallet, Spend } from '../contracts/index.js'
+import { cuidadoDeMama, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
 
@@ -66,4 +66,21 @@ export function getWallet(id: string): SharedWallet {
   const wallet = wallets.find((w) => w.id === id)
   if (!wallet) throw new Error('Billetera no encontrada')
   return structuredClone(wallet)
+}
+
+const SPENDS_INICIALES: Record<string, Spend[]> = {
+  'w-mama': [medicina],
+  'w-parque': [],
+  'w-horno': [],
+}
+
+let spends: Record<string, Spend[]> = structuredClone(SPENDS_INICIALES)
+
+export function getSpends(walletId: string): Spend[] {
+  return structuredClone(spends[walletId] ?? [])
+}
+
+export function resetMock(): void {
+  wallets = structuredClone(WALLETS_INICIALES)
+  spends = structuredClone(SPENDS_INICIALES)
 }
