@@ -1,7 +1,7 @@
 // Simulado de la API web (R4). Primer paso sin depender de nadie: api.mock con datos
 // que cumplen el contrato de /contracts. Cambiar de simulado a real es cambiar una
 // línea de importación (sección 14 del plan).
-import type { Money, SharedWallet, Spend } from '../contracts/index.js'
+import type { Money, SharedWallet, Spend, WalletEvent } from '../contracts/index.js'
 import { cuidadoDeMama, medicina } from '../contracts/ejemplo.js'
 
 const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
@@ -80,7 +80,61 @@ export function getSpends(walletId: string): Spend[] {
   return structuredClone(spends[walletId] ?? [])
 }
 
+const listeners: Record<string, Set<(e: WalletEvent) => void>> = {}
+let timers: ReturnType<typeof setTimeout>[] = []
+
 export function resetMock(): void {
   wallets = structuredClone(WALLETS_INICIALES)
   spends = structuredClone(SPENDS_INICIALES)
+  for (const id of timers) clearTimeout(id)
+  timers = []
+}
+
+export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => void {
+  const deLaBilletera = (listeners[walletId] ??= new Set())
+  deLaBilletera.add(cb)
+  return () => deLaBilletera.delete(cb)
+}
+
+function emitir(e: Omit<WalletEvent, 'ts'>): void {
+  const evento: WalletEvent = { ...e, ts: Date.now() }
+  for (const cb of listeners[e.walletId] ?? []) cb(structuredClone(evento))
+}
+
+function programar(ms: number, fn: () => void): void {
+  timers.push(setTimeout(fn, ms))
+}
+
+export const _testEmitir = emitir
+export const _testProgramar = programar
+
+export function playEscenario1(stepMs = 1200): void {
+  const wallet = wallets.find((w) => w.id === 'w-mama')
+  if (!wallet) return
+
+  for (const miembro of wallet.members) miembro.status = 'pending-approval'
+  wallet.authorizedCapacity = cop(0)
+
+  wallet.members.forEach((miembro, i) => {
+    programar(stepMs * (i + 1), () => {
+      miembro.status = 'active'
+      emitir({
+        walletId: 'w-mama',
+        type: 'member-active',
+        memberId: miembro.id,
+        message: `${miembro.name} se unió al grupo`,
+      })
+    })
+  })
+
+  programar(stepMs * 4, () => {
+    const capacidad = structuredClone(cuidadoDeMama.authorizedCapacity)
+    wallet.authorizedCapacity = capacidad
+    emitir({
+      walletId: 'w-mama',
+      type: 'capacity-updated',
+      amount: capacidad,
+      message: 'Cupo del grupo: $300.000. Nadie depositó nada.',
+    })
+  })
 }
