@@ -72,6 +72,25 @@ describe('API REST', () => {
     expect((await res.json()).status).toBe('approved')
   })
 
+  it('GET /api/wallets lista las billeteras (selector de R4)', async () => {
+    const res = await fetch(`${base}/api/wallets`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).map((w: { id: string }) => w.id)).toEqual(['w-mama'])
+  })
+
+  it('GET /api/spends/:id devuelve el gasto con su estado', async () => {
+    const spend = await (await post('/api/wallets/w-mama/spends', { destination: falsa, amount: cop(120_000) })).json()
+    const res = await fetch(`${base}/api/spends/${spend.id}`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ id: spend.id, status: 'awaiting-approval', risk: 94 })
+  })
+
+  it('GET /api/spends/:id inexistente → 404', async () => {
+    const res = await fetch(`${base}/api/spends/no-existe`)
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toMatch(/no encontrado/)
+  })
+
   it('billetera inexistente → 404', async () => {
     const res = await fetch(`${base}/api/wallets/no-existe`)
     expect(res.status).toBe(404)

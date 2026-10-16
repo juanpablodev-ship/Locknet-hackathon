@@ -136,6 +136,10 @@ export function createEngine(deps: EngineDeps) {
       wallets.set(wallet.id, wallet)
     },
 
+    listWallets(): SharedWallet[] {
+      return [...wallets.values()]
+    },
+
     getWallet: walletOf,
     getSpend: spendOf,
 
