@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WalletEvent } from '../contracts/index.js'
-import { _testEmitir, _testProgramar, getSpends, getWallet, getWallets, onEvents, resetMock } from './api.mock.js'
+import { cuidadoDeMama } from '../contracts/ejemplo.js'
+import {
+  _testEmitir,
+  _testProgramar,
+  getSpends,
+  getWallet,
+  getWallets,
+  onEvents,
+  playEscenario1,
+  resetMock,
+} from './api.mock.js'
 
 describe('getWallets', () => {
   it('devuelve las tres billeteras con sus kinds', () => {
@@ -107,5 +117,63 @@ describe('onEvents y emitir', () => {
     vi.advanceTimersByTime(5000)
 
     expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('playEscenario1', () => {
+  beforeEach(() => {
+    resetMock()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    resetMock()
+    vi.useRealTimers()
+  })
+
+  it('deja la billetera recién creada de inmediato', () => {
+    playEscenario1()
+
+    const wallet = getWallet('w-mama')
+    expect(wallet.members.every((m) => m.status === 'pending-approval')).toBe(true)
+    expect(wallet.authorizedCapacity.value).toBe('0')
+  })
+
+  it('emite 4 eventos en orden al avanzar el reloj', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    playEscenario1(1000)
+    vi.advanceTimersByTime(4000)
+
+    expect(eventos.map((e) => e.type)).toEqual([
+      'member-active',
+      'member-active',
+      'member-active',
+      'capacity-updated',
+    ])
+  })
+
+  it('al final los 3 miembros quedan active y el cupo vuelve al original', () => {
+    playEscenario1(1000)
+    vi.advanceTimersByTime(4000)
+
+    const wallet = getWallet('w-mama')
+    expect(wallet.members.every((m) => m.status === 'active')).toBe(true)
+    expect(wallet.authorizedCapacity).toEqual(cuidadoDeMama.authorizedCapacity)
+  })
+
+  it('resetMock a la mitad detiene los eventos y restaura el estado original', () => {
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    playEscenario1(1000)
+    vi.advanceTimersByTime(1500)
+
+    resetMock()
+    vi.advanceTimersByTime(10_000)
+
+    expect(eventos).toHaveLength(1)
+    expect(getWallet('w-mama')).toEqual(cuidadoDeMama)
   })
 })

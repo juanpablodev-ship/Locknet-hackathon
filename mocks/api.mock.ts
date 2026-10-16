@@ -107,3 +107,34 @@ function programar(ms: number, fn: () => void): void {
 
 export const _testEmitir = emitir
 export const _testProgramar = programar
+
+export function playEscenario1(stepMs = 1200): void {
+  const wallet = wallets.find((w) => w.id === 'w-mama')
+  if (!wallet) return
+
+  for (const miembro of wallet.members) miembro.status = 'pending-approval'
+  wallet.authorizedCapacity = cop(0)
+
+  wallet.members.forEach((miembro, i) => {
+    programar(stepMs * (i + 1), () => {
+      miembro.status = 'active'
+      emitir({
+        walletId: 'w-mama',
+        type: 'member-active',
+        memberId: miembro.id,
+        message: `${miembro.name} se unió al grupo`,
+      })
+    })
+  })
+
+  programar(stepMs * 4, () => {
+    const capacidad = structuredClone(cuidadoDeMama.authorizedCapacity)
+    wallet.authorizedCapacity = capacidad
+    emitir({
+      walletId: 'w-mama',
+      type: 'capacity-updated',
+      amount: capacidad,
+      message: 'Cupo del grupo: $300.000. Nadie depositó nada.',
+    })
+  })
+}
