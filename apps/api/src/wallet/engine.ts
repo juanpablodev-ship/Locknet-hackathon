@@ -2,7 +2,7 @@
 // y ejecución por aportes con conciliación (12.4).
 // Los servicios llegan por parámetro: simulados ahora, reales a las 15:00, sin cambiar el motor.
 import type {
-  Guardian, Money, PaymentsService, SharedWallet, Spend, SpendStatus, WalletEvent,
+  Guardian, Member, Money, PaymentsService, SharedWallet, Spend, SpendStatus, WalletEvent,
 } from '../../../../contracts'
 import { activeMembers, add, gt, newSpend, zero } from './model'
 import { assertTransition } from './state'
@@ -18,6 +18,7 @@ export interface EngineDeps {
   pollMs?: number                        // espera entre consultas de track()
   maxPolls?: number                      // intentos antes de dar el aporte por fallido
   sleep?: (ms: number) => Promise<void>
+  incomingPerShare?: boolean             // plan B: un cobro por aporte en vez de uno compartido
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -50,6 +51,18 @@ export function createEngine(deps: EngineDeps) {
   function setStatus(spend: Spend, to: SpendStatus): void {
     assertTransition(spend.status, to)
     spend.status = to
+  }
+
+  // Cupo del grupo = suma de lo que le queda a cada miembro activo en la moneda de la billetera.
+  // Los miembros en otra moneda no se suman hasta tener conversión (pendiente con available()).
+  function recomputeCapacity(wallet: SharedWallet): void {
+    const scale = wallet.authorizedCapacity.assetScale
+    let total = zero({ assetCode: wallet.currency, assetScale: scale })
+    for (const m of activeMembers(wallet)) {
+      const left = m.available ?? m.cap
+      if (left.assetCode === wallet.currency && left.assetScale === scale) total = add(total, left)
+    }
+    wallet.authorizedCapacity = total
   }
 
   function memberName(wallet: SharedWallet, memberId: string): string {
@@ -116,18 +129,30 @@ export function createEngine(deps: EngineDeps) {
     return spend
   }
 
-  async function payShares(wallet: SharedWallet, spend: Spend, shares: Share[], amount: Money): Promise<Spend> {
-    let url: string
+  // Justo antes de pagar: los cobros vencen. Si no se puede crear, fallan los aportes que dependían de él.
+  async function newIncoming(wallet: SharedWallet, spend: Spend, shares: Share[], amount: Money): Promise<string | undefined> {
     try {
-      // Justo antes de pagar: los cobros vencen.
-      url = (await deps.payments.createIncoming(spend.destination.walletAddress, amount)).incomingPaymentUrl
+      const url = (await deps.payments.createIncoming(spend.destination.walletAddress, amount)).incomingPaymentUrl
+      incomings.set(spend.id, [...(incomings.get(spend.id) ?? []), url])
+      return url
     } catch (e) {
       const reason = `No se pudo crear el cobro: ${e instanceof Error ? e.message : String(e)}`
       shares.forEach((s) => failShare(wallet, spend, s, reason))
-      return finish(wallet, spend)
+      return undefined
     }
-    incomings.set(spend.id, [...(incomings.get(spend.id) ?? []), url])
-    for (const share of shares) await payOne(wallet, spend, share, url)  // en orden: "1 de 3", "2 de 3"…
+  }
+
+  async function payShares(wallet: SharedWallet, spend: Spend, shares: Share[], amount: Money): Promise<Spend> {
+    if (deps.incomingPerShare) {
+      // Plan B: cada aporte paga su propio cobro (probado con un pagador en la Test Wallet).
+      for (const share of shares) {
+        const url = await newIncoming(wallet, spend, [share], share.share)
+        if (url) await payOne(wallet, spend, share, url)
+      }
+    } else {
+      const url = await newIncoming(wallet, spend, shares, amount)
+      if (url) for (const share of shares) await payOne(wallet, spend, share, url)  // en orden: "1 de 3", "2 de 3"…
+    }
     return finish(wallet, spend)
   }
 
@@ -138,6 +163,44 @@ export function createEngine(deps: EngineDeps) {
 
     listWallets(): SharedWallet[] {
       return [...wallets.values()]
+    },
+
+    // Cupo real (plan 12.2): lo que le queda a cada miembro según MembersService.available() de R1.
+    // Si la consulta de un miembro falla, se conserva su último valor y se sigue con los demás.
+    async refreshCapacity(walletId: string, available: (memberId: string) => Promise<Money>): Promise<SharedWallet> {
+      const wallet = walletOf(walletId)
+      for (const m of activeMembers(wallet)) {
+        try { m.available = await available(m.id) } catch { /* último valor conocido */ }
+      }
+      recomputeCapacity(wallet)
+      emit({ walletId, type: 'capacity-updated', amount: wallet.authorizedCapacity,
+             message: 'Cupo autorizado del grupo actualizado.' })
+      return wallet
+    },
+
+    // Reinicio de demo: reemplaza billeteras y borra gastos y cobros. No revoca permisos externos.
+    reset(next: SharedWallet[]): void {
+      if ([...spends.values()].some((s) => s.status === 'paying')) {
+        throw new Error('No se puede reiniciar con un pago en curso')
+      }
+      wallets.clear()
+      spends.clear()
+      incomings.clear()
+      for (const w of next) wallets.set(w.id, structuredClone(w))
+    },
+
+    // Un miembro que terminó de unirse (MembersService.finishJoin de R1). No deposita nada.
+    addMember(walletId: string, member: Member): SharedWallet {
+      const wallet = walletOf(walletId)
+      if (member.status !== 'active') throw new Error(`Solo se agregan miembros activos (estado: ${member.status})`)
+      if (wallet.members.some((m) => m.id === member.id)) throw new Error(`Ya es miembro: ${member.id}`)
+      wallet.members.push(structuredClone(member))
+      emit({ walletId, type: 'member-active', memberId: member.id, amount: member.cap,
+             message: `${member.name} se unió. No depositó nada.` })
+      recomputeCapacity(wallet)
+      emit({ walletId, type: 'capacity-updated', amount: wallet.authorizedCapacity,
+             message: 'Cupo autorizado del grupo actualizado.' })
+      return wallet
     },
 
     getWallet: walletOf,

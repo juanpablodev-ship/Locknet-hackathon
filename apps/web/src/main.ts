@@ -1,14 +1,19 @@
-import type { Member } from '../../../contracts/index.js'
+import type { Member, SharedWallet, Spend } from '../../../contracts/index.js'
 import { parseHash, type Route } from './router.js'
 import {
   MODO,
   castApproval,
+  crearTurnos,
+  executeSpend,
   getSpend,
   getWallet,
   onEvents,
   playEscenario1,
   playEscenario3,
-  resetMock
+  requestSpend,
+  resetMock,
+  retryShare,
+  setFalloAporte
 } from './api.js'
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
@@ -25,10 +30,26 @@ const nombres: Record<Route['name'], string> = {
 
 let desuscribir: (() => void) | null = null
 let votaComoActual: string | undefined
+const turnos = crearTurnos()
 
 function navegarA(hash: string): void {
   if (location.hash === hash) render()
   else location.hash = hash
+}
+
+function pintarCargando(app: HTMLElement): void {
+  app.innerHTML = '<div class="contenedor"><p class="cargando">Cargando…</p></div>'
+}
+
+function pintarError(app: HTMLElement, err: unknown, reintentar: () => void): void {
+  const texto = err instanceof Error ? err.message : 'Ocurrió un error inesperado.'
+  app.innerHTML = `
+    <div class="contenedor">
+      <p id="mensaje" role="status">${escapeHtml(texto)}</p>
+      <button type="button" class="boton" id="reintentar-carga">Reintentar</button>
+    </div>
+  `
+  document.getElementById('reintentar-carga')?.addEventListener('click', reintentar)
 }
 
 function panelDevHtml(): string {
@@ -37,8 +58,13 @@ function panelDevHtml(): string {
     <div class="panel-dev">
       <span>Modo respaldo</span>
       <button type="button" data-accion="escenario1">Escenario 1</button>
+      <button type="button" data-accion="escenario2">Escenario 2</button>
       <button type="button" data-accion="escenario3">Escenario 3</button>
       <button type="button" data-accion="reiniciar">Reiniciar</button>
+      <label class="interruptor">
+        <input type="checkbox" id="falla-madrid" />
+        Que falle Madrid
+      </label>
     </div>
   `
 }
@@ -52,6 +78,13 @@ function enlazarPanelDev(): void {
     if (accion === 'escenario1') {
       playEscenario1()
       navegarA('#/inicio')
+    } else if (accion === 'escenario2') {
+      void (async () => {
+        const wallet = await getWallet('w-mama')
+        const farmacia = wallet.knownDestinations[0]
+        const spend = await requestSpend('w-mama', farmacia, { value: '12000000', assetCode: 'COP', assetScale: 2 })
+        navegarA(`#/gasto/${spend.id}`)
+      })()
     } else if (accion === 'escenario3') {
       playEscenario3()
       navegarA('#/gasto/s-ataque')
@@ -60,13 +93,37 @@ function enlazarPanelDev(): void {
       navegarA('#/inicio')
     }
   })
+
+  const interruptor = document.getElementById('falla-madrid') as HTMLInputElement | null
+  interruptor?.addEventListener('change', () => {
+    setFalloAporte(interruptor.checked ? 'm-madrid' : null)
+  })
 }
 
-function pintarInicio(): void {
+async function pintarInicio(): Promise<void> {
   const app = document.getElementById('app')
   if (!app) return
-  app.innerHTML = renderInicio(getWallet('w-mama')) + panelDevHtml()
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
+
+  let wallet: SharedWallet
+  try {
+    wallet = await getWallet('w-mama')
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    pintarError(app, err, () => void pintarInicio())
+    return
+  }
+  if (!turnos.esVigente(miTurno)) return
+
+  app.innerHTML = renderInicio(wallet) + panelDevHtml()
   enlazarPanelDev()
+
+  desuscribir = onEvents('w-mama', (e) => {
+    if (e.type === 'member-active' || e.type === 'member-revoked' || e.type === 'capacity-updated') {
+      void pintarInicio()
+    }
+  })
 }
 
 function selectVotanteHtml(activos: Member[]): string {
@@ -86,24 +143,51 @@ function selectVotanteHtml(activos: Member[]): string {
   `
 }
 
-function pintarGasto(id: string): void {
+const EVENTOS_GASTO = new Set([
+  'spend-reviewed',
+  'approval-cast',
+  'spend-approved',
+  'spend-rejected',
+  'share-paid',
+  'share-failed',
+  'spend-paid'
+])
+
+async function pintarGasto(id: string): Promise<void> {
   const app = document.getElementById('app')
   if (!app) return
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
 
-  let spend
+  let spend: Spend
   try {
-    spend = getSpend(id)
-  } catch {
-    app.innerHTML = `
-      <div class="contenedor">
-        <p>Gasto no encontrado</p>
-        <a class="boton" href="#/inicio">Volver al inicio</a>
-      </div>
-    `
+    spend = await getSpend(id)
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    if (err instanceof Error && err.message === 'Gasto no encontrado') {
+      app.innerHTML = `
+        <div class="contenedor">
+          <p>Gasto no encontrado</p>
+          <a class="boton" href="#/inicio">Volver al inicio</a>
+        </div>
+      `
+    } else {
+      pintarError(app, err, () => void pintarGasto(id))
+    }
     return
   }
+  if (!turnos.esVigente(miTurno)) return
 
-  const wallet = getWallet(spend.walletId)
+  let wallet: SharedWallet
+  try {
+    wallet = await getWallet(spend.walletId)
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    pintarError(app, err, () => void pintarGasto(id))
+    return
+  }
+  if (!turnos.esVigente(miTurno)) return
+
   const activos = wallet.members.filter((m) => m.status === 'active')
   if (!votaComoActual || !activos.some((m) => m.id === votaComoActual)) {
     votaComoActual = activos[0]?.id
@@ -113,36 +197,43 @@ function pintarGasto(id: string): void {
 
   document.getElementById('votante')?.addEventListener('change', (ev) => {
     votaComoActual = (ev.target as HTMLSelectElement).value
-    pintarGasto(id)
+    void pintarGasto(id)
   })
 
   app.querySelector('.acciones')?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
-    if (!boton || !votaComoActual) return
+    if (!boton) return
     const accion = boton.dataset.accion
     const spendId = boton.dataset.spend
-    if (!spendId || (accion !== 'aprobar' && accion !== 'rechazar')) return
+    if (!spendId) return
 
-    try {
-      castApproval(spendId, votaComoActual, accion === 'aprobar')
-    } catch (err) {
-      const mensaje = document.getElementById('mensaje')
-      if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo registrar el voto.'
-    }
+    void (async () => {
+      try {
+        if (accion === 'aprobar' || accion === 'rechazar') {
+          if (!votaComoActual) return
+          await castApproval(spendId, votaComoActual, accion === 'aprobar')
+        } else if (accion === 'pagar') {
+          await executeSpend(spendId)
+        } else if (accion === 'reintentar') {
+          await retryShare(spendId)
+        }
+      } catch (err) {
+        const mensaje = document.getElementById('mensaje')
+        if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo completar la acción.'
+      }
+    })()
   })
 
   enlazarPanelDev()
-}
 
-function tryGetSpend(id: string) {
-  try {
-    return getSpend(id)
-  } catch {
-    return null
-  }
+  // Se suscribe al final, ya con el turno todavía vigente: evita dejar una suscripción
+  // de un pintado que quedó obsoleto mientras se esperaban las promesas de arriba.
+  desuscribir = onEvents(wallet.id, (e) => {
+    if (e.type === 'capacity-updated' || (EVENTOS_GASTO.has(e.type) && e.spendId === id)) {
+      void pintarGasto(id)
+    }
+  })
 }
-
-const EVENTOS_GASTO = ['spend-reviewed', 'approval-cast', 'spend-approved', 'spend-rejected']
 
 function render(): void {
   desuscribir?.()
@@ -153,25 +244,12 @@ function render(): void {
   const route = parseHash(location.hash)
 
   if (route.name === 'inicio') {
-    pintarInicio()
-    desuscribir = onEvents('w-mama', (e) => {
-      if (e.type === 'member-active' || e.type === 'member-revoked' || e.type === 'capacity-updated') {
-        pintarInicio()
-      }
-    })
+    void pintarInicio()
     return
   }
 
   if (route.name === 'gasto') {
-    pintarGasto(route.id)
-    const spend = tryGetSpend(route.id)
-    if (spend) {
-      desuscribir = onEvents(spend.walletId, (e) => {
-        if (EVENTOS_GASTO.includes(e.type) && e.spendId === route.id) {
-          pintarGasto(route.id)
-        }
-      })
-    }
+    void pintarGasto(route.id)
     return
   }
 

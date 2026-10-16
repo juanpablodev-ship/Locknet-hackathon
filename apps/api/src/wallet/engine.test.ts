@@ -46,6 +46,79 @@ describe('requestSpend: revisión con el guardián', () => {
   })
 })
 
+describe('addMember: unirse sin depositar', () => {
+  const vacia = () => ({ ...structuredClone(cuidadoDeMama), id: 'w-vacia', members: [], authorizedCapacity: cop(0) })
+  const nuevo = (id: string, assetCode = 'COP') => ({
+    id, name: `Hermano ${id}`, walletAddress: `https://ilp.interledger-test.dev/${id}`, assetCode,
+    cap: { value: '10000000', assetCode, assetScale: 2 }, interval: 'R12/2026-10-16T00:00:00Z/P1M', status: 'active' as const,
+  })
+
+  it('agrega al miembro, emite member-active y sube el cupo del grupo', () => {
+    engine.addWallet(vacia())
+    engine.addMember('w-vacia', nuevo('a'))
+    const w = engine.addMember('w-vacia', nuevo('b'))
+    expect(w.members.map((m) => m.id)).toEqual(['a', 'b'])
+    expect(w.authorizedCapacity).toEqual(cop(200_000))
+    expect(events.filter((e) => e.walletId === 'w-vacia').map((e) => e.type))
+      .toEqual(['member-active', 'capacity-updated', 'member-active', 'capacity-updated'])
+  })
+
+  it('un miembro en EUR se agrega pero no suma al cupo en COP (falta conversión)', () => {
+    engine.addWallet(vacia())
+    expect(engine.addMember('w-vacia', nuevo('madrid', 'EUR')).authorizedCapacity).toEqual(cop(0))
+  })
+
+  it('rechaza duplicados, miembros no activos y billeteras inexistentes', () => {
+    engine.addWallet(vacia())
+    engine.addMember('w-vacia', nuevo('a'))
+    expect(() => engine.addMember('w-vacia', nuevo('a'))).toThrow(/Ya es miembro/)
+    expect(() => engine.addMember('w-vacia', { ...nuevo('c'), status: 'revoked' })).toThrow(/activos/)
+    expect(() => engine.addMember('no-existe', nuevo('d'))).toThrow(/no encontrada/)
+  })
+})
+
+describe('refreshCapacity: cupo real con available()', () => {
+  it('usa lo que le queda a cada miembro y emite capacity-updated', async () => {
+    const quedan: Record<string, number> = { 'm-bogota': 60_000, 'm-medellin': 100_000 }
+    const w = await engine.refreshCapacity('w-mama', async (id) =>
+      id === 'm-madrid' ? { value: '2200', assetCode: 'EUR', assetScale: 2 } : cop(quedan[id]))
+    expect(w.members.map((m) => m.available?.value)).toEqual(['6000000', '10000000', '2200'])
+    expect(w.authorizedCapacity).toEqual(cop(160_000))   // EUR no se suma sin conversión
+    expect(events.at(-1)).toMatchObject({ type: 'capacity-updated', amount: cop(160_000) })
+  })
+
+  it('si available() falla para un miembro, conserva su último valor', async () => {
+    const w = await engine.refreshCapacity('w-mama', async (id) => {
+      if (id === 'm-bogota') throw new Error('No se pudo consultar el cupo autorizado')
+      return id === 'm-madrid' ? { value: '2200', assetCode: 'EUR', assetScale: 2 } : cop(10_000)
+    })
+    expect(w.members[0].available).toEqual(cop(100_000))
+    expect(w.authorizedCapacity).toEqual(cop(110_000))
+  })
+})
+
+describe('reset: reinicio de demo', () => {
+  it('reemplaza las billeteras y borra los gastos', () => {
+    engine.requestSpend('w-mama', farmacia, cop(120_000))
+    engine.reset([{ ...structuredClone(cuidadoDeMama), members: [] }])
+    expect(engine.listSpends('w-mama')).toEqual([])
+    expect(engine.getWallet('w-mama').members).toEqual([])
+  })
+
+  it('se niega con un pago en curso', async () => {
+    const lento = createEngine({
+      guardian: fakeGuardian, emit: () => {}, pollMs: 0, maxPolls: 1000, sleep: () => new Promise((r) => setTimeout(r, 5)),
+      payments: fakePayments({ trackAs: { 'm-bogota': 'pending' } }).svc,
+    })
+    lento.addWallet(structuredClone(cuidadoDeMama))
+    const { id } = lento.requestSpend('w-mama', farmacia, cop(120_000))
+    void lento.executeSpend(id)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(lento.getSpend(id).status).toBe('paying')
+    expect(() => lento.reset([])).toThrow(/pago en curso/)
+  })
+})
+
 describe('castApproval: aprobación del grupo (2 de 3)', () => {
   it('dos sí → approved', () => {
     const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))

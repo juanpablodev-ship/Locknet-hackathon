@@ -1,0 +1,15 @@
+{
+  "source": "test-wallet-recording",
+  "observedAt": "2026-10-16T21:13:45.876Z",
+  "operations": {
+    "finishJoin": true,
+    "tokenFor": true,
+    "available": true,
+    "revoke": true
+  },
+  "spentAmounts": {
+    "spentDebitAmount": null,
+    "spentReceiveAmount": null
+  },
+  "limitations": "Sin pago, sin renovación mensual observada. Reproducción offline no es una consulta actual."
+}
