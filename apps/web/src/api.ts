@@ -22,6 +22,12 @@ export function getSpends(walletId: string): Spend[] {
   return MODO === 'live' ? pendienteLive() : mock.getSpends(walletId)
 }
 
+export function getSpend(spendId: string): Spend {
+  const spend = getSpends('w-mama').find((s) => s.id === spendId)
+  if (!spend) throw new Error('Gasto no encontrado')
+  return spend
+}
+
 export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => void {
   return MODO === 'live' ? pendienteLive() : mock.onEvents(walletId, cb)
 }

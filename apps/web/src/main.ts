@@ -1,6 +1,17 @@
+import type { Member } from '../../../contracts/index.js'
 import { parseHash, type Route } from './router.js'
-import { getWallet, MODO, onEvents, playEscenario1, playEscenario3, resetMock } from './api.js'
-import { renderInicio } from './inicio.js'
+import {
+  MODO,
+  castApproval,
+  getSpend,
+  getWallet,
+  onEvents,
+  playEscenario1,
+  playEscenario3,
+  resetMock
+} from './api.js'
+import { escapeHtml, renderInicio } from './inicio.js'
+import { renderGasto } from './gasto.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -13,6 +24,12 @@ const nombres: Record<Route['name'], string> = {
 }
 
 let desuscribir: (() => void) | null = null
+let votaComoActual: string | undefined
+
+function navegarA(hash: string): void {
+  if (location.hash === hash) render()
+  else location.hash = hash
+}
 
 function panelDevHtml(): string {
   if (MODO !== 'mock') return ''
@@ -32,11 +49,16 @@ function enlazarPanelDev(): void {
   panel?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('button')
     const accion = boton?.dataset.accion
-    if (accion === 'escenario1') playEscenario1()
-    else if (accion === 'escenario3') playEscenario3()
-    else if (accion === 'reiniciar') resetMock()
-    else return
-    pintarInicio()
+    if (accion === 'escenario1') {
+      playEscenario1()
+      navegarA('#/inicio')
+    } else if (accion === 'escenario3') {
+      playEscenario3()
+      navegarA('#/gasto/s-ataque')
+    } else if (accion === 'reiniciar') {
+      resetMock()
+      navegarA('#/inicio')
+    }
   })
 }
 
@@ -46,6 +68,81 @@ function pintarInicio(): void {
   app.innerHTML = renderInicio(getWallet('w-mama')) + panelDevHtml()
   enlazarPanelDev()
 }
+
+function selectVotanteHtml(activos: Member[]): string {
+  const opciones = activos
+    .map(
+      (m) =>
+        `<option value="${escapeHtml(m.id)}" ${m.id === votaComoActual ? 'selected' : ''}>${escapeHtml(m.name)}</option>`
+    )
+    .join('')
+  return `
+    <div class="contenedor votante-barra">
+      <label class="votante">
+        Votas como:
+        <select id="votante">${opciones}</select>
+      </label>
+    </div>
+  `
+}
+
+function pintarGasto(id: string): void {
+  const app = document.getElementById('app')
+  if (!app) return
+
+  let spend
+  try {
+    spend = getSpend(id)
+  } catch {
+    app.innerHTML = `
+      <div class="contenedor">
+        <p>Gasto no encontrado</p>
+        <a class="boton" href="#/inicio">Volver al inicio</a>
+      </div>
+    `
+    return
+  }
+
+  const wallet = getWallet(spend.walletId)
+  const activos = wallet.members.filter((m) => m.status === 'active')
+  if (!votaComoActual || !activos.some((m) => m.id === votaComoActual)) {
+    votaComoActual = activos[0]?.id
+  }
+
+  app.innerHTML = selectVotanteHtml(activos) + renderGasto(spend, wallet, votaComoActual) + panelDevHtml()
+
+  document.getElementById('votante')?.addEventListener('change', (ev) => {
+    votaComoActual = (ev.target as HTMLSelectElement).value
+    pintarGasto(id)
+  })
+
+  app.querySelector('.acciones')?.addEventListener('click', (ev) => {
+    const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
+    if (!boton || !votaComoActual) return
+    const accion = boton.dataset.accion
+    const spendId = boton.dataset.spend
+    if (!spendId || (accion !== 'aprobar' && accion !== 'rechazar')) return
+
+    try {
+      castApproval(spendId, votaComoActual, accion === 'aprobar')
+    } catch (err) {
+      const mensaje = document.getElementById('mensaje')
+      if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo registrar el voto.'
+    }
+  })
+
+  enlazarPanelDev()
+}
+
+function tryGetSpend(id: string) {
+  try {
+    return getSpend(id)
+  } catch {
+    return null
+  }
+}
+
+const EVENTOS_GASTO = ['spend-reviewed', 'approval-cast', 'spend-approved', 'spend-rejected']
 
 function render(): void {
   desuscribir?.()
@@ -62,6 +159,19 @@ function render(): void {
         pintarInicio()
       }
     })
+    return
+  }
+
+  if (route.name === 'gasto') {
+    pintarGasto(route.id)
+    const spend = tryGetSpend(route.id)
+    if (spend) {
+      desuscribir = onEvents(spend.walletId, (e) => {
+        if (EVENTOS_GASTO.includes(e.type) && e.spendId === route.id) {
+          pintarGasto(route.id)
+        }
+      })
+    }
     return
   }
 

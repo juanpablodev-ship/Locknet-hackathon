@@ -18,7 +18,7 @@ body {
 .contenedor {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px 16px 96px;
   box-sizing: border-box;
 }
 
@@ -86,12 +86,15 @@ body {
 .boton {
   display: inline-block;
   padding: 16px 24px;
+  border: none;
   border-radius: 8px;
   background: var(--verde);
   color: #fff;
+  font-family: inherit;
   font-size: 20px;
   font-weight: 700;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .panel-dev {
@@ -114,4 +117,143 @@ body {
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
+}
+
+.sello {
+  display: inline-block;
+  margin: 0 0 16px;
+  padding: 4px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.puntaje {
+  margin: 0;
+  font-size: 120px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.puntaje-etiqueta {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.puntaje-verde {
+  color: var(--verde);
+}
+
+.puntaje-ambar {
+  color: var(--ambar);
+}
+
+.puntaje-rojo {
+  color: var(--rojo);
+}
+
+.advertencia {
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.motivos {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.destino code {
+  font-family: 'Courier New', monospace;
+}
+
+.monto {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.conteo-votos {
+  font-weight: 700;
+}
+
+.votos p {
+  margin: 4px 0;
+}
+
+.boton-rechazar {
+  background: #fff;
+  color: var(--rojo);
+  border: 2px solid var(--rojo);
+}
+
+.boton-rechazar-destacado {
+  background: var(--rojo);
+  color: #fff;
+  font-size: 24px;
+}
+
+.boton-aprobar {
+  background: var(--verde);
+}
+
+.acciones button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#mensaje {
+  min-height: 24px;
+  color: var(--rojo);
+  font-weight: 700;
+}
+
+.revisando {
+  font-size: 24px;
+}
+
+.panel {
+  margin-top: 16px;
+  padding: 24px;
+  border-radius: 12px;
+}
+
+.panel-titulo {
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.panel-rojo {
+  background: #fdecea;
+  border: 2px solid var(--rojo);
+  color: var(--rojo);
+}
+
+.panel-verde {
+  background: #e8f5e9;
+  border: 2px solid var(--verde);
+  color: var(--verde);
+}
+
+.votante-barra {
+  padding-top: 16px;
+  padding-bottom: 8px;
+}
+
+.votante {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.votante select {
+  padding: 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 20px;
 }
