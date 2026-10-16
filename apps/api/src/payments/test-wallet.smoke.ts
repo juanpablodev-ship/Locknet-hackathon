@@ -2,6 +2,7 @@ import { createAuthenticatedClient, isFinalizedGrantWithAccessToken, OpenPayment
 import { amountDifference, assertNoSmokeState, createSmokeState, inspectStoredPayment, readSmokeState,
   requireCompleteSmokeState, saveSmokeState, smokeStateFile } from './smoke-state'
 import type { SmokeAmount, SmokeInspection, SmokeState } from './smoke-state'
+import { quoteOnlyConfig, runQuoteOnly } from './quote-only'
 
 // Script aislado: no importar desde el servidor ni ejecutar sin autorización expresa.
 // Cargar .env local con el comando existente `npm run op -- ... --execute-smoke` SOLO
@@ -134,6 +135,28 @@ async function statusOnly(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes('--quote-only')) {
+    if (process.argv.includes('--execute-smoke') || process.argv.includes('--status-only')) {
+      console.error('Modos incompatibles.')
+      process.exitCode = 1
+      return
+    }
+    try {
+      const needed = ['WALLET_ADDRESS', 'KEY_ID', 'PRIVATE_KEY_PATH'] as const
+      const missing = needed.filter(name => !process.env[name]?.trim())
+      if (missing.length) throw new Error(`Configuración ausente: ${missing.join(', ')}`)
+      const config = quoteOnlyConfig(process.env)
+      const client = await createAuthenticatedClient({
+        walletAddressUrl: process.env.WALLET_ADDRESS!, privateKey: process.env.PRIVATE_KEY_PATH!, keyId: process.env.KEY_ID!,
+      })
+      await runQuoteOnly(client, config, line => console.log(line))
+    } catch (error) {
+      console.error(error instanceof Error && /^(Configuración ausente:|QUOTE_ONLY_MEMBER_ID|Dirección inválida:|Fallo en )/.test(error.message)
+        ? error.message : 'Quote-only falló en inicialización; detalle reservado')
+      process.exitCode = 1
+    }
+    return
+  }
   if (process.argv.includes('--status-only')) {
     if (process.argv.includes('--execute-smoke')) {
       console.error('Modos incompatibles.')
