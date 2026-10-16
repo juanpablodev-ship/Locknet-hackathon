@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editDistance, parseAddress } from "../src/address.js";
+import { editDistance, normalizeHandle, parseAddress } from "../src/address.js";
 
 describe("parseAddress", () => {
   it("pasa a minúsculas y quita la barra final", () => {
@@ -39,5 +39,38 @@ describe("editDistance", () => {
 
   it("no da 0 para textos distintos", () => {
     expect(editDistance("panaderia-centro", "farmacia-medellin")).toBeGreaterThan(2);
+  });
+});
+
+describe("normalizeHandle", () => {
+  it("1→l: farmacia-medel1in queda igual a farmacia-medellin", () => {
+    expect(normalizeHandle("farmacia-medel1in")).toBe(normalizeHandle("farmacia-medellin"));
+  });
+
+  it("rn→m", () => {
+    expect(normalizeHandle("farmacia-rnedellin")).toBe(normalizeHandle("farmacia-medellin"));
+  });
+
+  it("homóglifo cirílico (е) → e", () => {
+    expect(normalizeHandle("farmacia-med\u0435llin")).toBe(normalizeHandle("farmacia-medellin"));
+  });
+
+  it("minúsculas, tildes y NFKC", () => {
+    expect(normalizeHandle("FARMACÍA")).toBe("farmacia");
+    expect(normalizeHandle("ｆarmacia")).toBe("farmacia");
+  });
+
+  it("0→o, 5→s, 3→e, vv→w, |→l", () => {
+    expect(normalizeHandle("t0p5-3")).toBe("tops-e");
+    expect(normalizeHandle("vvalle")).toBe("walle");
+    expect(normalizeHandle("a|a")).toBe("ala");
+  });
+
+  it("unifica separadores _ . - en '-'", () => {
+    expect(normalizeHandle("mi_tienda.cali")).toBe("mi-tienda-cali");
+  });
+
+  it("no iguala handles realmente distintos", () => {
+    expect(normalizeHandle("panaderia-centro")).not.toBe(normalizeHandle("farmacia-medellin"));
   });
 });

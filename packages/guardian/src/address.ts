@@ -44,3 +44,35 @@ export function editDistance(a: string, b: string): number {
   }
   return prev[b.length];
 }
+
+const CYRILLIC_HOMOGLYPHS: Record<string, string> = {
+  а: "a",
+  е: "e",
+  о: "o",
+  р: "p",
+  с: "c",
+  х: "x",
+};
+
+const CONFUSIONS: Array<[RegExp, string]> = [
+  [/rn/g, "m"],
+  [/vv/g, "w"],
+  [/1/g, "l"],
+  [/0/g, "o"],
+  [/5/g, "s"],
+  [/3/g, "e"],
+  [/\|/g, "l"],
+];
+
+/**
+ * Lleva un handle a una forma comparable: lo que se ve igual a simple vista
+ * queda igual. Orden: NFKC, minúsculas, sin tildes, homóglifos cirílicos,
+ * confusiones visuales y separadores (_ . -) unificados en "-".
+ */
+export function normalizeHandle(s: string): string {
+  let out = s.normalize("NFKC").toLowerCase();
+  out = out.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/[аеорсх]/g, (c) => CYRILLIC_HOMOGLYPHS[c]);
+  for (const [pattern, replacement] of CONFUSIONS) out = out.replace(pattern, replacement);
+  return out.replace(/[_.-]+/g, "-");
+}
