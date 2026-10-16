@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editDistance, normalizeHandle, parseAddress } from "../src/address.js";
+import { compareHandles, editDistance, normalizeHandle, parseAddress } from "../src/address.js";
 
 describe("parseAddress", () => {
   it("pasa a minúsculas y quita la barra final", () => {
@@ -16,6 +16,10 @@ describe("parseAddress", () => {
       path: "/farmacia-medellin",
       isHttps: true,
     });
+  });
+
+  it("decodifica caracteres no ASCII del path", () => {
+    expect(parseAddress("https://ilp.interledger-test.dev/med\u0435llin").path).toBe("/med\u0435llin");
   });
 
   it("marca isHttps en false para http://", () => {
@@ -72,5 +76,59 @@ describe("normalizeHandle", () => {
 
   it("no iguala handles realmente distintos", () => {
     expect(normalizeHandle("panaderia-centro")).not.toBe(normalizeHandle("farmacia-medellin"));
+  });
+});
+
+describe("compareHandles", () => {
+  const host = "https://ilp.interledger-test.dev/";
+  const known = host + "farmacia-medellin";
+
+  it("farmacia-medel1in vs farmacia-medellin (mismo host) → lookalike", () => {
+    expect(compareHandles(host + "farmacia-medel1in", known)).toBe("lookalike");
+  });
+
+  it("farmacia-medellin vs farmacia-medellin → same", () => {
+    expect(compareHandles(known, known)).toBe("same");
+  });
+
+  it("mismo path con distinto host → lookalike", () => {
+    expect(
+      compareHandles(
+        "https://otro-banco.dev/farmacia-medellin",
+        "https://ilp.interledger-test.dev/farmacia-medellin",
+      ),
+    ).toBe("lookalike");
+  });
+
+  it("farmacia-rnedellin → lookalike", () => {
+    expect(compareHandles(host + "farmacia-rnedellin", known)).toBe("lookalike");
+  });
+
+  it("farmacia-medеllin (е cirílica) → lookalike", () => {
+    expect(compareHandles(host + "farmacia-med\u0435llin", known)).toBe("lookalike");
+  });
+
+  it("distancia ≤ 2 con longitud ≥ 8 → lookalike", () => {
+    expect(compareHandles(host + "farmacia-medelin", known)).toBe("lookalike");
+  });
+
+  it("hermano_1 vs hermano_2 → different", () => {
+    expect(compareHandles(host + "hermano_1", host + "hermano_2")).toBe("different");
+  });
+
+  it("la excepción de dígitos no anula 'mismo path con distinto host'", () => {
+    expect(compareHandles("https://otro.dev/hermano_1", host + "hermano_1")).toBe("lookalike");
+  });
+
+  it("la excepción de dígitos no anula 'igual tras normalizar'", () => {
+    expect(compareHandles(host + "hermano_l", host + "hermano_1")).toBe("lookalike");
+  });
+
+  it("panaderia-centro vs farmacia-medellin → different", () => {
+    expect(compareHandles(host + "panaderia-centro", known)).toBe("different");
+  });
+
+  it("handles cortos con distancia ≤ 2 → different", () => {
+    expect(compareHandles(host + "tienda", host + "tiendas")).toBe("different");
   });
 });

@@ -4,6 +4,15 @@ export interface ParsedAddress {
   isHttps: boolean;
 }
 
+/** URL codifica los caracteres no ASCII (%D0%B5); se decodifican para poder normalizarlos. */
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 /**
  * Acepta URLs completas, direcciones de pago con "$" (se resuelven por https)
  * y direcciones sin esquema (se asume https). Nunca lanza: si no se puede
@@ -19,7 +28,7 @@ export function parseAddress(url: string): ParsedAddress {
     const u = new URL(candidate);
     return {
       host: u.host.toLowerCase(),
-      path: u.pathname.toLowerCase().replace(/\/+$/, ""),
+      path: safeDecode(u.pathname).toLowerCase().replace(/\/+$/, ""),
       isHttps: u.protocol === "https:",
     };
   } catch {
@@ -75,4 +84,40 @@ export function normalizeHandle(s: string): string {
   out = out.replace(/[аеорсх]/g, (c) => CYRILLIC_HOMOGLYPHS[c]);
   for (const [pattern, replacement] of CONFUSIONS) out = out.replace(pattern, replacement);
   return out.replace(/[_.-]+/g, "-");
+}
+
+export type HandleComparison = "same" | "lookalike" | "different";
+
+/** Mismo largo y las únicas diferencias son un dígito por otro dígito. */
+function onlyDigitSwaps(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i] && !(/\d/.test(a[i]) && /\d/.test(b[i]))) return false;
+  }
+  return true;
+}
+
+/**
+ * Compara un destino candidato con uno conocido.
+ * - same: host y path idénticos.
+ * - lookalike: mismo path con otro host, igual tras normalizar pero distinto
+ *   en crudo, o distancia ≤ 2 sobre lo normalizado con longitud ≥ 8.
+ * - La excepción de dígitos (hermano_1 vs hermano_2) solo aplica a la regla
+ *   de distancia.
+ */
+export function compareHandles(candidate: string, known: string): HandleComparison {
+  const a = parseAddress(candidate);
+  const b = parseAddress(known);
+
+  if (a.host === b.host && a.path === b.path) return "same";
+  if (a.host !== b.host && a.path !== "" && a.path === b.path) return "lookalike";
+
+  const na = normalizeHandle(a.path);
+  const nb = normalizeHandle(b.path);
+  if (na === nb) return "lookalike";
+
+  if (Math.min(na.length, nb.length) >= 8 && editDistance(na, nb) <= 2) {
+    return onlyDigitSwaps(a.path, b.path) ? "different" : "lookalike";
+  }
+  return "different";
 }
