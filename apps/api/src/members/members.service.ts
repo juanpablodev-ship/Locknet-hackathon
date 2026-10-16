@@ -1,18 +1,20 @@
 import { randomUUID } from 'node:crypto'
-import type { AuthenticatedClient, GrantWithAccessToken } from '@interledger/open-payments'
+import type { AuthenticatedClient } from '@interledger/open-payments'
 import type { Member, MembersService, Money } from '../../../../contracts/index'
 import { guardian } from '../../../../packages/guardian/src/index.js'
 import { finishGrantInteraction, startVerification } from './verify-outgoing-grant'
+import { createMemberOperations, createMembersStore, membersState, permissionPeriod, type MembersStore } from './member-operations'
 
 // Firmas compartidas sin copiar ni ampliar MembersService. Las demás operaciones
 // del contrato quedan para otra tarea; no se proporcionan implementaciones falsas.
-export function createMembersJoinService(client: Pick<AuthenticatedClient, 'walletAddress' | 'grant'>, options: {
+export function createMembersJoinService(client: Pick<AuthenticatedClient, 'walletAddress' | 'grant' | 'outgoingPayment'>, options: {
   finishUri: string
   policy: { maxCap: Money }
   sessionId: string
   currentSessionId: () => string | undefined
   now?: () => number
-}): Pick<MembersService, 'startJoin' | 'finishJoin'> {
+  store?: MembersStore
+}): Pick<MembersService, 'startJoin' | 'finishJoin' | 'tokenFor' | 'available' | 'revoke'> {
   const callback = new URL(options.finishUri)
   if ((callback.protocol !== 'https:' && !(callback.protocol === 'http:' && callback.hostname === 'localhost')) ||
       callback.username || callback.password || callback.search || callback.hash || !options.sessionId) {
@@ -26,24 +28,19 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
     throw new Error('Política de cupo inválida')
   }
   const now = options.now ?? Date.now
-  const pending = new Map<string, {
-    walletId: string
-    interaction: Awaited<ReturnType<typeof startVerification>>
-    member: Omit<Member, 'id' | 'status'>
-    expiresAt: number
-  }>()
-  // Capacidad mínima server-side para conservar la concesión confirmada. No se
-  // serializa ni expone; tokenFor y persistencia durable quedan fuera de esta tarea.
-  const active = new Map<string, { walletId: string; member: Member; grant: GrantWithAccessToken }>()
-  let starting = false
+  const store = options.store ?? createMembersStore()
+  const state = membersState(store)
+  const { pending } = state
 
   return {
+    ...createMemberOperations(client, store, now),
     async startJoin(walletId, member) {
-      if (currentSessionId() !== sessionId || !walletId || starting) throw new Error('Sesión de unión inválida')
+      if (currentSessionId() !== sessionId || !walletId || state.starting.has(sessionId)) throw new Error('Sesión de unión inválida')
       const input: Omit<Member, 'id' | 'status'> = {
         name: member.name, walletAddress: member.walletAddress, assetCode: member.assetCode,
         cap: structuredClone(member.cap), interval: member.interval,
       }
+      permissionPeriod(input.interval, now())
       const wallet = new URL(input.walletAddress)
       if (wallet.protocol !== 'https:' || wallet.username || wallet.password || wallet.search || wallet.hash ||
           !input.name?.trim() || !/^[1-9]\d*$/.test(input.cap.value) ||
@@ -56,36 +53,41 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
       if (grantWarning.status === 'block') throw new Error('Solicitud bloqueada por el guardián')
       // Una sola interacción pendiente por sesión; no se sobrescribe por otro /start.
       for (const [state, entry] of pending) if (entry.expiresAt <= now()) pending.delete(state)
-      if (pending.size) throw new Error('Ya existe una unión pendiente')
-      starting = true
+      if ([...pending.values()].some(entry => entry.sessionId === sessionId)) throw new Error('Ya existe una unión pendiente')
+      state.starting.add(sessionId)
+      const epoch = state.epoch
       try {
         const interaction = await startVerification(client, {
           memberUrl: input.walletAddress, cap: input.cap.value, interval: input.interval,
           finishUri: callback.toString(), expectedDebit: input.cap,
         })
-        if (currentSessionId() !== sessionId) throw new Error('Sesión de unión inválida')
-        pending.set(interaction.state, { walletId, interaction, member: input, expiresAt: now() + 600_000 })
+        if (currentSessionId() !== sessionId || state.epoch !== epoch) throw new Error('Sesión de unión inválida')
+        pending.set(interaction.state, { walletId, interaction, member: input, expiresAt: now() + 600_000, sessionId })
         return { redirectUrl: interaction.grant.interact.redirect, grantWarning }
       } catch {
         // Nunca propagar respuestas del SDK o sus errores con cabeceras/tokens.
         throw new Error('No se pudo iniciar la unión')
-      } finally { starting = false }
+      } finally { if (state.epoch === epoch) state.starting.delete(sessionId) }
     },
 
     async finishJoin(p) {
       if (currentSessionId() !== sessionId || !p || typeof p.state !== 'string') throw new Error('Sesión de unión inválida')
       const entry = pending.get(p.state)
-      if (!entry) throw new Error('Unión inexistente o ya utilizada')
+      if (!entry || entry.sessionId !== sessionId) throw new Error('Unión inexistente o ya utilizada')
       // Consumo síncrono ANTES del guardián o de cualquier await: incluso los
       // intentos con hash inválido no pueden repetirse ni correr en paralelo.
       pending.delete(p.state)
+      const epoch = state.epoch
       if (entry.expiresAt <= now() || !p.hash || !p.interactRef) throw new Error('Retorno de unión inválido o vencido')
       try {
         const { grant, hashVerdict } = await finishGrantInteraction(client, entry.interaction, p, undefined,
-          () => currentSessionId() === sessionId && entry.expiresAt > now())
-        if (currentSessionId() !== sessionId || entry.expiresAt <= now()) throw new Error('Sesión de unión inválida')
+          () => currentSessionId() === sessionId && entry.expiresAt > now() && state.epoch === epoch)
+        if (currentSessionId() !== sessionId || entry.expiresAt <= now() || state.epoch !== epoch) throw new Error('Sesión de unión inválida')
         const member: Member = { ...entry.member, cap: { ...entry.member.cap }, id: randomUUID(), status: 'active' }
-        active.set(member.id, { walletId: entry.walletId, member: structuredClone(member), grant })
+        const ttl = grant.access_token.expires_in
+        if (ttl !== undefined && (!Number.isFinite(ttl) || ttl <= 0)) throw new Error('Permiso vencido')
+        state.records.set(member.id, { walletId: entry.walletId, member: structuredClone(member), grant,
+          wallet: entry.interaction.wallet, tokenExpiresAt: ttl === undefined ? Infinity : now() + ttl * 1000 })
         return { member, hashVerdict }
       } catch {
         throw new Error('No se pudo confirmar la unión')

@@ -3,7 +3,7 @@
 Este experimento consulta la wallet de un miembro y solicita un permiso interactivo
 `outgoing-payment`, acciones `read/create`, con `limits.debitAmount` y
 `limits.interval`, sin `receiver`. No crea pagos. El módulo `members.service.ts`
-implementa `startJoin` y `finishJoin` con Open Sentinels real.
+implementa `startJoin`, `finishJoin`, `tokenFor`, `available` y `revoke` con Open Sentinels real.
 
 ## Fuentes verificadas
 
@@ -102,8 +102,8 @@ experimento también delega en Open Sentinels, sin criptografía duplicada.
 ## Integración de startJoin y finishJoin para R3
 
 `createMembersJoinService(client, options)` devuelve exactamente
-`Pick<MembersService, 'startJoin' | 'finishJoin'>`. No pretende implementar aún
-las otras operaciones del contrato. `client` es el cliente autenticado del SDK
+`Pick<MembersService, 'startJoin' | 'finishJoin' | 'tokenFor' | 'available' | 'revoke'>`.
+`client` es el cliente autenticado del SDK
 oficial, creado en el servidor con logging silencioso y timeout de red.
 
 Opciones que debe aportar el servidor:
@@ -119,6 +119,9 @@ Opciones que debe aportar el servidor:
   petición `AsyncLocalStorage`, nunca desde una variable global que comparta
   peticiones concurrentes ni desde una petición antigua capturada en un cierre.
 - `now`: reloj opcional para pruebas; producción usa `Date.now`.
+- `store`: handle de `createMembersStore()` (módulo `member-operations.ts`). Debe
+  compartirse entre todas las instancias de sesión y con las operaciones de R2;
+  si se omite, la instancia queda aislada por compatibilidad.
 
 R3 debe conservar la instancia en el servidor y seleccionar la correspondiente
 mediante la sesión autenticada del navegador; no crear otra en el callback ni
@@ -142,9 +145,45 @@ continúa y comprueba los límites exactos. Solo entonces devuelve `Member` acti
 y el veredicto real; el token y la URI de gestión quedan privados en memoria.
 No se registra la URL del callback ni se devuelve la concesión por HTTP.
 
-El almacenamiento es en memoria: reiniciar el proceso pierde interacciones y
-concesiones. Persistencia durable, `available`, `revoke`, `tokenFor` y confirmación
-con destinatario quedan pendientes; tampoco se simulan estas operaciones.
+El almacenamiento compartido es en memoria (igual que el motor actual): reiniciar
+el proceso pierde interacciones y concesiones. No se agregó infraestructura ni
+se escriben tokens en disco. `listMembers(store)` devuelve copias públicas y
+`resetMembersStore(store)` borra únicamente estado local, invalida callbacks y
+operaciones en vuelo y NO revoca permisos externos.
+
+R2 recibe `createMemberOperations(client, store)` del servidor. `tokenFor(id)`
+consulta el cupo al proveedor, rechaza permisos no activos, vencidos, bloqueados,
+en revocación o agotados y devuelve el token solo al código servidor. No se debe
+conectar esta operación a HTTP, SSE, consola ni JSON de errores. El token es una
+capacidad de pago: existe una carrera inevitable si el proveedor lo revoca o lo
+gasta otro consumidor después de la consulta; R2 debe manejar el rechazo del pago.
+
+`available(id)` usa exclusivamente
+[`outgoingPayment.getGrantSpentAmounts`](https://openpayments.dev/sdk/outgoing-grant-spent-amounts/)
+con `wallet.resourceServer` y el token del grant final. Resta `spentDebitAmount`
+al tope con `BigInt`, valida moneda y escalas y redondea hacia abajo a la escala
+del cupo cuando hace falta. `null` significa que no se informó gasto. No hay
+respaldo automático con registros locales ni gastos de períodos anteriores.
+Si cambia el período durante la consulta, rechaza la respuesta y exige consultar
+otra vez. Los errores del proveedor no se convierten en un cupo ficticio.
+
+Alcance de intervalos: `R[n]/fecha-UTC/P1D` o `P1M`. El inicio mensual se limita a
+días 1–28 para no inventar cómo resuelve el proveedor fechas ambiguas de fin de
+mes. Otras duraciones se rechazan explícitamente. La consulta del proveedor es
+siempre del período vigente; las pruebas de renovación usan reloj y red simulados,
+sin afirmar una renovación mensual observada en la Test Wallet.
+
+`revoke(id)` usa [`grant.cancel`](https://openpayments.dev/sdk/grant-revoke/) con
+la URI y el token de `grant.continue` de la respuesta FINAL. No usa
+`access_token.manage` (corresponde a gestión de tokens, otra operación del SDK).
+Mientras cancela, `tokenFor` queda bloqueado; una cancelación confirmada marca
+`revoked` y elimina los tokens del registro. Llamadas concurrentes comparten la
+cancelación y repetir una ya confirmada no hace otra llamada. Si el proveedor
+falla, se mantiene el bloqueo local y se permite reintentar `revoke` explícitamente;
+no se afirma que el permiso externo haya sido revocado. Reiniciar un almacén
+en memoria no equivale a revocar en la wallet.
+
+Persistencia durable y confirmación con destinatario quedan pendientes.
 Esta tarea no modifica `server.ts`: conectar sus handlers y las sesiones le
 corresponde a R3. El script aislado sigue comprobando el permiso con el mismo
 guardián real; no sustituye la prueba HTTP del producto con sesión autenticada.

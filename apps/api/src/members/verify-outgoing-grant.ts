@@ -55,6 +55,7 @@ export async function startVerification(client: Client, config: Pick<ReturnType<
   if (!Number.isInteger(wallet.assetScale) || wallet.assetScale < 0 || !wallet.assetCode) {
     throw new Error('La wallet no devolvió una moneda válida')
   }
+  if (new URL(wallet.resourceServer).protocol !== 'https:') throw new Error('Servidor de recursos sin HTTPS')
   const grantUri = wallet.authServer
   if (new URL(grantUri).protocol !== 'https:') throw new Error('Servidor de autorización sin HTTPS')
   const clientNonce = randomBytes(32).toString('base64url')
