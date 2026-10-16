@@ -11,9 +11,11 @@ export function parseHash(hash: string): Route {
   const parts = path.split('/').filter((p) => p.length > 0)
 
   if (parts.length === 0) return { name: 'inicio' }
+  if (parts.length === 1 && parts[0] === 'inicio') return { name: 'inicio' }
   if (parts.length === 1 && parts[0] === 'unirse') return { name: 'unirse' }
   if (parts.length === 1 && parts[0] === 'historial') return { name: 'historial' }
   if (parts.length === 1 && parts[0] === 'gasto-nuevo') return { name: 'gasto-nuevo' }
+  if (parts.length === 2 && parts[0] === 'gasto' && parts[1] === 'nuevo') return { name: 'gasto-nuevo' }
   if (parts.length === 2 && parts[0] === 'gasto') return { name: 'gasto', id: parts[1] }
 
   return { name: 'no-encontrada' }
