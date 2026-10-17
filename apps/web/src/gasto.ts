@@ -46,7 +46,7 @@ function comparacionCuentas(spend: Spend, wallet: SharedWallet): string {
   if (!conocida) {
     return `
       <p class="cuenta-nueva">Es una cuenta nueva para este grupo</p>
-      <div class="cuenta-dato">
+      <div class="cuenta-dato cuenta-dato-nueva">
         <b>Cuenta que vas a pagar</b>
         <code>${escapeHtml(spend.destination.walletAddress)}</code>
       </div>
@@ -60,7 +60,7 @@ function comparacionCuentas(spend: Spend, wallet: SharedWallet): string {
         <b>Cuenta conocida · ${escapeHtml(conocida.name)}</b>
         <code>${diferencias.conocidaHtml}</code>
       </div>
-      <div class="cuenta-dato">
+      <div class="cuenta-dato cuenta-dato-nueva">
         <b>Cuenta que vas a pagar</b>
         <code>${diferencias.nuevaHtml}</code>
       </div>
@@ -115,11 +115,12 @@ function cuerpoEsperandoAprobacion(spend: Spend, wallet: SharedWallet, votaComo?
         <p class="monto">${escapeHtml(formatMoney(spend.amount))}</p>
         <p>Necesita aprobación del grupo: ${requeridos} de ${activos.length}</p>
       </section>
-      <section class="veredicto" aria-label="Veredicto de riesgo">
+      <section class="veredicto veredicto-${nivel.tone}" aria-label="Veredicto de riesgo">
         <p class="puntaje puntaje-${nivel.tone}">${spend.risk}</p>
         <p class="puntaje-etiqueta puntaje-${nivel.tone}">${nivel.label}</p>
         ${peor ? `<p class="advertencia">⚠ ${escapeHtml(peor.userMessage)}</p>` : ''}
         ${peor ? `<p class="motivos">${peor.reasons.map(escapeHtml).join(' · ')}</p>` : ''}
+        ${nivel.tone === 'rojo' ? `<p class="sello sello-alto">${NOMBRE_GUARDIAN} lo detuvo: revisa el destino antes de aprobar</p>` : ''}
       </section>
       <section class="votos" aria-label="Votos del grupo">
         <p class="conteo-votos">A favor: ${aFavor} de ${requeridos} · En contra: ${enContra} de ${votosParaRechazar}</p>

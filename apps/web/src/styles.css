@@ -4,13 +4,12 @@
    Los NOMBRES de los tokens son los del proyecto; los VALORES son los de Kivor:
    --verde = el producto/riesgo bajo/verificado, --rojo = las advertencias (--aviso
    del diseño), --sent = Open Sentinels (negro). --ambar es propio del proyecto (no
-   viene del diseño): se usa para "pendiente de unirse" e "incompleto". --morado es un
-   puente temporal hasta que la pantalla del gasto (commit 3) deje de necesitarlo: el
-   diseño de Kivor no usa morado, el riesgo medio se marca con borde rojo, no con color. */
+   viene del diseño): se usa para "pendiente de unirse" e "incompleto". El riesgo
+   medio se marca con borde rojo (3px), no con un color propio: así lo resuelve la
+   cascada del diseño para .veredicto.medio. */
 :root {
   --verde: #14d26f;
   --ambar: #8a5a00;
-  --morado: #e3242b;
   --rojo: #e3242b;
   --sent: #111111;
   --fondo: #ffffff;
@@ -225,7 +224,7 @@ body {
 .boton-reiniciar-demo:focus-visible,
 .panel-dev button:focus-visible,
 .panel-dev input:focus-visible {
-  outline: 3px solid var(--morado);
+  outline: 3px solid var(--texto);
   outline-offset: 2px;
 }
 
@@ -274,7 +273,7 @@ body {
   right: 24%;
   height: 4px;
   border-radius: 0 0 4px 4px;
-  background: var(--morado);
+  background: var(--texto);
 }
 
 .tabs i {
@@ -550,7 +549,7 @@ body {
   margin-top: 26px;
   padding: 16px 18px;
   border: 1px solid var(--borde);
-  border-left: 6px solid var(--morado);
+  border-left: 8px solid var(--rojo);
   border-radius: 6px;
   color: var(--texto);
   text-decoration: none;
@@ -573,7 +572,7 @@ body {
   flex: none;
   font-style: normal;
   font-weight: 700;
-  color: var(--morado);
+  color: var(--rojo);
 }
 
 .estado {
@@ -729,7 +728,7 @@ body {
   min-width: 0;
   padding: 18px 20px;
   border: 1px solid var(--borde);
-  border-left: 6px solid var(--morado);
+  border-left: 6px solid var(--texto);
   border-radius: 8px;
   background: var(--fondo);
   color: var(--texto);
@@ -739,7 +738,7 @@ body {
 
 .pedido:hover,
 .pedido:focus-visible {
-  border-color: var(--morado);
+  border-color: var(--texto);
   transform: translateY(-1px);
 }
 
@@ -775,7 +774,7 @@ body {
 }
 
 .riesgo-ambar {
-  color: var(--morado);
+  color: var(--rojo);
 }
 
 .riesgo-rojo {
@@ -1016,8 +1015,50 @@ body {
   font-family: var(--mono), monospace;
 }
 
-.veredicto {
-  border-left: 6px solid var(--rojo);
+/* Veredicto de riesgo en 3 niveles (decisión 1): bajo = gris claro y borde fino;
+   medio = blanco y borde rojo de 3px; alto = negro con franja diagonal roja/negra
+   y la etiqueta de nivel en rojo con texto blanco. El texto del nivel siempre dice
+   "Riesgo bajo/medio/alto": nunca se confía solo en el color. */
+.veredicto-verde {
+  background: var(--sup);
+}
+
+.veredicto-ambar {
+  border: 3px solid var(--rojo);
+}
+
+.veredicto-rojo {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--sent);
+  background: var(--sent);
+  color: #ffffff;
+}
+
+.veredicto-rojo::before {
+  content: '';
+  display: block;
+  height: 12px;
+  margin: -20px -20px 16px;
+  background: repeating-linear-gradient(135deg, var(--rojo) 0 12px, #111111 12px 24px);
+}
+
+.veredicto-rojo .puntaje-etiqueta {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: var(--rojo);
+  color: #ffffff;
+}
+
+.sello-alto {
+  margin: 12px 0 0;
+  padding: 6px 14px;
+  border: 3px solid var(--sent);
+  border-radius: 999px;
+  background: var(--rojo);
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .veredicto .puntaje-etiqueta {
@@ -1079,10 +1120,19 @@ body {
   max-height: min(90vh, 900px);
   padding: 0;
   overflow: auto;
-  border: 2px solid var(--rojo);
+  border: 3px solid var(--sent);
   border-radius: 12px;
   background: var(--fondo);
   color: var(--texto);
+}
+
+/* Confirmación de riesgo alto (decisión 7): la misma franja diagonal del
+   veredicto alto, como primer contenido del diálogo. */
+.confirma::before {
+  content: '';
+  display: block;
+  height: 12px;
+  background: repeating-linear-gradient(135deg, var(--rojo) 0 12px, #111111 12px 24px);
 }
 
 .confirma::backdrop {
@@ -1122,15 +1172,27 @@ body {
 
 .cuenta-dato mark {
   border-radius: 2px;
-  background: var(--morado);
+  background: var(--rojo);
   color: var(--fondo);
   font-weight: 700;
+}
+
+/* La cuenta que se va a pagar, destacada frente a la conocida (decisión 7). */
+.cuenta-dato-nueva {
+  border: 3px solid var(--sent);
+  background: var(--rojo);
+  color: #ffffff;
+}
+
+.cuenta-dato-nueva mark {
+  background: #ffffff;
+  color: var(--rojo);
 }
 
 .cuenta-nueva {
   margin: 0;
   padding: 12px;
-  border-left: 5px solid var(--ambar);
+  border-left: 5px solid var(--rojo);
   font-weight: 700;
 }
 
@@ -1153,6 +1215,7 @@ body {
   width: 24px;
   height: 24px;
   margin: 0;
+  accent-color: var(--sent);
 }
 
 .confirma-acciones {
@@ -1181,20 +1244,9 @@ body {
   font-weight: 700;
 }
 
-.puntaje-verde {
-  color: var(--verde);
-}
-
-/* Riesgo medio usa --morado, no --ambar: --ambar queda reservado para los estados
-   genéricos del proyecto (miembro pendiente de unirse, pago incompleto) que el
-   borrador no cubre, para no mezclar dos significados distintos bajo el mismo tono. */
-.puntaje-ambar {
-  color: var(--morado);
-}
-
-.puntaje-rojo {
-  color: var(--rojo);
-}
+/* El número y la etiqueta de riesgo no llevan su propio color (decisión 1): el
+   texto siempre dice el nivel, y el tono lo carga el panel .veredicto-* entero
+   (gris claro, borde rojo, o negro con texto blanco según el riesgo). */
 
 .advertencia {
   margin: 0 0 8px;
