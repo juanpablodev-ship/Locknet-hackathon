@@ -16,14 +16,13 @@ export function quoteOnlyConfig(env: NodeJS.ProcessEnv): QuoteOnlyConfig {
   const names = ['QUOTE_ONLY_MEMBER_ID', 'QUOTE_ONLY_PAYER_WALLET_ADDRESS', 'QUOTE_ONLY_RECEIVER_WALLET_ADDRESS'] as const
   const missing = names.filter(name => !env[name]?.trim())
   if (missing.length) throw new Error(`Configuración ausente: ${missing.join(', ')}`)
-  const memberId = env.QUOTE_ONLY_MEMBER_ID!
-  if (memberId !== 'hermano_1' && memberId !== 'hermano_2') throw new Error('QUOTE_ONLY_MEMBER_ID debe ser hermano_1 o hermano_2')
+  const memberId = env.QUOTE_ONLY_MEMBER_ID!.trim()
   for (const name of names.slice(1)) {
     try { if (new URL(env[name]!).protocol !== 'https:') throw new Error() }
     catch { throw new Error(`Dirección inválida: ${name}`) }
   }
-  if (new URL(env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!).pathname.split('/').filter(Boolean).at(-1) !== memberId)
-    throw new Error('QUOTE_ONLY_PAYER_WALLET_ADDRESS no corresponde al hermano indicado')
+  if (decodeURIComponent(new URL(env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!).pathname.split('/').filter(Boolean).at(-1) ?? '') !== memberId)
+    throw new Error('QUOTE_ONLY_PAYER_WALLET_ADDRESS no corresponde al miembro indicado')
   if (new URL(env.QUOTE_ONLY_RECEIVER_WALLET_ADDRESS!).pathname.split('/').filter(Boolean).at(-1) !== 'farmacia-medellin')
     throw new Error('QUOTE_ONLY_RECEIVER_WALLET_ADDRESS no corresponde a farmacia-medellin')
   return { memberId, payerWalletAddress: env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!, receiverWalletAddress: env.QUOTE_ONLY_RECEIVER_WALLET_ADDRESS! }
@@ -64,8 +63,9 @@ export async function runQuoteOnly(client: QuoteClient, config: QuoteOnlyConfig,
       throw new Error('Metadatos de wallet inválidos')
     report(`Pagador: ${payer.assetCode}, escala ${payer.assetScale}`)
     report(`Farmacia: ${receiver.assetCode}, escala ${receiver.assetScale}`)
-    stage = 'validación de wallets COP y escala'
-    if (receiver.assetCode !== 'COP' || payer.assetCode !== 'COP') throw new Error('Wallet COP requerida')
+    stage = 'validación de monedas y escala'
+    if (receiver.assetCode !== 'COP') throw new Error('Wallet receptora COP requerida')
+    if (payer.assetCode === receiver.assetCode) throw new Error('Se requiere una wallet pagadora en otra moneda')
     const amount = copReceiveAmount(receiver.assetScale)
     stage = 'grant.request incoming-payment'
     const incomingGrant = await client.grant.request({ url: receiver.authServer },
@@ -91,10 +91,13 @@ export async function runQuoteOnly(client: QuoteClient, config: QuoteOnlyConfig,
     if (!/^\d+$/.test(quote.debitAmount.value) || !/^[A-Z]{3}$/.test(quote.debitAmount.assetCode) ||
         !Number.isInteger(quote.debitAmount.assetScale) || quote.debitAmount.assetScale < 0 || quote.debitAmount.assetScale > 20)
       throw new Error('DebitAmount inválido')
+    if (quote.debitAmount.assetCode !== payer.assetCode || quote.debitAmount.assetScale !== payer.assetScale)
+      throw new Error('DebitAmount no corresponde a la wallet pagadora')
     const cost = quoteCost(quote.receiveAmount, quote.debitAmount)
     report('Quote: creada')
     report(`ReceiveAmount: ${quote.receiveAmount.value} ${quote.receiveAmount.assetCode} escala ${quote.receiveAmount.assetScale}`)
     report(`DebitAmount: ${quote.debitAmount.value} ${quote.debitAmount.assetCode} escala ${quote.debitAmount.assetScale}`)
+    report(`Conversión: ${quote.debitAmount.assetCode} → ${quote.receiveAmount.assetCode}`)
     if (cost) {
       report(`Diferencia: ${cost.difference}`)
       report(`Costo: ${cost.percent}%`)
