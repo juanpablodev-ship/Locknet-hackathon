@@ -110,11 +110,13 @@ describe('PaymentsService con SDK oficial', () => {
   })
 
   it('rechaza un segundo pago secuencial de la misma cotización', async () => {
-    const { service, quote } = setup()
+    const { service, quote, client } = setup()
+    await service.createIncoming('https://pharmacy.example', cop('4000000'))
     await service.quoteShare('hermano_1', 'https://resources.example/incoming/1', cop('4000000'))
     await service.payShare('hermano_1', quote.id)
 
-    await expect(service.payShare('hermano_1', quote.id)).rejects.toThrow('Cotización no encontrada')
+    await expect(service.payShare('hermano_1', quote.id)).rejects.toMatchObject({ outcome: 'not-created' })
+    expect(client.outgoingPayment.create).toHaveBeenCalledOnce()
   })
 
   it('lee del cobro la acumulación de aportes en lugar de acumularla localmente', async () => {
