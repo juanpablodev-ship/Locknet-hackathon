@@ -6,7 +6,7 @@ import { PaymentError } from '../apps/api/src/payments/errors'
 import { openAttemptJournal } from '../apps/api/src/payments/journal'
 
 type Snapshot = { capturedAt: string; wallets: SharedWallet[]; spends: Spend[] }
-type Journal = Awaited<ReturnType<typeof openAttemptJournal>>
+type Journal = Pick<Awaited<ReturnType<typeof openAttemptJournal>>, 'blocked' | 'record'>
 const validMoney = (m: Money) => m && /^\d+$/.test(m.value) && Number.isInteger(m.assetScale) && m.assetScale >= 0 && m.assetScale <= 255 && /^[A-Z0-9]{1,12}$/.test(m.assetCode)
 const enough = (received: Money, expected: Money) => validMoney(received) && validMoney(expected) &&
   BigInt(expected.value) > 0n && received.assetCode === expected.assetCode && received.assetScale === expected.assetScale && BigInt(received.value) >= BigInt(expected.value)

@@ -15,6 +15,25 @@ export async function openAttemptJournal(path: string) {
   let queue: Promise<void> = Promise.resolve()
   return {
     get blocked() { return [...pendingAtStartup].some(key => ['prepared', 'unknown', 'pending'].includes(records[key]?.status)) },
+    async refresh() {
+      await queue
+      if (pendingAtStartup.size === 0) return
+      let saved: Record<string, PaymentAttempt>
+      try {
+        saved = JSON.parse(await readFile(path, 'utf8'))
+        if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error()
+        // Solo se aceptan resoluciones de los mismos recursos cargados al arrancar.
+        for (const key of pendingAtStartup) {
+          const previous = records[key], next = saved[key]
+          if (!next || !['prepared', 'unknown', 'pending', 'completed', 'failed'].includes(next.status) ||
+              next.incomingPaymentUrl !== previous.incomingPaymentUrl || next.outgoingId !== previous.outgoingId ||
+              next.quoteId !== previous.quoteId) throw new Error()
+        }
+      } catch { throw new Error('No se pudo verificar la recuperación del diario; se conserva el bloqueo.') }
+      for (const key of pendingAtStartup) {
+        if (saved[key].status === 'completed' || saved[key].status === 'failed') records[key] = { ...saved[key] }
+      }
+    },
     entries() { return structuredClone(records) },
     record(key: string, attempt: PaymentAttempt): Promise<void> {
       // Lista blanca: un llamador no puede serializar otras propiedades.

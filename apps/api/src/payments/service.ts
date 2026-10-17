@@ -9,7 +9,7 @@ export function createPaymentsService(deps: {
   client: AuthenticatedClient
   memberWalletAddress: (memberId: string) => Promise<string>
   memberToken: (memberId: string) => Promise<string>
-  journal?: { blocked: boolean; record(key: string, attempt: PaymentAttempt): Promise<void> }
+  journal?: { blocked: boolean; refresh?(): Promise<void>; record(key: string, attempt: PaymentAttempt): Promise<void> }
 }): PaymentsService {
   const { client } = deps
   const incomingTokens = new Map<string, string>()
@@ -18,6 +18,11 @@ export function createPaymentsService(deps: {
   const quotes = new Map<string, { memberId: string; walletAddress: string; resourceServer: string; receiver: string; receive: Money; expiresAt?: string; paying?: boolean }>()
   const outgoingTokens = new Map<string, { token: string; receiver: string; expected: Money; quoteId: string; walletAddress: string }>()
 
+  async function assertJournalReady() {
+    try { await deps.journal?.refresh?.() }
+    catch { throw new PaymentError('No se pudo verificar la recuperación del diario. No se envió un pago.', 'not-created') }
+    if (deps.journal?.blocked) throw new PaymentError('Hay intentos previos sin resolver en el diario local. No se creó un cobro ni se envió un pago; completa la recuperación.', 'not-created')
+  }
   async function readIncoming(url: string) {
     const token = incomingTokens.get(url)
     const wallet = incomingWallets.get(url)
@@ -31,7 +36,7 @@ export function createPaymentsService(deps: {
   }
   const service: PaymentsService = {
     async createIncoming(walletAddress, amount) {
-      if (deps.journal?.blocked) throw new PaymentError('Hay intentos previos sin resolver en el diario local. No se creó un cobro ni se envió un pago; completa la recuperación.', 'not-created')
+      await assertJournalReady()
       if (BigInt(amount.value) <= 0n) throw new Error('El cobro debe ser positivo')
       const wallet = await client.walletAddress.get({ url: walletAddress })
       if (wallet.assetCode !== amount.assetCode || wallet.assetScale !== amount.assetScale)
@@ -52,7 +57,7 @@ export function createPaymentsService(deps: {
     },
 
     async quoteShare(memberId, incomingPaymentUrl, share) {
-      if (deps.journal?.blocked) throw new PaymentError('Hay intentos previos sin resolver en el diario local. No se creó una cotización ni se envió un pago; completa la recuperación.', 'not-created')
+      await assertJournalReady()
       if (BigInt(share.value) <= 0n) throw new Error('El aporte debe ser positivo')
       const walletAddress = await deps.memberWalletAddress(memberId)
       const wallet = await client.walletAddress.get({ url: walletAddress })
@@ -72,7 +77,7 @@ export function createPaymentsService(deps: {
     },
 
     async payShare(memberId, quoteId) {
-      if (deps.journal?.blocked) throw new PaymentError('Hay intentos previos sin resolver en el diario local; revisa la wallet antes de pagar.', 'not-created')
+      await assertJournalReady()
       const quote = quotes.get(quoteId)
       if (!quote || quote.memberId !== memberId || quote.paying) throw new PaymentError('Cotizacion no utilizable.', 'not-created')
       quote.paying = true

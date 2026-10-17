@@ -37,6 +37,18 @@ describe('PaymentsService con SDK oficial', () => {
     expect(f.client.quote.create).not.toHaveBeenCalled()
     expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
   })
+  it('consulta la recuperación antes de crear un cobro y falla cerrado si el archivo no es verificable', async () => {
+    const f = setup()
+    let blocked = true
+    const journal = { get blocked() { return blocked }, record: vi.fn(), refresh: vi.fn(async () => { blocked = false }) }
+    const service = createPaymentsService({ client: f.client as unknown as AuthenticatedClient, memberWalletAddress: vi.fn(), memberToken: f.memberToken, journal })
+    await service.createIncoming('https://pharmacy.example', cop('4000000'))
+    expect(journal.refresh).toHaveBeenCalledOnce()
+    expect(f.client.incomingPayment.create).toHaveBeenCalledOnce()
+    journal.refresh.mockRejectedValueOnce(new Error('unverified-file'))
+    await expect(service.quoteShare('member', f.incoming.id, cop('4000000'))).rejects.toMatchObject({ outcome: 'not-created' })
+    expect(f.client.quote.create).not.toHaveBeenCalled()
+  })
   it('respuesta perdida al crear un outgoing no permite reenviar la misma quote', async () => {
     const f = setup(); await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
     const q = await f.service.quoteShare('bogota', f.incoming.id, cop('4000000'))

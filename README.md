@@ -267,7 +267,9 @@ La recuperación también puede confirmar un intento fallido sin leer el cobro s
 el proveedor devuelve `failed: true` y `sentAmount.value: "0"`, con moneda y escala
 comparables a un `debitAmount` positivo. No inventa un `receivedAmount` de cero.
 Un pago pendiente, un envío parcial, una lectura rechazada o `EXPIRED` por sí solo
-mantienen el bloqueo. La API de una sesión ya abierta conserva su diario en memoria:
-actualizarlo externamente no prueba que ese proceso haya cargado los estados nuevos.
+mantienen el bloqueo. La API refresca las resoluciones externas de los recursos cargados al arrancar
+antes de crear cobros, cotizar o pagar. Si faltan registros o cambian los IDs,
+conserva el bloqueo. La primera activación de esta corrección requiere recargar
+la API; las recuperaciones posteriores se consultan sin esa recarga.
 No reiniciar la API ni perder uniones hasta completar la recuperación y guardar
 el estado público. No se habilita un pago real mientras quede algún intento incierto.
