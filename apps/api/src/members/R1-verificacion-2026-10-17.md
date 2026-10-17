@@ -94,4 +94,3 @@ flujo existente del repositorio. Nunca se registran llaves ni tokens.
 ## Formulario real preparado (no es consentimiento bancario)
 
 ![Formulario EUR, sin enviar permiso](evidence/2026-10-17/union-preparada.png)
-
