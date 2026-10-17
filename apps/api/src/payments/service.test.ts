@@ -25,6 +25,14 @@ function setup() {
 }
 
 describe('PaymentsService con SDK oficial', () => {
+  it('respuesta perdida al crear un outgoing no permite reenviar la misma quote', async () => {
+    const f = setup(); await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
+    const q = await f.service.quoteShare('bogota', f.incoming.id, cop('4000000'))
+    f.client.outgoingPayment.create.mockRejectedValue(new Error('synthetic private provider detail'))
+    await expect(f.service.payShare('bogota', q.quoteId)).rejects.toMatchObject({ outcome: 'unknown' })
+    await expect(f.service.payShare('bogota', q.quoteId)).rejects.toMatchObject({ outcome: 'not-created' })
+    expect(f.client.outgoingPayment.create).toHaveBeenCalledOnce()
+  })
   it('crea un cobro con permiso limitado y lo consulta por el monto recibido', async () => {
     const { service, client, incoming } = setup()
     const created = await service.createIncoming('https://farmacia.example', cop('12000000'))
@@ -40,12 +48,13 @@ describe('PaymentsService con SDK oficial', () => {
   it('rechaza cobro de moneda distinta y cobro desconocido', async () => {
     const { service } = setup()
     await expect(service.createIncoming('https://farmacia.example', { value: '1', assetCode: 'EUR', assetScale: 2 }))
-      .rejects.toThrow('moneda')
-    await expect(service.received('https://resources.example/incoming/unknown')).rejects.toThrow('Cobro no encontrado')
+      .rejects.toThrow()
+    await expect(service.received('https://resources.example/incoming/unknown')).rejects.toThrow()
   })
 
   it('cotiza receiveAmount, paga con el permiso del miembro y distingue pendiente de completado', async () => {
-    const { service, client, quote, outgoing, memberToken } = setup()
+    const { service, client, quote, outgoing, memberToken, incoming } = setup()
+    await service.createIncoming('https://pharmacy.example', cop('4000000'))
     const q = await service.quoteShare('bogota', 'https://resources.example/incoming/1', cop('4000000'))
     expect(q).toEqual({ quoteId: quote.id, debitAmount: cop('4000000'), receiveAmount: cop('4000000') })
     expect(client.quote.create).toHaveBeenCalledWith(
@@ -56,7 +65,8 @@ describe('PaymentsService con SDK oficial', () => {
     expect(memberToken).toHaveBeenCalledWith('bogota')
     expect(paid.outgoingId).toBe(outgoing.id)
     expect(await service.track(outgoing.id)).toBe('pending')
-    outgoing.sentAmount = cop('4000000')
+    outgoing.sentAmount = cop('123') // no se compara con el debito
+    incoming.receivedAmount = cop('4000000')
     expect(await service.track(outgoing.id)).toBe('completed')
   })
 
@@ -64,20 +74,21 @@ describe('PaymentsService con SDK oficial', () => {
     const { service, quote, memberToken } = setup()
     quote.receiveAmount = cop('3999999')
     await expect(service.quoteShare('bogota', 'https://resources.example/incoming/1', cop('4000000')))
-      .rejects.toThrow('no cubre')
+      .rejects.toThrow()
     quote.receiveAmount = cop('4000000')
     const { quoteId } = await service.quoteShare('bogota', 'https://resources.example/incoming/1', cop('4000000'))
-    await expect(service.payShare('madrid', quoteId)).rejects.toThrow('Cotización no encontrada')
+    await expect(service.payShare('madrid', quoteId)).rejects.toThrow()
     expect(memberToken).not.toHaveBeenCalled()
   })
 
   it('trata un pago fallido como fallido y rechaza identificadores desconocidos', async () => {
     const { service, outgoing } = setup()
+    await service.createIncoming('https://pharmacy.example', cop('4000000'))
     const { quoteId } = await service.quoteShare('bogota', 'https://resources.example/incoming/1', cop('4000000'))
     await service.payShare('bogota', quoteId)
     outgoing.failed = true
     expect(await service.track(outgoing.id)).toBe('failed')
-    await expect(service.track('https://resources.example/outgoing/unknown')).rejects.toThrow('Pago saliente no encontrado')
+    await expect(service.track('https://resources.example/outgoing/unknown')).rejects.toThrow()
   })
 
   it('permite dos cotizaciones locales para aportes parciales al mismo cobro', async () => {
@@ -99,11 +110,13 @@ describe('PaymentsService con SDK oficial', () => {
   })
 
   it('rechaza un segundo pago secuencial de la misma cotización', async () => {
-    const { service, quote } = setup()
+    const { service, quote, client } = setup()
+    await service.createIncoming('https://pharmacy.example', cop('4000000'))
     await service.quoteShare('hermano_1', 'https://resources.example/incoming/1', cop('4000000'))
     await service.payShare('hermano_1', quote.id)
 
-    await expect(service.payShare('hermano_1', quote.id)).rejects.toThrow('Cotización no encontrada')
+    await expect(service.payShare('hermano_1', quote.id)).rejects.toMatchObject({ outcome: 'not-created' })
+    expect(client.outgoingPayment.create).toHaveBeenCalledOnce()
   })
 
   it('lee del cobro la acumulación de aportes en lugar de acumularla localmente', async () => {

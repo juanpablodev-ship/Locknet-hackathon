@@ -32,6 +32,10 @@ export function createMembersJoinService(client: Pick<AuthenticatedClient, 'wall
   const { pending } = state
 
   return {
+    cancelJoin(expectedState) {
+      if (currentSessionId() !== sessionId) throw new Error('Sesión de unión inválida')
+      for (const [key, entry] of pending) if (entry.sessionId === sessionId && (!expectedState || key === expectedState)) pending.delete(key)
+    },
     ...createMemberOperations(client, store, now),
     async startJoin(walletId, member) {
       if (currentSessionId() !== sessionId || !walletId || state.starting.has(sessionId)) throw new Error('Sesión de unión inválida')

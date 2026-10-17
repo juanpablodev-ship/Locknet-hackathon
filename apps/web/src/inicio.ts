@@ -143,6 +143,8 @@ export function renderInicio(w: SharedWallet, spends: Spend[] = [], wallets: Sha
     <div class="contenedor">
       ${renderSelectorBilleteras(wallets, w.id)}
       <p class="etiqueta">Cupo autorizado este mes</p>
+      ${w.capacityStale ? '<p role="status">No se pudo confirmar todo el cupo. Los importes no consultables se excluyen.</p>' : ''}
+      ${w.capacityByAsset?.length ? `<p>Cupos por moneda, sin conversión: ${w.capacityByAsset.map(m => escapeHtml(formatMoney(m))).join(' + ')}</p><p>El total siguiente incluye solo ${escapeHtml(w.currency)}. No se convierte EUR con una tasa inventada.</p>` : ''}
       <p class="cupo">${escapeHtml(formatMoney(w.authorizedCapacity))}</p>
       <p>Nadie depositó nada. Cada uno autorizó un tope desde su banco.</p>
       ${renderBarraCupo(w.members)}

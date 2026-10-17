@@ -10,6 +10,7 @@ import type { Engine } from './wallet/engine'
 export interface JoinDeps {
   // R1 exige: sessionId fijo por instancia y currentSessionId leído del contexto de cada petición.
   createService(sessionId: string, currentSessionId: () => string | undefined, assetCode: string): MembersService
+  metadata?: (walletAddress: string) => Promise<{ assetCode: string; assetScale: number }>
   webUrl: string   // a dónde vuelve el navegador después del callback
 }
 
@@ -82,9 +83,14 @@ const wrap = (h: Handler) => (req: Request, res: Response, next: NextFunction) =
 
 export function createApp(deps: {
   engine: Engine; bus: EventBus; heartbeatMs?: number; join?: JoinDeps; demo?: DemoDeps
+  security?: boolean
+  setup?: unknown
+  revoke?: (memberId: string) => Promise<void>
   available?: (memberId: string) => Promise<Money>   // MembersService.available() de R1 (cupo real)
 }) {
   const { engine, bus } = deps
+  const secure = deps.security ?? deps.demo?.mode !== 'fixtures'
+  const expectedOrigin = deps.join ? new URL(deps.join.webUrl).origin : undefined
   // Refresca el cupo en segundo plano; un fallo nunca rompe la respuesta al usuario.
   const refreshLater = (walletId: string) => {
     if (deps.available) engine.refreshCapacity(walletId, deps.available).catch(() => {})
@@ -96,20 +102,33 @@ export function createApp(deps: {
   // Sesión del navegador: cookie sid emitida SOLO por este servidor; el contexto de cada
   // petición vive en AsyncLocalStorage (nunca en una variable global compartida).
   const requestContext = new AsyncLocalStorage<{ sid?: string }>()
-  const sessions = new Map<string, { service: MembersService; walletId: string; assetCode: string }>()
-  const issued = new Set<string>()
+  const sessions = new Map<string, { service: MembersService; walletId: string; assetCode: string; pending: boolean; finishing?: boolean; expiresAt: number; members: Set<string> }>()
+  const issued = new Map<string, number>()
   const currentSessionId = () => {
     const sid = requestContext.getStore()?.sid
-    return sid && issued.has(sid) ? sid : undefined
+    return sid && (issued.get(sid) ?? 0) > Date.now() ? sid : undefined
   }
   app.use((req, _res, next) => {
     const sid = readCookie(req, SESSION_COOKIE)
-    requestContext.run({ sid: sid && issued.has(sid) ? sid : undefined }, next)
+    requestContext.run({ sid: sid && (issued.get(sid) ?? 0) > Date.now() ? sid : undefined }, next)
   })
-  app.use((_req, res, next) => {   // la web de R4 puede correr en otro puerto
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer')
+    if (req.method === 'OPTIONS') { res.sendStatus(403); return }
+    if (secure && req.method !== 'GET' && req.headers.origin !== expectedOrigin) { res.status(403).json({ error: 'Origen no permitido. Usa la web configurada y su proxy.' }); return }
     next()
+  })
+  const identity = (walletId: string, claimed?: string): string => {
+    const sid = currentSessionId(); const owned = sid ? sessions.get(sid)?.members : undefined
+    const active = engine.getWallet(walletId).members.filter(m => m.status === 'active' && owned?.has(m.id))
+    const chosen = claimed ? active.find(m => m.id === claimed) : active[0]
+    if (!chosen) throw new Error('Debes autorizar tu propia wallet en este navegador para esta accion.')
+    return chosen.id
+  }
+  app.get('/api/setup', (_req, res) => res.json(deps.setup ?? {}))
+  app.get('/api/session', (_req, res) => {
+    if (!secure) { res.json({ memberIds: engine.listWallets().flatMap(w => w.members.filter(m => m.status === 'active').map(m => m.id)), simulated: true }); return }
+    const sid = currentSessionId(); res.json({ memberIds: sid ? [...(sessions.get(sid)?.members ?? [])] : [] })
   })
 
   app.get('/api/wallets', wrap((_req, res) => res.json(engine.listWallets())))
@@ -129,28 +148,41 @@ export function createApp(deps: {
       throw new BadRequest('Falta destination { name, walletAddress }')
     }
     if (!isMoney(amount)) throw new BadRequest('amount debe ser Money { value, assetCode, assetScale }')
+    if (secure) identity(req.params.id)
     res.status(201).json(engine.requestSpend(req.params.id, destination, amount))
   }))
 
   app.post('/api/spends/:id/approvals', wrap((req, res) => {
     const { memberId, yes } = req.body ?? {}
     if (typeof memberId !== 'string' || typeof yes !== 'boolean') throw new BadRequest('Falta { memberId, yes }')
+    const spend = engine.getSpend(req.params.id)
+    if (secure) identity(spend.walletId, memberId)
     res.json(engine.castApproval(req.params.id, memberId, yes))
   }))
 
   // Pagar y reintentar responden 202 de inmediato; el avance ("2 de 3") llega por SSE.
   const background = (expected: string, run: (id: string) => Promise<unknown>): Handler => (req, res) => {
     const spend = engine.getSpend(req.params.id)
+    if (secure) identity(spend.walletId)
     if (spend.status !== expected) {
       throw new Error(`El gasto debe estar en ${expected} (estado: ${spend.status})`)
     }
     run(spend.id)
-      .catch((e) => console.error(`[api] falló ${spend.id}:`, e instanceof Error ? e.message : 'error'))
+      .catch(() => { /* no registrar errores del proveedor */ })
       .finally(() => refreshLater(spend.walletId))
     res.status(202).json({ spendId: spend.id, status: 'paying' })
   }
   app.post('/api/spends/:id/execute', wrap(background('approved', (id) => engine.executeSpend(id))))
   app.post('/api/spends/:id/retry', wrap(background('incomplete', (id) => engine.retryShare(id))))
+
+  app.post('/api/spends/:id/recheck', wrap(background('incomplete', (id) => engine.recheckSpend(id))))
+
+  app.post('/api/wallets/:id/members/:memberId/revoke', wrap(async (req, res) => {
+    if (secure) identity(req.params.id, req.params.memberId)
+    if (!deps.revoke) throw new Error('Revocacion no disponible')
+    await deps.revoke(req.params.memberId); engine.revokeMember(req.params.id, req.params.memberId)
+    res.json({ revoked: true })
+  }))
 
   app.post('/api/wallets/:id/capacity/refresh', wrap(async (req, res) => {
     if (!deps.available) throw new Error('Consulta de cupo no encontrada en este servidor')
@@ -166,6 +198,7 @@ export function createApp(deps: {
   app.post('/api/demo/reset', wrap((_req, res) => {
     const d = deps.demo
     if (!d) throw new Error('Reinicio de demo no encontrado en este servidor')
+    if (secure) identity(engine.listWallets()[0].id)
     const next = d.seeds()
     engine.reset(next)          // 409 si hay un pago en curso; nada se toca antes de esto
     d.resetStore()
@@ -183,24 +216,39 @@ export function createApp(deps: {
     if (typeof name !== 'string' || typeof walletAddress !== 'string' || typeof interval !== 'string' || !isMoney(cap)) {
       throw new BadRequest('Falta { name, walletAddress, cap: Money, interval }')
     }
+    if (engine.getWallet(walletId).members.some(m => m.walletAddress === walletAddress && m.status === 'active')) throw new Error('Esta wallet ya tiene una union activa.')
     let sid = currentSessionId()
     if (!sid) {
       sid = randomBytes(32).toString('base64url')
-      issued.add(sid)
+      issued.set(sid, Date.now() + 86400000)
       res.setHeader('Set-Cookie',
-        `${SESSION_COOKIE}=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${req.secure ? '; Secure' : ''}`)
+        `${SESSION_COOKIE}=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${join.webUrl.startsWith('https:') ? '; Secure' : ''}`)
     }
-    // Una instancia por sesión y moneda (la política maxCap del guardián es por moneda).
-    let session = sessions.get(sid)
-    if (!session || session.assetCode !== cap.assetCode) {
-      session = { service: join.createService(sid, currentSessionId, cap.assetCode), walletId, assetCode: cap.assetCode }
-      sessions.set(sid, session)
+    const existing = sessions.get(sid)
+    if (existing?.pending && existing.expiresAt > Date.now()) throw new Error('Ya hay una union pendiente en este navegador; no cambies de grupo.')
+    const session = { service: undefined as unknown as MembersService, walletId, assetCode: cap.assetCode,
+      pending: true, expiresAt: Date.now() + 600000, members: existing?.members ?? new Set<string>() }
+    sessions.set(sid, session)
+    try {
+      if (join.metadata) {
+        const metadata = await join.metadata(walletAddress)
+        if (metadata.assetCode !== cap.assetCode || metadata.assetScale !== cap.assetScale) throw new Error('Unidad distinta de la wallet publica')
+      }
+      session.service = join.createService(sid, currentSessionId, cap.assetCode)
+      const result = await requestContext.run({ sid }, () => session.service.startJoin(walletId, { name, walletAddress, assetCode: cap.assetCode, cap, interval }))
+      res.json(result)
+    } catch {
+      session.pending = false
+      throw new Error('No se pudo iniciar la union; revisa wallet, moneda, escala e intervalo.')
     }
-    session.walletId = walletId
-    const current = session
-    const result = await requestContext.run({ sid }, () =>
-      current.service.startJoin(walletId, { name, walletAddress, assetCode: cap.assetCode, cap, interval }))
-    res.json(result)   // { redirectUrl, grantWarning }: la web muestra el aviso y luego redirige
+  }))
+
+  app.post('/api/join/cancel', wrap((_req, res) => {
+    const sid = currentSessionId(); const session = sid ? sessions.get(sid) : undefined
+    if (session?.finishing) throw new Error('Hay una union completandose')
+    session?.service?.cancelJoin?.()
+    if (session) session.pending = false
+    res.json({ cancelledLocally: true, externalGrantRevoked: false })
   }))
 
   // El banco redirige aquí. Nunca se registran ni se reenvían hash, interact_ref ni state.
@@ -208,19 +256,29 @@ export function createApp(deps: {
     const join = deps.join
     if (!join) throw new Error('Unirse no está disponible en este servidor')
     const back = (result: 'ok' | 'error' | 'rechazada') => res.redirect(303, `${join.webUrl}#/inicio?union=${result}`)
-    if (new URL(req.originalUrl, 'http://localhost').searchParams.get('result') === 'grant_rejected') return back('rechazada')
+    const rejected = new URL(req.originalUrl, 'http://localhost').searchParams
+    if (rejected.get('result') === 'grant_rejected') {
+      const sid = currentSessionId(); const session = sid ? sessions.get(sid) : undefined
+      const state = rejected.get('state')
+      if (session && state && !session.finishing) { session.service.cancelJoin?.(state); session.pending = false }
+      return back('rechazada')
+    }
 
     const sid = currentSessionId()
     const session = sid ? sessions.get(sid) : undefined
     const p = singleParams(req, ['interact_ref', 'hash', 'state'])
-    if (!session || !p) return back('error')
+    if (!session || !session.pending || session.finishing || session.expiresAt <= Date.now() || !p) return back('error')
+    session.finishing = true
     let member: Member
     try {
       ({ member } = await session.service.finishJoin({ interactRef: p.interact_ref, hash: p.hash, state: p.state }))
     } catch {
+      session.finishing = false
       return back('error')   // incluye hash inválido: R1 no continúa la concesión
     }
+    session.pending = false; session.finishing = false
     engine.addMember(session.walletId, member)
+    session.members.add(member.id)
     refreshLater(session.walletId)
     return back('ok')
   }))

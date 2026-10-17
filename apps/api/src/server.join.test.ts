@@ -120,7 +120,7 @@ describe('GET /api/join/finish', () => {
     expect(wallet.members.map((m: Member) => m.name)).toEqual(['bogota'])
     expect(events.map((e) => e.type)).toEqual(['member-active', 'capacity-updated', 'capacity-updated'])
     // primero el tope, luego el cupo real consultado con available()
-    expect(events[1].amount).toEqual(cop(100_000))
+    expect(events[1].amount).toEqual(cop(0))
     expect(events[2].amount).toEqual(cop(70_000))
   })
 

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { flagFor, formatMoney, progressText, riskLevel, statusLabel } from './format.js'
 
 describe('formatMoney', () => {
+  it('conserva centavos COP y enteros grandes sin redondear dinero', () => {
+    expect(formatMoney({ value: '150', assetCode: 'COP', assetScale: 2 })).toBe('$1,5')
+    expect(formatMoney({ value: '9007199254740993', assetCode: 'COP', assetScale: 0 })).toContain('9.007.199.254.740.993')
+    expect(() => formatMoney({ value: 'NaN', assetCode: 'COP', assetScale: 2 })).toThrow()
+  })
   it('COP sin decimales', () => {
     expect(formatMoney({ value: '30000000', assetCode: 'COP', assetScale: 2 })).toBe('$300.000')
   })

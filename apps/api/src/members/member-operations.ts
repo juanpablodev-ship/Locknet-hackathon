@@ -103,7 +103,8 @@ export function createMemberOperations(client: Pick<AuthenticatedClient, 'grant'
     async tokenFor(id) {
       const entry = usable(id)
       const left = await available(id)
-      if (BigInt(left.value) <= 0n || state.records.get(id) !== entry || usable(id) !== entry) throw new Error('Permiso no utilizable o cupo agotado')
+      if (BigInt(left.value) <= 0n) throw new Error('Cupo autorizado agotado')
+      if (state.records.get(id) !== entry || usable(id) !== entry) throw new Error('Permiso no utilizable')
       return entry.grant!.access_token.value // Exclusivamente consumidor interno R2; nunca HTTP/eventos/logs.
     },
     async revoke(id) {

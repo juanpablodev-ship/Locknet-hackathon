@@ -68,7 +68,7 @@ describe('executeSpend: pagos por aporte', () => {
   it('aporte que se queda en pending → falla al agotar los intentos', async () => {
     const { engine, id } = setup({ trackAs: { 'm-medellin': 'pending' } })
     const s = await engine.executeSpend(id)
-    expect(s.shares[1]).toMatchObject({ status: 'failed', failReason: 'El pago no se confirmó a tiempo' })
+    expect(s.shares[1]).toMatchObject({ status: 'pending', failReason: expect.stringContaining('Resultado pendiente') })
   })
 
   it('no ejecuta un gasto que espera aprobación del grupo', async () => {
