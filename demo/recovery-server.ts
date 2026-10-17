@@ -16,6 +16,11 @@ export function readAuthorizationExpiresAt(seconds: number | undefined, now = Da
   return now + (lifetime - 5) * 1000
 }
 
+export function isRecoveryReadScope(access: { type: string; identifier?: string; actions: string[] }, wallet: string) {
+  return access.type === 'outgoing-payment' && access.identifier === wallet && access.actions.length === 2 &&
+    access.actions.includes('read') && access.actions.includes('read-all')
+}
+
 export async function startRecovery() {
   const port = Number(process.env.RECOVERY_PORT ?? '3345')
   const origin = `http://localhost:${port}`
@@ -42,7 +47,7 @@ export async function startRecovery() {
     const requestedAt = Date.now()
     // Solo lectura: nunca create, nunca límites de débito ni envío de dinero.
     const grant = await client.grant.request({ url: wallet.authServer }, {
-      access_token: { access: [{ type: 'outgoing-payment', identifier: wallet.id, actions: ['read'] }] },
+      access_token: { access: [{ type: 'outgoing-payment', identifier: wallet.id, actions: ['read', 'read-all'] }] },
       interact: { start: ['redirect'], finish: { method: 'redirect', uri: `${origin}/finish?state=${state}`, nonce } },
     })
     if (!isPendingGrant(grant) || !grant.interact.finish) throw new Error('Se esperaba consentimiento')
@@ -67,7 +72,7 @@ export async function startRecovery() {
     }
     try {
       if (req.method === 'GET' && url.pathname === '/') {
-        res.end(`<h1>Recuperar pagos existentes — solo lectura</h1><p>Este servidor no puede enviar dinero. Cada dueño debe autorizar desde su perfil de navegador.</p><ul>${choices.map((m, i) => `<li>${escape(m.name)}: ${readTokens.has(m.walletAddress) ? 'lectura autorizada' : `<a href="/start?member=${i}">Solicitar permiso de lectura</a>`}</li>`).join('')}</ul><form method="post" action="/check"><button>Consultar intentos existentes y guardar resultados confirmados (sin pagar)</button></form>`)
+        res.end(`<h1>Recuperar pagos existentes — solo lectura</h1><p>Este servidor no puede enviar dinero. Solicita read y read-all para consultar pagos históricos de la wallet; nunca create. Cada dueño debe autorizar desde su perfil de navegador.</p><ul>${choices.map((m, i) => `<li>${escape(m.name)}: ${readTokens.has(m.walletAddress) ? 'lectura autorizada' : `<a href="/start?member=${i}">Solicitar permiso de lectura</a>`}</li>`).join('')}</ul><form method="post" action="/check"><button>Consultar intentos existentes y guardar resultados confirmados (sin pagar)</button></form>`)
       } else if (req.method === 'GET' && url.pathname === '/start') {
         if ([...pending.values()].some(s => s.sid === sid && !s.consumed && Date.now() - s.requestedAt < 600000)) throw new Error('Interacción pendiente')
         const session = await begin(Number(url.searchParams.get('member')), sid)
@@ -86,7 +91,7 @@ export async function startRecovery() {
         const grant = await client.grant.continue({ url: session.grant.continue.uri, accessToken: session.grant.continue.access_token.value }, { interact_ref: url.searchParams.get('interact_ref')! })
         if (!isFinalizedGrantWithAccessToken(grant) || grant.access_token.access.length !== 1) throw new Error('Grant inválido')
         const access = grant.access_token.access[0]
-        if (access.type !== 'outgoing-payment' || access.identifier !== session.wallet.id || access.actions.length !== 1 || access.actions[0] !== 'read') throw new Error('Alcance distinto')
+        if (!isRecoveryReadScope(access, session.wallet.id)) throw new Error('Alcance distinto')
         const expiresAt = readAuthorizationExpiresAt(grant.access_token.expires_in)
         readTokens.set(session.wallet.id, grant.access_token.value)
         readExpiries.set(session.wallet.id, expiresAt)

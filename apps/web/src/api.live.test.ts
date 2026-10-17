@@ -52,6 +52,28 @@ describe('api.ts en modo live', () => {
     }
   }
 
+  it('normaliza un destino antiguo con $ sin mutar el grupo ni crear pagos', async () => {
+    const destination = { name: 'Farmacia', walletAddress: '$ilp.interledger-test.dev/far' }
+    await api.requestSpend('w-existing', destination, medicina.amount)
+    expectRequest('/api/wallets/w-existing/spends', 'POST', { destination: { ...destination, walletAddress: 'https://ilp.interledger-test.dev/far' }, amount: medicina.amount })
+    expect(destination.walletAddress).toBe('$ilp.interledger-test.dev/far')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('crear grupo envía el destino HTTPS aunque la entrada use $', async () => {
+    await api.createWallet({ name: 'Medicinas', currency: 'COP', approvalsRequired: 2,
+      aboveAmount: { value: '20000000', assetCode: 'COP', assetScale: 2 },
+      knownDestinations: [{ name: 'Farmacia', walletAddress: '$ilp.interledger-test.dev/far' }] })
+    const call = fetchMock.mock.calls[0]
+    expect(JSON.parse(call[1]!.body as string).knownDestinations[0].walletAddress).toBe('https://ilp.interledger-test.dev/far')
+    expect(call[0]).toBe('/api/wallets')
+  })
+
+  it('rechaza destinos inseguros antes de transmitir una solicitud', async () => {
+    await expect(api.requestSpend('w-existing', { name: 'X', walletAddress: 'http://example.com/far' }, medicina.amount)).rejects.toThrow('HTTPS')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('llama las rutas existentes con los métodos y cuerpos correspondientes', async () => {
     await api.getWallets()
     expectRequest('/api/wallets', 'GET')

@@ -25,6 +25,18 @@ function setup() {
 }
 
 describe('PaymentsService con SDK oficial', () => {
+  it('un diario bloqueado impide cobros y cotizaciones antes de llamar al proveedor', async () => {
+    const f = setup()
+    const service = createPaymentsService({ client: f.client as unknown as AuthenticatedClient,
+      memberWalletAddress: vi.fn(), memberToken: f.memberToken, journal: { blocked: true, record: vi.fn() } })
+    await expect(service.createIncoming('https://pharmacy.example', cop('4000000'))).rejects.toMatchObject({ outcome: 'not-created' })
+    await expect(service.quoteShare('member', f.incoming.id, cop('4000000'))).rejects.toMatchObject({ outcome: 'not-created' })
+    expect(f.client.walletAddress.get).not.toHaveBeenCalled()
+    expect(f.client.grant.request).not.toHaveBeenCalled()
+    expect(f.client.incomingPayment.create).not.toHaveBeenCalled()
+    expect(f.client.quote.create).not.toHaveBeenCalled()
+    expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
+  })
   it('respuesta perdida al crear un outgoing no permite reenviar la misma quote', async () => {
     const f = setup(); await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
     const q = await f.service.quoteShare('bogota', f.incoming.id, cop('4000000'))

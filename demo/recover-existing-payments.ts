@@ -14,8 +14,8 @@ const enough = (received: Money, expected: Money) => validMoney(received) && val
 /** Solo grant read y GET de IDs existentes. No contiene create de pagos, quotes ni cobros. */
 export async function recoverExisting(client: AuthenticatedClient, snapshot: Snapshot, journal: Journal, apply: boolean, readTokens: ReadonlyMap<string, string> = new Map()) {
   const reader = createPaymentReader(client, readTokens)
-  const report: { spendId: string; memberName: string; status: PaymentAttempt['status']; stage?: 'outgoing' | 'incoming' | 'validation'; received?: Money; expired?: boolean; reason: string }[] = []
-  const checked = new Map<string, { status: PaymentAttempt['status']; received: Money; expired: boolean }>()
+  const report: { spendId: string; memberName: string; status: PaymentAttempt['status']; stage?: 'outgoing' | 'incoming' | 'validation'; zeroSent?: boolean; received?: Money; expired?: boolean; reason: string }[] = []
+  const checked = new Map<string, { status: PaymentAttempt['status']; received?: Money; expired: boolean; zeroSent?: boolean }>()
   for (const spend of snapshot.spends) {
     const wallet = snapshot.wallets.find(w => w.id === spend.walletId)
     if (!wallet) throw new Error('El archivo de recuperación no identifica el grupo.')
@@ -36,18 +36,27 @@ export async function recoverExisting(client: AuthenticatedClient, snapshot: Sna
           let result = checked.get(attempt.outgoingId)
           if (!result) {
             const outgoing = await reader.outgoing(attempt.outgoingId, member.walletAddress)
-            if (outgoing.walletAddress !== member.walletAddress || outgoing.receiver !== attempt.incomingPaymentUrl) throw new Error('Recurso no corresponde al intento')
-            stage = 'incoming'
-            const incoming = await reader.incoming(attempt.incomingPaymentUrl, spend.destination.walletAddress)
-            stage = 'validation'
-            if (incoming.walletAddress !== spend.destination.walletAddress || !validMoney(incoming.receivedAmount)) throw new Error('Cobro no corresponde al destino')
-            const received = incoming.receivedAmount
-            const status = enough(received, outgoing.receiveAmount) ? 'completed' : outgoing.failed ? 'failed' : 'pending'
-            result = { status, received, expired: !!incoming.expiresAt && Date.parse(incoming.expiresAt) <= Date.now() }
+            if (outgoing.id !== attempt.outgoingId || outgoing.walletAddress !== member.walletAddress || outgoing.receiver !== attempt.incomingPaymentUrl) throw new Error('Recurso no corresponde al intento')
+            // failed por sí solo puede incluir un envío parcial. Cero debe venir
+            // del proveedor, ser comparable al débito y acompañar un estado terminal.
+            const sent = outgoing.sentAmount, debit = outgoing.debitAmount
+            if (outgoing.failed === true && validMoney(sent) && validMoney(debit) &&
+                BigInt(sent.value) === 0n && BigInt(debit.value) > 0n &&
+                sent.assetCode === debit.assetCode && sent.assetScale === debit.assetScale) {
+              result = { status: 'failed', expired: false, zeroSent: true }
+            } else {
+              stage = 'incoming'
+              const incoming = await reader.incoming(attempt.incomingPaymentUrl, spend.destination.walletAddress)
+              stage = 'validation'
+              if (incoming.walletAddress !== spend.destination.walletAddress || !validMoney(incoming.receivedAmount)) throw new Error('Cobro no corresponde al destino')
+              const received = incoming.receivedAmount
+              const status = enough(received, outgoing.receiveAmount) ? 'completed' : outgoing.failed ? 'failed' : 'pending'
+              result = { status, received, expired: !!incoming.expiresAt && Date.parse(incoming.expiresAt) <= Date.now() }
+            }
             checked.set(attempt.outgoingId, result)
           }
           report.push({ spendId: spend.id, memberName: member.name, ...result,
-            reason: result.status === 'completed' ? 'Recepción confirmada por el proveedor.' : result.status === 'failed' ? 'Outgoing fallido confirmado; recepción consultada.' : 'El proveedor aún no confirma un estado terminal; vencer el cobro no demuestra fallo.' })
+            reason: result.zeroSent ? 'El proveedor confirmó outgoing fallido con cero enviado. No se declara recepción ni se consulta el cobro antiguo.' : result.status === 'completed' ? 'Recepción confirmada por el proveedor.' : result.status === 'failed' ? 'Outgoing fallido confirmado; recepción consultada.' : 'El proveedor aún no confirma un estado terminal; vencer el cobro no demuestra fallo.' })
           if (apply) {
             attempt.status = result.status
             if (attempt.quoteId) await journal.record(attempt.quoteId, { ...attempt, status: result.status })
