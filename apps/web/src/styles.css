@@ -14,7 +14,9 @@
   --rojo: #e3242b;
   --sent: #111111;
   --fondo: #ffffff;
+  --sup: #f5f5f5;
   --texto: #111111;
+  --muted: #555555;
   --borde: #cfcfcf;
   --fondo-panel-rojo: #e3242b;
   --texto-panel-rojo: #ffffff;
@@ -51,7 +53,7 @@ body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* Proyector: 1366×768 y más grande. El diseño de a pie (móvil) es la columna angosta
+/* Proyector: 1366�-768 y más grande. El diseño de a pie (móvil) es la columna angosta
    del borrador; aquí se escala la letra base y, por pantalla, el ancho del contenedor. */
 @media (min-width: 1024px) {
   body {
@@ -332,9 +334,47 @@ body {
   }
 }
 
+/* El dinero sigue en el banco de cada miembro: $0 en custodia de Kivor (decisión 4). */
+.custodia {
+  margin: 16px 0;
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: var(--sup);
+}
+
+.c-num {
+  margin: 0 0 4px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.c-txt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.c-txt b {
+  color: var(--texto);
+}
+
+/* Cupo agrupado por moneda (capacityByAsset): nunca se suman monedas distintas. */
+.monedas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.cupo-de {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
 /* Una casilla del mismo ancho por miembro (decisión 8): el relleno es SU propio
    porcentaje available/cap, nunca una suma entre monedas distintas. */
-.barra-cupo {
+.casillas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
   gap: 3px;
@@ -345,72 +385,98 @@ body {
   border-radius: 6px;
 }
 
-.casilla-cupo {
+.casilla {
   position: relative;
   background: var(--borde);
 }
 
-.casilla-cupo span {
+.casilla i {
   display: block;
   height: 100%;
   background: var(--verde);
 }
 
-.casilla-cupo-vacia {
-  position: absolute;
-  inset: 0;
+.casilla-vacia {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--sup);
+  color: var(--muted);
   font-size: 13px;
-  color: var(--texto);
 }
 
 .miembros {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 16px;
   margin: 16px 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
 }
 
-.reglas-billetera {
-  margin: 24px 0;
-  padding: 20px;
+.miembros li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 12px 14px;
   border: 1px solid var(--borde);
   border-radius: 8px;
 }
 
-.reglas-billetera h2 {
-  margin-top: 0;
+.miembros li small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.h-sec {
+  margin: 28px 0 4px;
   font-size: 24px;
 }
 
-.contrato-filas {
+/* El contrato agrupado por quién hace cumplir cada regla (decisión 6). */
+#contrato {
+  display: grid;
+  gap: 14px;
+  margin: 12px 0;
+}
+
+.grupo-c {
+  padding: 16px 18px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+
+.grupo-c h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.grupo-c ul {
   margin: 0;
   padding: 0;
   list-style: none;
+  display: grid;
+  gap: 8px;
 }
 
-.contrato-filas li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 4px 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--borde);
-  font-size: 20px;
+.grupo-c li {
+  font-size: 16px;
 }
 
-.contrato-filas li:first-child {
-  border-top: 0;
+.grupo-c.kivor {
+  border-color: var(--verde);
+  background: var(--sup);
 }
 
-.contrato-regla {
-  flex: 1 1 320px;
+.grupo-c.sentinels {
+  border-color: var(--sent);
+  background: var(--sent);
+  color: #ffffff;
 }
 
-.contrato-quien {
-  flex: 0 0 auto;
+.grupo-c.sentinels h3 {
+  color: #ffffff;
 }
 
 .nota-configuracion {
@@ -431,48 +497,28 @@ body {
   background: var(--verde);
 }
 
-.selector-billeteras {
-  margin: 0 0 24px;
+.grupos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 20px;
 }
 
-.selector-billeteras > p {
-  margin: 0 0 8px;
-  font-weight: 700;
-}
-
-.selector-billeteras .acciones {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  margin-top: 0;
-}
-
-.selector-billeteras .boton {
-  width: 100%;
-  max-width: 100%;
-  min-height: 64px;
-  border: 2px solid var(--borde);
-  overflow-wrap: anywhere;
-  white-space: normal;
-  text-align: center;
+.chip {
+  padding: 8px 16px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
 }
 
 .billetera-seleccionada {
-  outline: 3px solid var(--texto);
-  outline-offset: 2px;
-}
-
-.miembro {
-  border: 1px solid var(--borde);
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.miembro-nombre {
-  margin: 0 0 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
+  border-color: var(--texto);
+  background: var(--texto);
+  color: #ffffff;
 }
 
 .marca {
@@ -566,6 +612,49 @@ body {
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
+}
+
+/* Botones del dise�o final de Kivor (decisiones 1 y 5): mismo rol que .boton,
+   sistema visual nuevo. Conviven mientras los commits 3 a 6 restylen el resto. */
+.acc {
+  margin-top: 24px;
+}
+
+.dos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+}
+
+.btn {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid var(--texto);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn.lleno {
+  border-color: var(--verde);
+  background: var(--verde);
+  color: var(--texto-sobre-verde);
+}
+
+.btn.peq {
+  display: block;
+  width: auto;
+  padding: 8px 16px;
+  margin: 12px 0;
+  font-size: 15px;
 }
 
 .formulario {
@@ -1385,3 +1474,4 @@ body {
   .panel-titulo { font-size: clamp(24px, 7vw, 32px); }
   .acciones > button { width: 100%; }
 }
+

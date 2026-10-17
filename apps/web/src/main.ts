@@ -163,13 +163,13 @@ async function pintarInicio(): Promise<void> {
   if (!turnos.esVigente(miTurno)) return
   const result = new URLSearchParams(location.hash.split('?')[1] ?? '').get('union')
   const message = result === 'ok' ? 'Union confirmada; ya puedes actuar como tu miembro.' : result ? 'No se confirmo la union. No se activo un miembro; vuelve a intentarlo desde Unirse.' : ''
-  app.innerHTML = renderInicio(wallet, spends, wallets) + `<p role="status">${escapeHtml(message)}</p><button id="consultar-cupo">Consultar cupos</button>` + (MODO === 'live' ? wallet.members.filter(m => ownedIds.includes(m.id) && m.status === 'active').map(m => `<button data-revoke="${escapeHtml(m.id)}">Revocar mi permiso: ${escapeHtml(m.name)}</button>`).join('') : '') + panelDevHtml()
+  app.innerHTML = renderInicio(wallet, spends, wallets) + (message ? `<p role="status">${escapeHtml(message)}</p>` : '') + (MODO === 'live' ? wallet.members.filter(m => ownedIds.includes(m.id) && m.status === 'active').map(m => `<button data-revoke="${escapeHtml(m.id)}">Revocar mi permiso: ${escapeHtml(m.name)}</button>`).join('') : '') + panelDevHtml()
   document.getElementById('consultar-cupo')?.addEventListener('click', () => { void refreshCapacity(wallet.id).then(() => pintarInicio()).catch(err => pintarError(app, err, () => void pintarInicio())) })
   app.querySelectorAll('[data-revoke]').forEach(button => button.addEventListener('click', () => {
     if (confirm('Revocar explicitamente este permiso en la wallet?')) void revokeMember(wallet.id, (button as HTMLElement).dataset.revoke!).then(() => pintarInicio()).catch(err => pintarError(app, err, () => void pintarInicio()))
   }))
   enlazarPanelDev()
-  app.querySelector('.selector-billeteras')?.addEventListener('click', (event) => {
+  app.querySelector('.grupos')?.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest('[data-wallet-id]') as HTMLElement | null
     const walletId = button?.dataset.walletId
     if (walletId && wallets.some((item) => item.id === walletId)) {
