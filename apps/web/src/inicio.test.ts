@@ -6,6 +6,11 @@ import { renderInicio, renderSelectorBilleteras } from './inicio.js'
 import { NOMBRE_GUARDIAN } from './config.js'
 
 describe('renderInicio', () => {
+  it('"Invitar a alguien" lleva el id del grupo, escapado', () => {
+    expect(renderInicio(cuidadoDeMama)).toContain(`href="#/unirse?grupo=${cuidadoDeMama.id}">Invitar a alguien`)
+    expect(renderInicio({ ...cuidadoDeMama, id: 'a&b"c' })).toContain('href="#/unirse?grupo=a%26b%22c">Invitar a alguien')
+  })
+
   it('muestra la etiqueta y el cupo formateado', () => {
     const html = renderInicio(cuidadoDeMama)
     expect(html).toContain('Cupo autorizado este mes')

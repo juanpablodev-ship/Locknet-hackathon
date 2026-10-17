@@ -37,3 +37,8 @@ export function parseHash(hash: string): Route {
 
   return { name: 'no-encontrada' }
 }
+
+// Hash de la invitación a un grupo; el id se escapa para que no rompa la URL.
+export function hashUnirse(walletId: string): string {
+  return `#/unirse?grupo=${encodeURIComponent(walletId)}`
+}

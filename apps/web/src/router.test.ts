@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseHash } from './router.js'
+import { hashUnirse, parseHash } from './router.js'
 
 describe('parseHash', () => {
   it('da inicio cuando no hay hash', () => {
@@ -64,5 +64,13 @@ describe('parseHash', () => {
 
   it('da no-encontrada para una ruta desconocida', () => {
     expect(parseHash('#/xyz')).toEqual({ name: 'no-encontrada' })
+  })
+})
+
+describe('hashUnirse', () => {
+  it('lleva el id del grupo, escapado, y parseHash lo devuelve igual', () => {
+    expect(hashUnirse('w-mama-a1b2c3')).toBe('#/unirse?grupo=w-mama-a1b2c3')
+    expect(hashUnirse('a&b=c#d')).toBe('#/unirse?grupo=a%26b%3Dc%23d')
+    expect(parseHash(hashUnirse('a&b=c d'))).toEqual({ name: 'unirse', grupo: 'a&b=c d' })
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cuidadoDeMama, destinoParecido } from '../../../contracts/ejemplo.js'
-import { qrComoSvg, renderGrupoNoExiste, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
+import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
 
 describe('qrComoSvg', () => {
   it('genera un SVG para la URL de invitación', async () => {
@@ -84,5 +84,13 @@ describe('invitación con el grupo', () => {
     const html = renderGrupoNoExiste()
     expect(html).toContain('Este grupo no existe o el servidor se reinició.')
     expect(html).toContain('href="#/inicio"')
+  })
+})
+
+describe('enlace "Unirse al grupo" cuando no hay wallet propia', () => {
+  it('lleva el grupo actual, escapado', () => {
+    const html = renderSinWalletPropia('w-mama-a1b2c3')
+    expect(html).toContain('href="#/unirse?grupo=w-mama-a1b2c3"')
+    expect(renderSinWalletPropia('a&b"c')).toContain('href="#/unirse?grupo=a%26b%22c"')
   })
 })

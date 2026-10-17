@@ -1,5 +1,6 @@
 import type { Member, SharedWallet, Spend } from '../../../contracts/index.js'
 import { NOMBRE_GUARDIAN } from './config.js'
+import { hashUnirse } from './router.js'
 import { flagFor, formatMoney, riskLevel } from './format.js'
 
 export function escapeHtml(texto: string): string {
@@ -172,7 +173,7 @@ export function renderInicio(w: SharedWallet, spends: Spend[] = [], wallets: Sha
       ${renderReglas(w, spends)}
       <div class="acciones">
         <a class="boton" href="#/gasto/nuevo">Pedir un gasto</a>
-        <a class="boton" href="#/unirse">Invitar a alguien</a>
+        <a class="boton" href="${escapeHtml(hashUnirse(w.id))}">Invitar a alguien</a>
       </div>
     </div>
   `

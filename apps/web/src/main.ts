@@ -33,7 +33,7 @@ import { renderHistorial } from './historial.js'
 import { renderPorAprobar } from './por-aprobar.js'
 import { DEMO_MODE } from './config.js'
 import { renderAppChrome } from './navegacion.js'
-import { qrComoSvg, renderGrupoNoExiste, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
+import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
 import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
 import { moneyFromMajor } from './money-input.js'
@@ -210,8 +210,8 @@ async function pintarInicio(): Promise<void> {
   })
 }
 
-function selectVotanteHtml(activos: Member[]): string {
-  if (!activos.length) return `<div class="contenedor votante-barra"><p>Autoriza tu wallet en este navegador para aprobar o gestionar pagos. <a href="#/unirse">Unirse al grupo</a></p></div>`
+function selectVotanteHtml(activos: Member[], walletId: string): string {
+  if (!activos.length) return renderSinWalletPropia(walletId)
   const opciones = activos
     .map(
       (m) =>
@@ -288,7 +288,7 @@ async function pintarGasto(id: string): Promise<void> {
     catch (error) { if (turnos.esVigente(miTurno)) pintarError(app, error, () => void pintarGasto(id)); return }
     if (!turnos.esVigente(miTurno)) return
   }
-  app.innerHTML = selectVotanteHtml(activos) + renderGasto(spend, wallet, votaComoActual, paymentBlocker) + panelDevHtml()
+  app.innerHTML = selectVotanteHtml(activos, wallet.id) + renderGasto(spend, wallet, votaComoActual, paymentBlocker) + panelDevHtml()
   const consultaMensaje = mensajesConsulta.get(id)
   if (consultaMensaje) {
     let feedback = app.querySelector<HTMLElement>('#mensaje')

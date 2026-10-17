@@ -1,6 +1,7 @@
 import QRCode from 'qrcode'
 import type { JoinSetup, SharedWallet, Verdict } from '../../../contracts/index.js'
 import { escapeHtml } from './inicio.js'
+import { hashUnirse } from './router.js'
 
 export function qrComoSvg(url: string): Promise<string> {
   return QRCode.toString(url, { type: 'svg' })
@@ -8,7 +9,11 @@ export function qrComoSvg(url: string): Promise<string> {
 
 // Enlace de la invitación: lleva el id del grupo para que funcione en otro navegador o dispositivo.
 export function urlInvitacion(base: string, walletId: string): string {
-  return `${base}#/unirse?grupo=${encodeURIComponent(walletId)}`
+  return `${base}${hashUnirse(walletId)}`
+}
+
+export function renderSinWalletPropia(walletId: string): string {
+  return `<div class="contenedor votante-barra"><p>Autoriza tu wallet en este navegador para aprobar o gestionar pagos. <a href="${escapeHtml(hashUnirse(walletId))}">Unirse al grupo</a></p></div>`
 }
 
 export function renderGrupoNoExiste(): string {
