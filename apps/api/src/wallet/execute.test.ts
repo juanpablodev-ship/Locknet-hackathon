@@ -134,6 +134,28 @@ describe('executeSpend: pagos por aporte', () => {
     expect(s.shares.every((sh) => sh.received === undefined)).toBe(true)
   })
 
+  it('3b: en cada forma de fallar un aporte hay un motivo claro y no se filtra el error original', async () => {
+    const secreto = 'boom https://ilp.privado/token=abc123'
+    const casos: Array<[string, Parameters<typeof fakePayments>[0], RegExp]> = [
+      ['pago rechazado por el proveedor', { failMember: { 'm-madrid': 'El proveedor confirmó fondos insuficientes.' } }, /fondos insuficientes/],
+      ['respuesta perdida al pagar (resultado desconocido)', { failWith: { 'm-madrid': new Error(secreto) } }, /Resultado desconocido/],
+      ['no se pudo crear el cobro', { incomingFails: new Error(secreto) }, /Error temporal del proveedor/],
+      ['el proveedor confirma que el pago falló', { trackAs: { 'm-madrid': 'failed' } }, /confirmo que el pago fallo/],
+    ]
+    for (const [nombre, opts, esperado] of casos) {
+      const { engine, id } = setup(opts, true)
+      const s = await engine.executeSpend(id)
+      const afectados = s.shares.filter((sh) => sh.status !== 'paid')
+      expect(afectados.length, nombre).toBeGreaterThan(0)
+      for (const sh of afectados) {
+        expect(sh.failReason?.trim(), `${nombre}: motivo vacío`).toBeTruthy()
+        expect(sh.failReason, nombre).toMatch(esperado)
+        expect(sh.failReason, `${nombre}: filtró el error original`).not.toMatch(/boom|token|abc123|privado/)
+      }
+      expect(s.status, nombre).toBe('incomplete')
+    }
+  })
+
   it('no reintenta un gasto que ya está pagado', async () => {
     const { engine, id } = setup()
     await engine.executeSpend(id)
