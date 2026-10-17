@@ -16,11 +16,7 @@ body {
 }
 
 #app {
-  padding-top: 72px;
-}
-
-body[data-demo-mode='fixtures'] #app {
-  padding-top: 128px;
+  padding-top: 16px;
 }
 
 .app-shell {
@@ -38,6 +34,34 @@ body[data-demo-mode='fixtures'] #app {
   color: var(--texto);
   font-weight: 700;
   text-align: center;
+}
+
+.acciones-demo {
+  display: flex;
+  min-height: 48px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--borde);
+  background: var(--fondo);
+}
+
+.boton-reiniciar-demo {
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--fondo);
+  color: var(--texto);
+  cursor: pointer;
+  font: inherit;
+}
+
+.boton-reiniciar-demo:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .menu-navegacion {

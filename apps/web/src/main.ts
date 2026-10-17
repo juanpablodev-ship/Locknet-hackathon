@@ -80,7 +80,6 @@ function panelDevHtml(): string {
       ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
       <button type="button" data-accion="escenario2">Escenario 2</button>
       ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
-      <button type="button" data-accion="reiniciar">Reiniciar</button>
       ${soloMama ? `<label class="interruptor">
         <input type="checkbox" id="falla-madrid" />
         Que falle Madrid
@@ -113,19 +112,6 @@ function enlazarPanelDev(): void {
     } else if (accion === 'escenario3') {
       playEscenario3()
       navegarA('#/gasto/s-ataque')
-    } else if (accion === 'reiniciar') {
-      void (async () => {
-        try {
-          const resultado = await resetDemo()
-          if (MODO === 'mock') resetMock()
-          modoServidor = { mode: resultado.mode, label: resultado.label }
-          errorModoServidor = null
-          hashInvalidoActual = false
-          navegarA('#/inicio')
-        } catch (err) {
-          mostrarErrorModo(err)
-        }
-      })()
     }
   })
 
@@ -532,15 +518,43 @@ function pintarChrome(route: Route): void {
   shell.className = `app-shell${mode === 'fixtures' ? ' app-shell-fixtures' : ''}`
   shell.innerHTML = renderAppChrome(route, mode, modoServidor?.label, errorModoServidor ?? undefined)
   document.body.dataset.demoMode = mode
+  const app = document.getElementById('app')
+  if (app) app.style.paddingTop = `${shell.offsetHeight + 16}px`
+  shell.onclick = (event) => {
+    const boton = (event.target as HTMLElement).closest('[data-accion="reiniciar-demo"]') as HTMLButtonElement | null
+    if (boton) void reiniciarDemo(boton)
+  }
+}
+
+async function reiniciarDemo(boton: HTMLButtonElement): Promise<void> {
+  boton.disabled = true
+  try {
+    if (MODO === 'mock') {
+      resetMock()
+      hashInvalidoActual = false
+      navegarA('#/inicio')
+      return
+    }
+
+    const resultado = await resetDemo()
+    const wallets = await getWallets()
+    if (wallets.length === 0) throw new Error('No hay billeteras disponibles después del reinicio.')
+    if (!wallets.some((wallet) => wallet.id === getWalletActual())) {
+      setWalletActual(wallets[0].id)
+    }
+    modoServidor = { mode: resultado.mode, label: resultado.label }
+    errorModoServidor = null
+    hashInvalidoActual = false
+    navegarA('#/inicio')
+  } catch (err) {
+    mostrarErrorModo(err)
+  } finally {
+    if (boton.isConnected) boton.disabled = false
+  }
 }
 
 function mostrarErrorModo(err: unknown): void {
   const texto = err instanceof Error ? err.message : 'Ocurrió un error inesperado.'
-  const mensaje = document.querySelector('#app #mensaje')
-  if (mensaje) {
-    mensaje.textContent = texto
-    return
-  }
   errorModoServidor = texto
   pintarChrome(parseHash(location.hash))
 }

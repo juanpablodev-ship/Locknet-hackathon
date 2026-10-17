@@ -5,11 +5,7 @@ import { escapeHtml } from './inicio.js'
 export function renderBandaRespaldo(
   mode: ApiModeInfo['mode'],
   label?: string,
-  error?: string,
 ): string {
-  if (error) {
-    return `<div class="banda-respaldo" role="status"><span id="mensaje">${escapeHtml(error)}</span></div>`
-  }
   if (mode !== 'fixtures') return ''
   return `<div class="banda-respaldo" role="status">${escapeHtml(
     label ?? 'MODO RESPALDO · respuestas reales grabadas',
@@ -45,5 +41,11 @@ export function renderAppChrome(
   label?: string,
   error?: string,
 ): string {
-  return `${renderBandaRespaldo(mode, label, error)}${renderMenuNavegacion(route)}`
+  const mensaje = error ? `<span role="status">${escapeHtml(error)}</span>` : ''
+  return `${renderBandaRespaldo(mode, label)}
+    <div class="acciones-demo">
+      ${mensaje}
+      <button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>
+    </div>
+    ${renderMenuNavegacion(route)}`
 }

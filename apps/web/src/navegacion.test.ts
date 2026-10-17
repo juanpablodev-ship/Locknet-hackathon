@@ -35,4 +35,11 @@ describe('menú de navegación', () => {
     const html = renderAppChrome({ name: 'inicio' }, 'fixtures')
     expect(html.indexOf('MODO RESPALDO')).toBeLessThan(html.indexOf('menu-navegacion'))
   })
+
+  it('muestra el reinicio junto a la navegación tanto en live como en fixtures', () => {
+    for (const mode of ['live', 'fixtures'] as const) {
+      const html = renderAppChrome({ name: 'inicio' }, mode)
+      expect(html).toContain('data-accion="reiniciar-demo">Reiniciar</button>')
+    }
+  })
 })
