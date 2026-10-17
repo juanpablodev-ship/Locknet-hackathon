@@ -1,21 +1,33 @@
-import type { SharedWallet, Spend, Verdict } from '../../../contracts/index.js'
+import type { Member, SharedWallet, Spend, Verdict } from '../../../contracts/index.js'
 import { formatMoney, progressText, riskLevel, statusLabel } from './format.js'
 import { escapeHtml } from './inicio.js'
 import { NOMBRE_GUARDIAN } from './config.js'
+import { cuentaMasParecida, resaltarDiferencias } from './cuenta.js'
 
 type Share = Spend['shares'][number]
+type Approval = Spend['approvals'][number]
 
 function peorVerdict(verdicts: Verdict[]): Verdict | undefined {
   return verdicts.reduce<Verdict | undefined>((peor, v) => (!peor || v.riskPoints > peor.riskPoints ? v : peor), undefined)
 }
 
-function renderVoto(a: Spend['approvals'][number], wallet: SharedWallet): string {
-  const miembro = wallet.members.find((m) => m.id === a.memberId)
-  const nombre = escapeHtml(miembro ? miembro.name : a.memberId)
-  return `<p>${nombre} ${a.yes ? 'aprobó' : 'rechazó'}</p>`
+function renderVoto(member: Member, approval?: Approval): string {
+  const resultado = approval ? (approval.yes ? 'Aprobó' : 'Rechazó') : 'Pendiente'
+  const tono = approval ? (approval.yes ? 'verde' : 'rojo') : 'ambar'
+  return `
+    <article class="voto voto-${tono}">
+      <b>${escapeHtml(member.name)}</b>
+      <span>${resultado}</span>
+    </article>
+  `
 }
 
-function botonesVoto(spendId: string, destacarRechazar: boolean, yaVoto: boolean): string {
+function botonesVoto(
+  spendId: string,
+  destacarRechazar: boolean,
+  yaVoto: boolean,
+  requiereConfirmacion: boolean,
+): string {
   if (yaVoto) {
     return `
       <button type="button" class="boton boton-rechazar" disabled>Ya votaste</button>
@@ -25,7 +37,60 @@ function botonesVoto(spendId: string, destacarRechazar: boolean, yaVoto: boolean
   const claseRechazar = destacarRechazar ? 'boton boton-rechazar boton-rechazar-destacado' : 'boton boton-rechazar'
   return `
     <button type="button" class="${claseRechazar}" data-accion="rechazar" data-spend="${escapeHtml(spendId)}">Rechazar</button>
-    <button type="button" class="boton boton-aprobar" data-accion="aprobar" data-spend="${escapeHtml(spendId)}">Aprobar</button>
+    <button type="button" class="boton boton-aprobar" data-accion="${requiereConfirmacion ? 'abrir-confirmacion' : 'aprobar'}" data-spend="${escapeHtml(spendId)}">${requiereConfirmacion ? 'Revisar riesgo y aprobar' : 'Aprobar'}</button>
+  `
+}
+
+function comparacionCuentas(spend: Spend, wallet: SharedWallet): string {
+  const conocida = cuentaMasParecida(wallet.knownDestinations, spend.destination.walletAddress)
+  if (!conocida) {
+    return `
+      <p class="cuenta-nueva">Es una cuenta nueva para este grupo</p>
+      <div class="cuenta-dato">
+        <b>Cuenta que vas a pagar</b>
+        <code>${escapeHtml(spend.destination.walletAddress)}</code>
+      </div>
+    `
+  }
+
+  const diferencias = resaltarDiferencias(conocida.walletAddress, spend.destination.walletAddress)
+  return `
+    <div class="comparacion-cuentas">
+      <div class="cuenta-dato">
+        <b>Cuenta conocida · ${escapeHtml(conocida.name)}</b>
+        <code>${diferencias.conocidaHtml}</code>
+      </div>
+      <div class="cuenta-dato">
+        <b>Cuenta que vas a pagar</b>
+        <code>${diferencias.nuevaHtml}</code>
+      </div>
+    </div>
+  `
+}
+
+function dialogoConfirmacion(spend: Spend, wallet: SharedWallet): string {
+  return `
+    <dialog id="confirmacion-riesgo" class="confirma" role="alertdialog" aria-labelledby="titulo-confirmacion-riesgo">
+      <form method="dialog" class="confirma-contenido">
+        <h2 id="titulo-confirmacion-riesgo">Revisa el destino antes de aprobar</h2>
+        ${comparacionCuentas(spend, wallet)}
+        <ul class="avisos-riesgo">
+          <li>La cuenta de destino puede ser diferente de una cuenta que el grupo ya conoce.</li>
+          <li>La aprobación autoriza este gasto; no confirma que el pago haya llegado.</li>
+          <li>Confirma con ${escapeHtml(spend.destination.name)} que esta es su cuenta antes de seguir.</li>
+        </ul>
+        <label class="aceptar-riesgo">
+          <input id="aceptar-riesgo" type="checkbox" required />
+          Confirmo que revisé la cuenta y quiero votar a favor de este gasto.
+        </label>
+        <div class="acciones confirma-acciones">
+          <button type="submit" class="boton boton-secundario">Volver</button>
+          <button id="aprobar-riesgo" type="button" class="boton boton-peligro" data-accion="aprobar" data-spend="${escapeHtml(spend.id)}" disabled>
+            Aprobar ${escapeHtml(formatMoney(spend.amount))} de todos modos
+          </button>
+        </div>
+      </form>
+    </dialog>
   `
 }
 
@@ -39,20 +104,35 @@ function cuerpoEsperandoAprobacion(spend: Spend, wallet: SharedWallet, votaComo?
   const aFavor = spend.approvals.filter((a) => a.yes).length
   const enContra = spend.approvals.filter((a) => !a.yes).length
   const yaVoto = votaComo ? spend.approvals.some((a) => a.memberId === votaComo) : false
-  const destacarRechazar = spend.risk >= wallet.rules.groupApproval.riskThreshold
+  const requiereConfirmacion = spend.risk >= wallet.rules.groupApproval.riskThreshold
 
   return `
-    <p class="puntaje puntaje-${nivel.tone}">${spend.risk}</p>
-    <p class="puntaje-etiqueta puntaje-${nivel.tone}">${nivel.label}</p>
-    ${peor ? `<p class="advertencia">⚠ ${escapeHtml(peor.userMessage)}</p>` : ''}
-    ${peor ? `<p class="motivos">${peor.reasons.map(escapeHtml).join(' · ')}</p>` : ''}
-    <p class="destino">${escapeHtml(spend.destination.name)} · <code>${escapeHtml(spend.destination.walletAddress)}</code></p>
-    <p class="monto">${escapeHtml(formatMoney(spend.amount))}</p>
-    <p>Esto necesita aprobación del grupo: ${requeridos} de ${activos.length}</p>
-    <p class="conteo-votos">A favor: ${aFavor} de ${requeridos} · En contra: ${enContra} de ${votosParaRechazar}</p>
-    <div class="votos">${spend.approvals.map((a) => renderVoto(a, wallet)).join('')}</div>
-    <div class="acciones">${botonesVoto(spend.id, destacarRechazar, yaVoto)}</div>
-    <div id="mensaje" role="status"></div>
+    <div class="aprobacion-gasto">
+      <section class="pedido-gasto">
+        <h1>Solicitud de gasto</h1>
+        <p class="destino">${escapeHtml(spend.destination.name)}</p>
+        <code class="direccion-destino">${escapeHtml(spend.destination.walletAddress)}</code>
+        <p class="monto">${escapeHtml(formatMoney(spend.amount))}</p>
+        <p>Necesita aprobación del grupo: ${requeridos} de ${activos.length}</p>
+      </section>
+      <section class="veredicto" aria-label="Veredicto de riesgo">
+        <p class="puntaje puntaje-${nivel.tone}">${spend.risk}</p>
+        <p class="puntaje-etiqueta puntaje-${nivel.tone}">${nivel.label}</p>
+        ${peor ? `<p class="advertencia">⚠ ${escapeHtml(peor.userMessage)}</p>` : ''}
+        ${peor ? `<p class="motivos">${peor.reasons.map(escapeHtml).join(' · ')}</p>` : ''}
+      </section>
+      <section class="votos" aria-label="Votos del grupo">
+        <p class="conteo-votos">A favor: ${aFavor} de ${requeridos} · En contra: ${enContra} de ${votosParaRechazar}</p>
+        <div class="cuadricula-votos">${activos
+          .map((member) => renderVoto(member, spend.approvals.find((a) => a.memberId === member.id)))
+          .join('')}</div>
+      </section>
+      <div class="acciones acciones-aprobacion">
+        ${botonesVoto(spend.id, requiereConfirmacion, yaVoto, requiereConfirmacion)}
+        ${requiereConfirmacion && !yaVoto ? dialogoConfirmacion(spend, wallet) : ''}
+        <div id="mensaje" role="status"></div>
+      </div>
+    </div>
   `
 }
 

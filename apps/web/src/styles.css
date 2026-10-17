@@ -21,7 +21,7 @@
     --verde: #08ffff;
     --ambar: #ffc107;
     --morado: #c9a0ff;
-    --rojo: #da35ba;
+    --rojo: #ed4dc8;
     --fondo: #2a0f49;
     --texto: #ffffff;
     --borde: rgb(255 194 243 / 0.3);
@@ -33,7 +33,7 @@
   --verde: #08ffff;
   --ambar: #ffc107;
   --morado: #c9a0ff;
-  --rojo: #da35ba;
+  --rojo: #ed4dc8;
   --fondo: #2a0f49;
   --texto: #ffffff;
   --borde: rgb(255 194 243 / 0.3);
@@ -669,6 +669,196 @@ body {
   line-height: 1;
 }
 
+.aprobacion-gasto {
+  display: grid;
+  gap: 16px;
+}
+
+.pedido-gasto,
+.veredicto,
+.votos {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--fondo);
+}
+
+.pedido-gasto h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+}
+
+.destino {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.direccion-destino {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--mono), monospace;
+}
+
+.veredicto {
+  border-left: 6px solid var(--rojo);
+}
+
+.veredicto .puntaje-etiqueta {
+  margin-top: 8px;
+}
+
+.veredicto .advertencia {
+  font-size: 24px;
+}
+
+.veredicto .motivos {
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.votos {
+  align-self: start;
+}
+
+.cuadricula-votos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.voto {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-left: 5px solid currentColor;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.voto-verde {
+  color: var(--verde);
+}
+
+.voto-rojo {
+  color: var(--rojo);
+}
+
+.voto-ambar {
+  color: var(--ambar);
+}
+
+.voto span {
+  font-weight: 700;
+}
+
+.acciones-aprobacion {
+  align-content: start;
+}
+
+.confirma {
+  width: min(760px, calc(100% - 32px));
+  max-height: min(90vh, 900px);
+  padding: 0;
+  overflow: auto;
+  border: 2px solid var(--rojo);
+  border-radius: 12px;
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.confirma::backdrop {
+  background: rgb(0 0 0 / 0.72);
+}
+
+.confirma-contenido {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.confirma-contenido h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.comparacion-cuentas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cuenta-dato {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.cuenta-dato code {
+  overflow-wrap: anywhere;
+  font-family: var(--mono), monospace;
+}
+
+.cuenta-dato mark {
+  border-radius: 2px;
+  background: var(--morado);
+  color: var(--fondo);
+  font-weight: 700;
+}
+
+.cuenta-nueva {
+  margin: 0;
+  padding: 12px;
+  border-left: 5px solid var(--ambar);
+  font-weight: 700;
+}
+
+.avisos-riesgo {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 24px;
+}
+
+.aceptar-riesgo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.aceptar-riesgo input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.confirma-acciones {
+  justify-content: flex-end;
+}
+
+.boton-secundario {
+  border: 1px solid var(--borde);
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.boton-peligro {
+  background: var(--rojo);
+  color: #fff;
+}
+
+.boton-peligro:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .puntaje-etiqueta {
   margin: 0 0 16px;
   font-size: 24px;
@@ -716,6 +906,57 @@ body {
 
 .votos p {
   margin: 4px 0;
+}
+
+@media (min-width: 1024px) {
+  .aprobacion-gasto {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'pedido votos'
+      'veredicto votos'
+      'veredicto acciones';
+    align-items: start;
+  }
+
+  .pedido-gasto {
+    grid-area: pedido;
+  }
+
+  .veredicto {
+    grid-area: veredicto;
+  }
+
+  .votos {
+    grid-area: votos;
+  }
+
+  .acciones-aprobacion {
+    grid-area: acciones;
+  }
+
+  .veredicto .puntaje {
+    font-size: clamp(96px, 9vw, 144px);
+  }
+
+  .veredicto .motivos,
+  .direccion-destino,
+  .pedido-gasto p {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 600px) {
+  .comparacion-cuentas {
+    grid-template-columns: 1fr;
+  }
+
+  .confirma-contenido {
+    padding: 18px;
+  }
+
+  .confirma-acciones {
+    display: grid;
+  }
 }
 
 .boton-rechazar {

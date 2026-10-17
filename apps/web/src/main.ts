@@ -264,12 +264,23 @@ async function pintarGasto(id: string): Promise<void> {
     void pintarGasto(id)
   })
 
+  const checkboxRiesgo = app.querySelector('#aceptar-riesgo') as HTMLInputElement | null
+  const botonAprobarRiesgo = app.querySelector('#aprobar-riesgo') as HTMLButtonElement | null
+  checkboxRiesgo?.addEventListener('change', () => {
+    if (botonAprobarRiesgo) botonAprobarRiesgo.disabled = !checkboxRiesgo.checked
+  })
+
   app.querySelector('.acciones')?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
     if (!boton) return
     const accion = boton.dataset.accion
     const spendId = boton.dataset.spend
     if (!spendId) return
+    if (accion === 'abrir-confirmacion') {
+      const dialogo = app.querySelector('#confirmacion-riesgo') as HTMLDialogElement | null
+      dialogo?.showModal()
+      return
+    }
 
     void (async () => {
       try {
