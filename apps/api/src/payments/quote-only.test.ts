@@ -5,15 +5,15 @@ const payerUrl = 'https://wallet.example/cuenta-eur'
 const receiverUrl = 'https://wallet.example/farmacia-usd'
 const config = { memberId: 'cuenta-eur', payerWalletAddress: payerUrl, receiverWalletAddress: receiverUrl, receiveAmountMajor: '10.00' }
 
-function setup(receiverScale = 2, payerAssetCode = 'EUR', receiverAssetCode = 'USD') {
+function setup(receiverScale = 2, payerAssetCode = 'EUR', receiverAssetCode = 'USD', payerScale = 2, debitAmountValue = '950', receiveAmountValue = '1000') {
   const get = vi.fn(async ({ url }: { url: string }) => ({ id: url, assetCode: url === receiverUrl ? receiverAssetCode : payerAssetCode,
-    assetScale: url === receiverUrl ? receiverScale : 2,
+    assetScale: url === receiverUrl ? receiverScale : payerScale,
     authServer: 'https://auth.example', resourceServer: 'https://resource.example' }))
   const request = vi.fn(async () => ({ access_token: { value: 'SENTINEL_TOKEN', access: [] } }))
   const createIncoming = vi.fn(async () => ({ id: 'https://resource.example/incoming/1' }))
   const createQuote = vi.fn(async (_options: unknown, _payload: unknown) => ({ id: 'https://resource.example/quotes/1',
-    receiveAmount: { value: '1000', assetCode: receiverAssetCode, assetScale: receiverScale },
-    debitAmount: { value: '950', assetCode: 'EUR', assetScale: 2 } }))
+    receiveAmount: { value: receiveAmountValue, assetCode: receiverAssetCode, assetScale: receiverScale },
+    debitAmount: { value: debitAmountValue, assetCode: payerAssetCode, assetScale: payerScale } }))
   const outgoingCreate = vi.fn()
   const client = { walletAddress: { get }, grant: { request }, incomingPayment: { create: createIncoming },
     quote: { create: createQuote }, outgoingPayment: { create: outgoingCreate } }
@@ -60,12 +60,18 @@ describe('--quote-only', () => {
     expect(f.outgoingCreate).not.toHaveBeenCalled()
   })
 
-  it('rechaza pagador en la misma moneda antes de pedir grants o crear recursos', async () => {
-    const f = setup(2, 'USD')
-    await expect(runQuoteOnly(f.client, config, line => f.lines.push(line))).rejects.toThrow('validación de monedas y escala')
-    expect(f.request).not.toHaveBeenCalled()
-    expect(f.createIncoming).not.toHaveBeenCalled()
-    expect(f.createQuote).not.toHaveBeenCalled()
+  it('cotiza COP a COP con escalas distintas y no crea pagos salientes', async () => {
+    const copConfig = { ...config, receiveAmountMajor: '40000' }
+    const f = setup(2, 'COP', 'COP', 0, '42000', '4000000')
+    await runQuoteOnly(f.client, copConfig, line => f.lines.push(line))
+    expect(f.createIncoming).toHaveBeenCalledTimes(1)
+    expect(f.createQuote).toHaveBeenCalledTimes(1)
+    expect(f.createQuote.mock.calls[0]?.[1]).toMatchObject({ receiveAmount: { value: '4000000', assetCode: 'COP', assetScale: 2 } })
+    expect(f.outgoingCreate).not.toHaveBeenCalled()
+    expect(f.lines.join('\n')).toContain('Conversión: COP → COP (misma moneda)')
+    expect(f.lines.join('\n')).toContain('Diferencia: 2000.00 COP')
+    expect(f.lines.join('\n')).toContain('Costo: 5.00%')
+    expect(f.lines.join('\n')).toContain('Supera 5 %: no')
   })
 
   it('acepta una receptora ZAR con la misma configuración de monto', async () => {
