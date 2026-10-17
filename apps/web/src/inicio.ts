@@ -1,5 +1,5 @@
 import type { Member, SharedWallet, Spend } from '../../../contracts/index.js'
-import { flagFor, formatMoney } from './format.js'
+import { flagFor, formatMoney, riskLevel } from './format.js'
 
 export function escapeHtml(texto: string): string {
   return texto
@@ -22,11 +22,44 @@ function renderMiembro(m: Member): string {
   const disponible = m.available ? escapeHtml(formatMoney(m.available)) : '—'
   return `
     <article class="miembro">
-      <p class="miembro-nombre">${flagFor(m.assetCode)} ${escapeHtml(m.name)}</p>
+      <p class="miembro-nombre"><span class="marca marca-${estado.tono}"></span>${flagFor(m.assetCode)} ${escapeHtml(m.name)}</p>
       <p>Tope: ${escapeHtml(formatMoney(m.cap))} al mes</p>
       <p>Disponible: ${disponible}</p>
       <p class="estado estado-${estado.tono}">${estado.texto}</p>
     </article>
+  `
+}
+
+// Una casilla del mismo ancho por miembro; cada una se rellena con SU PROPIO porcentaje
+// available/cap (en su propia moneda: nunca se suman monedas distintas en una sola barra).
+function renderBarraCupo(members: Member[]): string {
+  const casillas = members
+    .map((m) => {
+      if (!m.available) {
+        return `<div class="casilla-cupo" role="img" aria-label="${escapeHtml(m.name)}: disponible desconocido"><span class="casilla-cupo-vacia">—</span></div>`
+      }
+      const disponible = Number(m.available.value)
+      const tope = Number(m.cap.value)
+      const porcentaje = tope > 0 ? Math.min(100, Math.max(0, (disponible / tope) * 100)) : 0
+      return `<div class="casilla-cupo" role="img" aria-label="${escapeHtml(m.name)}: ${porcentaje.toFixed(0)}% disponible"><span style="width: ${porcentaje}%"></span></div>`
+    })
+    .join('')
+  return `<div class="barra-cupo">${casillas}</div>`
+}
+
+// El primer gasto que espera el voto del grupo, si hay alguno: la "tarjeta espera" del borrador.
+function renderTarjetaEspera(spends: Spend[]): string {
+  const pendiente = spends.find((spend) => spend.status === 'awaiting-approval')
+  if (!pendiente) return ''
+  const nivel = riskLevel(pendiente.risk)
+  return `
+    <a class="espera" href="#/gasto/${escapeHtml(pendiente.id)}">
+      <span>
+        <b>${escapeHtml(pendiente.destination.name)}, ${escapeHtml(formatMoney(pendiente.amount))}</b>
+        <small>${escapeHtml(nivel.label)}: esperando aprobación del grupo</small>
+      </span>
+      <em>Revisar</em>
+    </a>
   `
 }
 
@@ -112,7 +145,9 @@ export function renderInicio(w: SharedWallet, spends: Spend[] = [], wallets: Sha
       <p class="etiqueta">Cupo autorizado este mes</p>
       <p class="cupo">${escapeHtml(formatMoney(w.authorizedCapacity))}</p>
       <p>Nadie depositó nada. Cada uno autorizó un tope desde su banco.</p>
+      ${renderBarraCupo(w.members)}
       <div class="miembros">${miembros}</div>
+      ${renderTarjetaEspera(spends)}
       ${renderReglas(w, spends)}
       <div class="acciones">
         <a class="boton" href="#/gasto/nuevo">Pedir un gasto</a>

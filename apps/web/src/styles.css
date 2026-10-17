@@ -249,10 +249,50 @@ body {
 
 .cupo {
   margin: 4px 0 16px;
-  font-size: 72px;
+  font-size: clamp(38px, 11.5vw, 56px);
   font-weight: 700;
   line-height: 1.1;
   word-break: break-word;
+}
+
+@media (min-width: 1024px) {
+  .cupo {
+    font-size: clamp(56px, 6vw, 96px);
+  }
+}
+
+/* Una casilla del mismo ancho por miembro (decisión 8): el relleno es SU propio
+   porcentaje available/cap, nunca una suma entre monedas distintas. */
+.barra-cupo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 3px;
+  height: 30px;
+  margin: 18px 0;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.casilla-cupo {
+  position: relative;
+  background: var(--borde);
+}
+
+.casilla-cupo span {
+  display: block;
+  height: 100%;
+  background: var(--verde);
+}
+
+.casilla-cupo-vacia {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--texto);
 }
 
 .miembros {
@@ -323,7 +363,65 @@ body {
 
 .miembro-nombre {
   margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
+}
+
+.marca {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.marca-verde {
+  background: var(--verde);
+}
+
+.marca-ambar {
+  background: var(--ambar);
+}
+
+.marca-rojo {
+  background: var(--rojo);
+}
+
+/* Tarjeta "espera" del borrador: el primer gasto que espera el voto del grupo. */
+.espera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 26px;
+  padding: 16px 18px;
+  border: 1px solid var(--borde);
+  border-left: 6px solid var(--morado);
+  border-radius: 6px;
+  color: var(--texto);
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.espera b {
+  display: block;
+  font-weight: 700;
+}
+
+.espera small {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.8;
+  font-size: 16px;
+}
+
+.espera em {
+  flex: none;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--morado);
 }
 
 .estado {
