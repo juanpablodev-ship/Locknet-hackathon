@@ -235,7 +235,7 @@ body {
   bottom: 0;
   z-index: 6;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   min-height: var(--altura-tabs);
   background: var(--fondo);
   border-top: 1px solid var(--borde);
@@ -1383,4 +1383,20 @@ body {
   .panel { padding: 16px; }
   .panel-titulo { font-size: clamp(24px, 7vw, 32px); }
   .acciones > button { width: 100%; }
+}
+
+.error-campo {
+  margin: 0;
+  color: var(--rojo);
+  font-weight: 700;
+}
+
+.avanzado-grupo {
+  display: grid;
+  gap: 12px;
+}
+
+.contrato-subtitulo {
+  margin: 16px 0 4px;
+  font-size: 1rem;
 }

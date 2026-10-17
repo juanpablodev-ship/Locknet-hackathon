@@ -4,6 +4,7 @@ import {
   MODO,
   type ApiModeInfo,
   castApproval,
+  createWallet,
   crearTurnos,
   executeSpend,
   finishJoin,
@@ -26,12 +27,13 @@ import {
 } from './api.js'
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
+import { renderCrearGrupo, renderVistaPreviaContrato, validarGrupo, VALORES_INICIALES, type CampoGrupo, type ValoresGrupo } from './crear-grupo.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
 import { renderHistorial } from './historial.js'
 import { renderPorAprobar } from './por-aprobar.js'
 import { DEMO_MODE } from './config.js'
 import { renderAppChrome } from './navegacion.js'
-import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
+import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, topeDelContrato, urlInvitacion } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
 import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
 import { moneyFromMajor } from './money-input.js'
@@ -40,6 +42,7 @@ import './styles.css'
 const nombres: Record<Route['name'], string> = {
   inicio: 'inicio',
   unirse: 'unirse',
+  'crear-grupo': 'crear-grupo',
   'unirse-volver': 'unirse-volver',
   'gasto-nuevo': 'gasto-nuevo',
   gasto: 'gasto',
@@ -54,6 +57,8 @@ let votaComoActual: string | undefined
 let redireccionUnirsePendiente: string | null = null
 let hashInvalidoActual = false
 let joinSetup: JoinSetup | undefined
+// Id del grupo recién creado en este navegador: la invitación muestra el aviso mientras se siga en ella.
+let grupoRecienCreado: string | null = null
 let ownedIds: string[] = []
 let modoServidor: ApiModeInfo | null = null
 let errorModoServidor: string | null = null
@@ -205,8 +210,8 @@ async function pintarInicio(): Promise<void> {
   })
 }
 
-function selectVotanteHtml(activos: Member[]): string {
-  if (!activos.length) return `<div class="contenedor votante-barra"><p>Autoriza tu wallet en este navegador para aprobar o gestionar pagos. <a href="#/unirse">Unirse al grupo</a></p></div>`
+function selectVotanteHtml(activos: Member[], walletId: string): string {
+  if (!activos.length) return renderSinWalletPropia(walletId)
   const opciones = activos
     .map(
       (m) =>
@@ -283,7 +288,7 @@ async function pintarGasto(id: string): Promise<void> {
     catch (error) { if (turnos.esVigente(miTurno)) pintarError(app, error, () => void pintarGasto(id)); return }
     if (!turnos.esVigente(miTurno)) return
   }
-  app.innerHTML = selectVotanteHtml(activos) + renderGasto(spend, wallet, votaComoActual, paymentBlocker) + panelDevHtml()
+  app.innerHTML = selectVotanteHtml(activos, wallet.id) + renderGasto(spend, wallet, votaComoActual, paymentBlocker) + panelDevHtml()
   const consultaMensaje = mensajesConsulta.get(id)
   if (consultaMensaje) {
     let feedback = app.querySelector<HTMLElement>('#mensaje')
@@ -458,7 +463,7 @@ function pintarFormularioUnirse(
   const app = document.getElementById('app')
   if (!app) return
 
-  app.innerHTML = renderUnirse(wallet, qrSvg, warning, joinSetup) + panelDevHtml()
+  app.innerHTML = renderUnirse(wallet, qrSvg, warning, joinSetup, grupoRecienCreado === wallet.id, urlInvitacion(`${location.origin}${location.pathname}`, wallet.id)) + panelDevHtml()
   const form = document.getElementById('form-unirse') as HTMLFormElement | null
   const nombre = document.getElementById('nombre-miembro') as HTMLInputElement | null
   const direccion = document.getElementById('direccion-miembro') as HTMLInputElement | null
@@ -470,6 +475,17 @@ function pintarFormularioUnirse(
   const updateWallet = () => {
     const m = joinSetup?.members.find(m => m.walletAddress === direccion?.value.trim())
     const label = document.getElementById('moneda-tope'); if (label) label.textContent = m ? `${m.assetCode}, escala ${m.assetScale}` : wallet.currency
+    // El contrato fija tope y periodicidad solo en la moneda del grupo; en otra, vuelven a ser editables.
+    const contrato = topeDelContrato(wallet, m?.assetCode ?? wallet.currency)
+    const intervalo = document.getElementById('intervalo-miembro') as HTMLInputElement | null
+    const nota = document.getElementById('nota-tope-contrato')
+    if (nota) { nota.textContent = contrato.nota; nota.hidden = !contrato.nota }
+    if (tope && intervalo) {
+      const estabaFijo = tope.readOnly
+      tope.readOnly = intervalo.readOnly = contrato.fijo
+      if (contrato.fijo) { tope.value = contrato.tope ?? tope.value; intervalo.value = contrato.interval ?? intervalo.value }
+      else if (estabaFijo) { tope.value = ''; intervalo.value = joinSetup?.interval ?? intervalo.value }
+    }
   }
   direccion?.addEventListener('input', updateWallet)
   document.getElementById('wallet-configurada')?.addEventListener('change', event => {
@@ -552,22 +568,78 @@ function pintarFormularioUnirse(
   enlazarPanelDev()
 }
 
-async function pintarUnirse(): Promise<void> {
+function leerValoresCrearGrupo(form: HTMLFormElement): ValoresGrupo {
+  const campo = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | null)?.value ?? ''
+  return {
+    nombre: campo('nombre'), moneda: campo('moneda'), destinoNombre: campo('destinoNombre'),
+    destinoDireccion: campo('destinoDireccion'), monto: campo('monto'), tope: campo('tope'),
+    aprobaciones: campo('aprobaciones'), riesgo: campo('riesgo'),
+  }
+}
+
+function mostrarErroresCrearGrupo(errores: Partial<Record<CampoGrupo, string>>): void {
+  for (const campo of Object.keys(VALORES_INICIALES) as CampoGrupo[]) {
+    const el = document.getElementById(`error-${campo}`)
+    if (!el) continue
+    el.textContent = errores[campo] ?? ''
+    el.hidden = !errores[campo]
+  }
+  if (errores.riesgo) document.querySelector<HTMLDetailsElement>('.avanzado-grupo')?.setAttribute('open', '')
+}
+
+function pintarCrearGrupo(): void {
+  const app = document.getElementById('app')
+  if (!app) return
+  turnos.nuevo()
+  app.innerHTML = renderCrearGrupo()
+  const form = document.getElementById('form-crear-grupo') as HTMLFormElement | null
+  if (!form) return
+  const mensaje = document.getElementById('mensaje')
+  form.addEventListener('input', () => {
+    const vista = document.getElementById('vista-contrato')
+    if (vista) vista.innerHTML = renderVistaPreviaContrato(leerValoresCrearGrupo(form))
+  })
+  form.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const { errores, body } = validarGrupo(leerValoresCrearGrupo(form))
+    mostrarErroresCrearGrupo(errores)
+    if (!body) { if (mensaje) mensaje.textContent = ''; return }
+    const boton = form.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (boton) boton.disabled = true
+    void createWallet(body).then((grupo) => {
+      setWalletActual(grupo.id)
+      grupoRecienCreado = grupo.id
+      navegarA(`#/unirse?grupo=${encodeURIComponent(grupo.id)}`)
+    }).catch((err) => {
+      if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo crear el grupo.'
+      if (boton) boton.disabled = false
+    })
+  })
+}
+
+async function pintarUnirse(grupo?: string): Promise<void> {
   const app = document.getElementById('app')
   if (!app) return
   const miTurno = turnos.nuevo()
   pintarCargando(app)
 
   try {
+    if (grupo) {
+      // La invitación trae el grupo: si existe pasa a ser el grupo actual; si no, se avisa.
+      const existe = (await getWallets()).some((w) => w.id === grupo)
+      if (!turnos.esVigente(miTurno)) return
+      if (!existe) { app.innerHTML = renderGrupoNoExiste(); return }
+      setWalletActual(grupo)
+    }
     const wallet = await getWallet(getWalletActual())
     joinSetup = await getJoinSetup()
     if (!turnos.esVigente(miTurno)) return
-    const qrSvg = await qrComoSvg(`${location.origin}${location.pathname}#/unirse`)
+    const qrSvg = await qrComoSvg(urlInvitacion(`${location.origin}${location.pathname}`, wallet.id))
     if (!turnos.esVigente(miTurno)) return
     pintarFormularioUnirse(wallet, qrSvg)
   } catch (err) {
     if (!turnos.esVigente(miTurno)) return
-    pintarError(app, err, () => void pintarUnirse())
+    pintarError(app, err, () => void pintarUnirse(grupo))
   }
 }
 
@@ -761,6 +833,7 @@ function render(): void {
   const app = document.getElementById('app')
   if (!app) return
   const route = parseHash(location.hash)
+  if (route.name !== 'unirse' && route.name !== 'unirse-volver') grupoRecienCreado = null
   void pintarChrome(route)
 
   if (route.name === 'inicio') {
@@ -778,8 +851,13 @@ function render(): void {
     return
   }
 
+  if (route.name === 'crear-grupo') {
+    pintarCrearGrupo()
+    return
+  }
+
   if (route.name === 'unirse') {
-    void pintarUnirse()
+    void pintarUnirse(route.grupo)
     return
   }
 

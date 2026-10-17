@@ -4,6 +4,7 @@ import { cuidadoDeMama } from '../contracts/ejemplo.js'
 import {
   _testEmitir,
   _testProgramar,
+  createWallet,
   castApproval,
   executeSpend,
   finishJoin,
@@ -323,6 +324,38 @@ const NUEVO_MIEMBRO = {
   interval: 'R12/2026-10-16T00:00:00Z/P1M',
 }
 
+describe('startJoin con el tope fijado por el contrato', () => {
+  const cop = (pesos: number) => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
+  const nuevoGrupo = () => createWallet({
+    name: 'Medicinas', currency: 'COP', approvalsRequired: 2, aboveAmount: cop(200_000), memberCap: { cap: cop(40_000) },
+    knownDestinations: [{ name: 'Farmacia', walletAddress: 'https://ilp.interledger-test.dev/farmacia' }],
+  })
+  const miembro = (cap: object, interval: string) => ({ name: 'Ana', walletAddress: 'https://ilp.interledger-test.dev/ana', cap, interval }) as never
+  beforeEach(() => resetMock())
+  afterEach(() => resetMock())
+
+  it('acepta el tope y la periodicidad del contrato', () => {
+    const g = nuevoGrupo()
+    expect(startJoin(g.id, miembro(g.rules.memberCap!.cap, g.rules.memberCap!.interval)).redirectUrl).toContain('ok=1')
+  })
+
+  it('rechaza otro tope o otra periodicidad en la moneda del grupo', () => {
+    const g = nuevoGrupo()
+    expect(() => startJoin(g.id, miembro(cop(50_000), g.rules.memberCap!.interval))).toThrow('El tope y la periodicidad los fija el contrato del grupo.')
+    expect(() => startJoin(g.id, miembro(g.rules.memberCap!.cap, 'R12/2026-01-01T00:00:00Z/P1W'))).toThrow('los fija el contrato')
+  })
+
+  it('en otra moneda acepta el tope propio', () => {
+    const g = nuevoGrupo()
+    expect(() => startJoin(g.id, miembro({ value: '2200', assetCode: 'EUR', assetScale: 2 }, 'R12/2026-10-16T00:00:00Z/P1M'))).not.toThrow()
+  })
+
+  it('un grupo sin memberCap se une como antes (y rechaza otra moneda)', () => {
+    expect(() => startJoin('w-mama', miembro(cop(100_000), 'R12/2026-10-16T00:00:00Z/P1M'))).not.toThrow()
+    expect(() => startJoin('w-mama', miembro({ value: '2200', assetCode: 'EUR', assetScale: 2 }, 'R12/2026-10-16T00:00:00Z/P1M'))).toThrow('moneda del grupo')
+  })
+})
+
 describe('startJoin y finishJoin', () => {
   beforeEach(() => resetMock())
   afterEach(() => resetMock())
@@ -503,5 +536,70 @@ describe('executeSpend y retryShare', () => {
     vi.advanceTimersByTime(10_000)
 
     expect(eventos).toHaveLength(0)
+  })
+})
+
+describe('createWallet', () => {
+  const cop = (pesos: number) => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
+  const valido = () => ({
+    name: 'Medicinas de mamá', currency: 'COP', approvalsRequired: 2, aboveAmount: cop(200_000),
+    knownDestinations: [{ name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }],
+  })
+
+  afterEach(() => resetMock())
+
+  it('crea el grupo, lo agrega a la lista y lo devuelve con el formato del servidor', () => {
+    const grupo = createWallet(valido())
+    expect(grupo.id).toMatch(/^w-medicinas-de-mama-[a-z0-9]{6}$/)
+    expect(grupo).toMatchObject({ kind: 'care', members: [], authorizedCapacity: { value: '0', assetCode: 'COP', assetScale: 2 } })
+    expect(grupo.rules).toEqual({ split: 'equal', groupApproval: { aboveAmount: cop(200_000), approvalsRequired: 2, riskThreshold: 60, confirmInWallet: false } })
+    expect(getWallets().map((w) => w.id)).toContain(grupo.id)
+    expect(getSpends(grupo.id)).toEqual([])
+  })
+
+  it('dos grupos con el mismo nombre tienen ids distintos y resetMock los quita', () => {
+    const a = createWallet(valido()); const b = createWallet(valido())
+    expect(a.id).not.toBe(b.id)
+    resetMock()
+    expect(getWallets()).toHaveLength(3)
+  })
+
+  it('guarda el tope por persona con el intervalo armado como en el servidor', () => {
+    const grupo = createWallet({ ...valido(), memberCap: { cap: cop(40_000) } })
+    expect(grupo.rules.memberCap).toEqual({ cap: cop(40_000), interval: `R12/${new Date().toISOString().slice(0, 10)}T00:00:00Z/P1M` })
+    expect(createWallet(valido()).rules).not.toHaveProperty('memberCap')
+  })
+
+  it.each([
+    ['en otra moneda', { cap: { ...cop(40_000), assetCode: 'EUR' } }],
+    ['en escala distinta de 2', { cap: { value: '40000', assetCode: 'COP', assetScale: 0 } }],
+    ['en 0', { cap: cop(0) }],
+    ['sin cap', {}],
+  ])('rechaza el tope por persona %s', (_caso, memberCap) => {
+    expect(() => createWallet({ ...valido(), memberCap } as never)).toThrow(/tope por persona/)
+  })
+
+  it('acepta direcciones con $', () => {
+    expect(() => createWallet({ ...valido(), knownDestinations: [{ name: 'X', walletAddress: '$ilp.example/x' }] })).not.toThrow()
+  })
+
+  const invalidos: [string, object, RegExp][] = [
+    ['nombre vacío', { name: '' }, /nombre/],
+    ['nombre con espacios al borde', { name: ' Mamá' }, /nombre/],
+    ['moneda no permitida', { currency: 'MXN', aboveAmount: { ...cop(1), assetCode: 'MXN' } }, /moneda/],
+    ['aprobaciones 0', { approvalsRequired: 0 }, /aprobaciones/],
+    ['aprobaciones 6', { approvalsRequired: 6 }, /aprobaciones/],
+    ['monto en otra moneda', { aboveAmount: { ...cop(1000), assetCode: 'EUR' } }, /moneda del grupo/],
+    ['monto en escala distinta de 2', { aboveAmount: { value: '1000', assetCode: 'COP', assetScale: 0 } }, /escala 2/],
+    ['monto en 0', { aboveAmount: cop(0) }, /mayor que 0/],
+    ['riesgo 101', { riskThreshold: 101 }, /riesgo/],
+    ['sin destinos', { knownDestinations: [] }, /destinos/],
+    ['dirección http://', { knownDestinations: [{ name: 'X', walletAddress: 'http://a.dev/x' }] }, /https:\/\//],
+    ['dirección sin esquema', { knownDestinations: [{ name: 'X', walletAddress: 'farmacia' }] }, /https:\/\//],
+    ['dirección https:// sin host', { knownDestinations: [{ name: 'X', walletAddress: 'https://' }] }, /https:\/\//],
+  ]
+  it.each(invalidos)('rechaza: %s', (_caso, cambio, mensaje) => {
+    expect(() => createWallet({ ...valido(), ...cambio } as never)).toThrow(mensaje)
+    expect(getWallets()).toHaveLength(3)
   })
 })

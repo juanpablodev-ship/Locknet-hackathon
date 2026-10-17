@@ -1,12 +1,50 @@
 import QRCode from 'qrcode'
 import type { JoinSetup, SharedWallet, Verdict } from '../../../contracts/index.js'
 import { escapeHtml } from './inicio.js'
+import { moneyToMajor } from './money-input.js'
+import { hashUnirse } from './router.js'
 
 export function qrComoSvg(url: string): Promise<string> {
   return QRCode.toString(url, { type: 'svg' })
 }
 
-export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verdict, setup?: JoinSetup): string {
+// Enlace de la invitación: lleva el id del grupo para que funcione en otro navegador o dispositivo.
+export function urlInvitacion(base: string, walletId: string): string {
+  return `${base}${hashUnirse(walletId)}`
+}
+
+export function renderSinWalletPropia(walletId: string): string {
+  return `<div class="contenedor votante-barra"><p>Autoriza tu wallet en este navegador para aprobar o gestionar pagos. <a href="${escapeHtml(hashUnirse(walletId))}">Unirse al grupo</a></p></div>`
+}
+
+export interface TopeContrato {
+  fijo: boolean
+  tope?: string       // en unidades mayores, listo para el campo
+  interval?: string
+  nota: string
+}
+
+// Si el contrato fija el tope y el miembro paga en la moneda del grupo, el tope y la periodicidad
+// vienen del contrato y no se editan; en otra moneda, cada quien pone el suyo.
+export function topeDelContrato(wallet: SharedWallet, monedaMiembro: string): TopeContrato {
+  const fijado = wallet.rules.memberCap
+  if (!fijado) return { fijo: false, nota: '' }
+  if (monedaMiembro !== wallet.currency) return { fijo: false, nota: 'En otra moneda, el tope lo defines tú.' }
+  return { fijo: true, tope: moneyToMajor(fijado.cap), interval: fijado.interval, nota: 'Lo fija el contrato del grupo.' }
+}
+
+export function renderGrupoNoExiste(): string {
+  return `
+    <div class="contenedor">
+      <div class="panel panel-ambar" role="status">
+        <p class="panel-titulo">Este grupo no existe o el servidor se reinició.</p>
+      </div>
+      <a class="boton" href="#/inicio">Ir al inicio</a>
+    </div>
+  `
+}
+
+export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verdict, setup?: JoinSetup, grupoCreado = false, enlace?: string): string {
   const advertencia =
     warning?.status === 'warn'
       ? `
@@ -21,11 +59,14 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
       `
       : ''
 
+  const contrato = topeDelContrato(wallet, wallet.currency)
   return `
     <div class="contenedor">
+      ${grupoCreado ? '<div class="panel panel-verde aviso-grupo-creado" role="status"><p class="panel-titulo">Grupo creado. Comparte esta invitación; empieza por unirte tú.</p></div>' : ''}
       <h1>Unirse a ${escapeHtml(wallet.name)}</h1>
       <p>Escanea para unirte a ${escapeHtml(wallet.name)}</p>
       <div class="qr-unirse" aria-label="Código QR para unirse">${qrSvg}</div>
+      ${enlace ? `<label for="enlace-invitacion">Enlace de la invitación</label><input id="enlace-invitacion" type="text" readonly value="${escapeHtml(enlace)}" />` : ''}
       ${advertencia}
       <form id="form-unirse" class="formulario">
         ${setup ? `<label for="wallet-configurada">Wallet de prueba (sin autorizar todavía)</label><select id="wallet-configurada"><option value="">Selecciona tu propia wallet</option>${setup.members.map(m => `<option value="${escapeHtml(m.walletAddress)}">${escapeHtml(m.name)} · ${escapeHtml(m.assetCode)} · escala ${m.assetScale}</option>`).join('')}</select>` : ''}
@@ -34,9 +75,10 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
         <label for="direccion-miembro">Dirección de la billetera</label>
         <input id="direccion-miembro" name="walletAddress" type="url" required />
         <label for="tope-miembro">Tope por período (<span id="moneda-tope">${escapeHtml(wallet.currency)}</span>)</label>
-        <input id="tope-miembro" name="cap" type="text" inputmode="decimal" value="100000" required />
+        <input id="tope-miembro" name="cap" type="text" inputmode="decimal" value="${escapeHtml(contrato.tope ?? '100000')}"${contrato.fijo ? ' readonly' : ''} required />
         <label for="intervalo-miembro">Intervalo autorizado (UTC)</label>
-        <input id="intervalo-miembro" name="interval" type="text" value="${escapeHtml(setup?.interval ?? 'R12/2026-10-17T00:00:00Z/P1M')}" required />
+        <input id="intervalo-miembro" name="interval" type="text" value="${escapeHtml(contrato.interval ?? setup?.interval ?? 'R12/2026-10-17T00:00:00Z/P1M')}"${contrato.fijo ? ' readonly' : ''} required />
+        <p id="nota-tope-contrato" class="nota-configuracion"${contrato.nota ? '' : ' hidden'}>${escapeHtml(contrato.nota)}</p>
         <p>El tope está en la moneda de tu wallet. Solo quedarás activo después de autorizar.</p>
         <div id="mensaje" role="status"></div>
         <button class="boton" type="submit">Continuar</button>

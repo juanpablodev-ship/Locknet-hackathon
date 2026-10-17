@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   castApproval,
+  createWallet,
   crearTurnos,
   finishJoin,
   getSpend,
@@ -97,5 +98,23 @@ describe('crearTurnos', () => {
 
     expect(a.esVigente(t1)).toBe(true)
     expect(b.esVigente(t2)).toBe(true)
+  })
+
+  it('createWallet crea el grupo en el simulado y getWallet lo encuentra', async () => {
+    resetMock()
+    const grupo = await createWallet({
+      name: 'Medicinas de mamá', currency: 'COP', approvalsRequired: 2,
+      aboveAmount: { value: '20000000', assetCode: 'COP', assetScale: 2 },
+      knownDestinations: [{ name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }],
+    })
+    expect((await getWallet(grupo.id)).name).toBe('Medicinas de mamá')
+    resetMock()
+  })
+
+  it('createWallet rechaza un cuerpo inválido con el mensaje del simulado', async () => {
+    await expect(createWallet({
+      name: '', currency: 'COP', approvalsRequired: 2,
+      aboveAmount: { value: '20000000', assetCode: 'COP', assetScale: 2 }, knownDestinations: [],
+    })).rejects.toThrow('El nombre debe tener')
   })
 })

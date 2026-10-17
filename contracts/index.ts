@@ -42,6 +42,7 @@ export interface Member {
 
 export interface Rules {
   split: 'equal' | 'proportional-to-cap'
+  memberCap?: { cap: Money; interval: string }   // tope por persona que fija el contrato; sin él, cada quien elige el suyo
   groupApproval: {                      // inspirada en la multifirma; la aplica la plataforma
     aboveAmount: Money; approvalsRequired: number; riskThreshold: number  // riesgo ≥ umbral → exige aprobación
     confirmInWallet: boolean            // true → permiso de un solo pago con limits.receiver (sección 6.1)

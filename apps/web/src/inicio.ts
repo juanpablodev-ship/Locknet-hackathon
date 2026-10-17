@@ -1,5 +1,6 @@
 import type { Member, SharedWallet, Spend } from '../../../contracts/index.js'
 import { NOMBRE_GUARDIAN } from './config.js'
+import { hashUnirse } from './router.js'
 import { flagFor, formatMoney, riskLevel } from './format.js'
 
 export function escapeHtml(texto: string): string {
@@ -64,31 +65,39 @@ function renderTarjetaEspera(spends: Spend[]): string {
   `
 }
 
-function renderReglas(w: SharedWallet, spends: Spend[]): string {
+export function renderReglas(w: SharedWallet, spends: Spend[]): string {
   if (w.kind === 'care') {
     const approval = w.rules.groupApproval
     const aprobaciones = approval.approvalsRequired === 1 ? '1 aprobación' : `${approval.approvalsRequired} aprobaciones`
     const destinos = w.knownDestinations.map((d) => escapeHtml(d.name)).join(', ') || 'ninguno todavía'
-    const filas: Array<[string, string]> = [
-      ['Nadie aporta más del tope que autorizó', 'Su propio banco'],
-      ['El permiso se renueva cada mes', 'Su propio banco'],
-      ['Si alguien se sale, su permiso se cancela al instante', 'Su propio banco'],
-      ['El destino recibe el monto exacto, aunque alguien pague en otra moneda', 'La cotización de Open Payments'],
+    const tope = w.rules.memberCap
+      ? `Cada uno autoriza hasta ${escapeHtml(formatMoney(w.rules.memberCap.cap))} al mes`
+      : 'Cada uno autoriza el tope que elija'
+    const acordado: Array<[string, string]> = [
+      [tope, 'Su propio banco'],
       [
         `Un pago riesgoso o mayor a ${escapeHtml(formatMoney(approval.aboveAmount))} necesita ${aprobaciones} del grupo; un solo rechazo detiene un pago riesgoso`,
         'Kivor',
       ],
       [`Destinos de confianza: ${destinos}`, NOMBRE_GUARDIAN],
+    ]
+    const garantizado: Array<[string, string]> = [
+      ['Si alguien se sale, su permiso se cancela al instante', 'Su propio banco'],
+      ['El destino recibe el monto exacto, aunque alguien pague en otra moneda', 'La cotización de Open Payments'],
       ['Nada se da por pagado sin verificar lo que llegó', NOMBRE_GUARDIAN],
     ]
-    return `
-      <section class="reglas-billetera contrato-grupo">
-        <h2>El contrato del grupo</h2>
-        <ul class="contrato-filas">
+    const lista = (filas: Array<[string, string]>) => `<ul class="contrato-filas">
           ${filas
             .map(([regla, quien]) => `<li><span class="contrato-regla">${regla}</span><b class="contrato-quien">${quien}</b></li>`)
             .join('\n          ')}
-        </ul>
+        </ul>`
+    return `
+      <section class="reglas-billetera contrato-grupo">
+        <h2>El contrato del grupo</h2>
+        <h3 class="contrato-subtitulo">Lo que acordó el grupo</h3>
+        ${lista(acordado)}
+        <h3 class="contrato-subtitulo">Lo que se garantiza siempre</h3>
+        ${lista(garantizado)}
       </section>
     `
   }
@@ -172,7 +181,7 @@ export function renderInicio(w: SharedWallet, spends: Spend[] = [], wallets: Sha
       ${renderReglas(w, spends)}
       <div class="acciones">
         <a class="boton" href="#/gasto/nuevo">Pedir un gasto</a>
-        <a class="boton" href="#/unirse">Invitar a alguien</a>
+        <a class="boton" href="${escapeHtml(hashUnirse(w.id))}">Invitar a alguien</a>
       </div>
     </div>
   `

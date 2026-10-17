@@ -20,15 +20,16 @@ export function renderEncabezado(nombreBilletera: string, numeroMiembros: number
   `
 }
 
-function pestanaActiva(route: Route, tab: 'inicio' | 'por-aprobar' | 'historial'): boolean {
+function pestanaActiva(route: Route, tab: 'inicio' | 'por-aprobar' | 'historial' | 'crear-grupo'): boolean {
   if (tab === 'inicio') return route.name === 'inicio'
   // La pantalla de un gasto es donde se revisa y se vota un pago pendiente:
   // conceptualmente es parte de "Por aprobar", aunque su ruta sea #/gasto/:id.
   if (tab === 'por-aprobar') return route.name === 'por-aprobar' || route.name === 'gasto'
+  if (tab === 'crear-grupo') return route.name === 'crear-grupo'
   return route.name === 'historial'
 }
 
-function itemPestana(route: Route, tab: 'inicio' | 'por-aprobar' | 'historial', href: string, etiqueta: string, contador?: number): string {
+function itemPestana(route: Route, tab: 'inicio' | 'por-aprobar' | 'historial' | 'crear-grupo', href: string, etiqueta: string, contador?: number): string {
   const activa = pestanaActiva(route, tab)
   const insignia = contador && contador > 0 ? `<i>${contador}</i>` : ''
   return `<a class="${activa ? 'tab-activa' : ''}" href="${href}"${activa ? ' aria-current="page"' : ''}>${etiqueta}${insignia}</a>`
@@ -40,6 +41,7 @@ export function renderPestanas(route: Route, contadorPorAprobar: number): string
       ${itemPestana(route, 'inicio', '#/inicio', 'Inicio')}
       ${itemPestana(route, 'por-aprobar', '#/por-aprobar', 'Por aprobar', contadorPorAprobar)}
       ${itemPestana(route, 'historial', '#/historial', 'Historial')}
+      ${itemPestana(route, 'crear-grupo', '#/crear-grupo', 'Crear grupo')}
     </nav>
   `
 }
