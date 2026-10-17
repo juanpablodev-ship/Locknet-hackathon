@@ -129,6 +129,16 @@ describe('P2: concesión independiente con destinatario fijo; guardián real y S
 })
 
 describe('unión con Open Sentinels real', () => {
+  it('cancelar la interacción local permite reiniciar pero no cancela grants externos', async () => {
+    const f = setup(); const first = await begin(f)
+    f.session.current = 'other'
+    expect(() => f.service.cancelJoin?.()).toThrow('Sesión')
+    f.session.current = f.options.sessionId
+    f.service.cancelJoin?.()
+    await expect(f.service.finishJoin(first.p)).rejects.toThrow('inexistente')
+    expect(f.cancel).not.toHaveBeenCalled()
+    await expect(f.service.startJoin('group-1', f.member)).resolves.toHaveProperty('redirectUrl')
+  })
   it.each(['base64', 'base64url'] as const)('startJoin → finishJoin valida %s y activa solo tras continuar', async encoding => {
     const f = setup()
     const check = vi.spyOn(guardian, 'checkGrantRequest')

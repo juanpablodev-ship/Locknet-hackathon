@@ -1,0 +1,9 @@
+{
+  "application": "https://ilp.interledger-test.dev/locknet-pruebas",
+  "members": [
+    { "name": "Hermano COP 1", "walletAddress": "https://ilp.interledger-test.dev/hermano_2" },
+    { "name": "Hermano COP 2", "walletAddress": "https://ilp.interledger-test.dev/her" },
+    { "name": "Hermano EUR", "walletAddress": "https://ilp.interledger-test.dev/c8b493c2" }
+  ],
+  "pharmacy": "https://ilp.interledger-test.dev/far"
+}
