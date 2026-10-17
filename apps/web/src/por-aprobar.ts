@@ -1,16 +1,21 @@
 import type { SharedWallet, Spend } from '../../../contracts/index.js'
-import { formatMoney } from './format.js'
+import { formatMoney, riskLevel } from './format.js'
 import { escapeHtml } from './inicio.js'
 
-function renderFila(spend: Spend): string {
+function renderFila(spend: Spend, walletName: string): string {
+  const nivel = riskLevel(spend.risk)
   return `
-    <article class="fila-gasto">
-      <div>
-        <p class="fila-gasto-destino">${escapeHtml(spend.destination.name)}</p>
-      </div>
-      <p class="fila-gasto-monto">${escapeHtml(formatMoney(spend.amount))}</p>
-      <a class="boton" href="#/gasto/${escapeHtml(spend.id)}">Revisar</a>
-    </article>
+    <a class="pedido" href="#/gasto/${escapeHtml(spend.id)}">
+      <span class="pedido-datos">
+        <b class="pedido-destino">${escapeHtml(spend.destination.name)}</b>
+        <span class="pedido-billetera">Billetera: ${escapeHtml(walletName)}</span>
+      </span>
+      <span class="pedido-detalle">
+        <b class="pedido-monto">${escapeHtml(formatMoney(spend.amount))}</b>
+        <span class="insignia-riesgo riesgo-${nivel.tone}">${escapeHtml(nivel.label)} · ${spend.risk}</span>
+      </span>
+      <span class="pedido-revisar">Revisar <span aria-hidden="true">→</span></span>
+    </a>
   `
 }
 
@@ -21,7 +26,7 @@ export function renderPorAprobar(spends: Spend[], wallet: SharedWallet): string 
     return `
       <div class="contenedor">
         <h1>Por aprobar · ${escapeHtml(wallet.name)}</h1>
-        <p>No hay pagos por aprobar</p>
+        <p class="vacio" role="status">No hay pagos por aprobar</p>
       </div>
     `
   }
@@ -29,7 +34,7 @@ export function renderPorAprobar(spends: Spend[], wallet: SharedWallet): string 
   return `
     <div class="contenedor">
       <h1>Por aprobar · ${escapeHtml(wallet.name)}</h1>
-      <div class="lista-historial">${pendientes.map(renderFila).join('')}</div>
+      <div class="lista-aprobar" aria-label="Gastos pendientes de aprobación">${pendientes.map((spend) => renderFila(spend, wallet.name)).join('')}</div>
     </div>
   `
 }
