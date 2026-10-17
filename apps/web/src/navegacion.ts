@@ -14,7 +14,7 @@ export function renderEncabezado(nombreBilletera: string, numeroMiembros: number
   const plural = numeroMiembros === 1 ? 'miembro' : 'miembros'
   return `
     <header class="cab">
-      <div><b>${escapeHtml(nombreBilletera)}</b><span>${numeroMiembros} ${plural}</span></div>
+      <div><small class="cab-marca">Kivor</small><b>${escapeHtml(nombreBilletera)}</b><span>${numeroMiembros} ${plural}</span></div>
       <button id="tema" type="button" data-accion="alternar-tema">${tema === 'dark' ? 'Tema claro' : 'Tema oscuro'}</button>
     </header>
   `

@@ -29,6 +29,18 @@ describe('encabezado', () => {
     expect(html).toContain('3 miembros')
   })
 
+  it('muestra "Kivor" junto al nombre del grupo, antes de él', () => {
+    const html = renderEncabezado('Cuidado de mamá', 3, 'light')
+    expect(html).toContain('<small class="cab-marca">Kivor</small>')
+    expect(html.indexOf('Kivor')).toBeLessThan(html.indexOf('Cuidado de mamá'))
+  })
+
+  it('escapa el nombre del grupo sin perder la marca', () => {
+    const html = renderEncabezado('<img src=x>', 1, 'light')
+    expect(html).toContain('Kivor')
+    expect(html).not.toContain('<img')
+  })
+
   it('usa el singular con un solo miembro', () => {
     expect(renderEncabezado('Billetera', 1, 'light')).toContain('1 miembro<')
   })
