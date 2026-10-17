@@ -324,6 +324,38 @@ const NUEVO_MIEMBRO = {
   interval: 'R12/2026-10-16T00:00:00Z/P1M',
 }
 
+describe('startJoin con el tope fijado por el contrato', () => {
+  const cop = (pesos: number) => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
+  const nuevoGrupo = () => createWallet({
+    name: 'Medicinas', currency: 'COP', approvalsRequired: 2, aboveAmount: cop(200_000), memberCap: { cap: cop(40_000) },
+    knownDestinations: [{ name: 'Farmacia', walletAddress: 'https://ilp.interledger-test.dev/farmacia' }],
+  })
+  const miembro = (cap: object, interval: string) => ({ name: 'Ana', walletAddress: 'https://ilp.interledger-test.dev/ana', cap, interval }) as never
+  beforeEach(() => resetMock())
+  afterEach(() => resetMock())
+
+  it('acepta el tope y la periodicidad del contrato', () => {
+    const g = nuevoGrupo()
+    expect(startJoin(g.id, miembro(g.rules.memberCap!.cap, g.rules.memberCap!.interval)).redirectUrl).toContain('ok=1')
+  })
+
+  it('rechaza otro tope o otra periodicidad en la moneda del grupo', () => {
+    const g = nuevoGrupo()
+    expect(() => startJoin(g.id, miembro(cop(50_000), g.rules.memberCap!.interval))).toThrow('El tope y la periodicidad los fija el contrato del grupo.')
+    expect(() => startJoin(g.id, miembro(g.rules.memberCap!.cap, 'R12/2026-01-01T00:00:00Z/P1W'))).toThrow('los fija el contrato')
+  })
+
+  it('en otra moneda acepta el tope propio', () => {
+    const g = nuevoGrupo()
+    expect(() => startJoin(g.id, miembro({ value: '2200', assetCode: 'EUR', assetScale: 2 }, 'R12/2026-10-16T00:00:00Z/P1M'))).not.toThrow()
+  })
+
+  it('un grupo sin memberCap se une como antes (y rechaza otra moneda)', () => {
+    expect(() => startJoin('w-mama', miembro(cop(100_000), 'R12/2026-10-16T00:00:00Z/P1M'))).not.toThrow()
+    expect(() => startJoin('w-mama', miembro({ value: '2200', assetCode: 'EUR', assetScale: 2 }, 'R12/2026-10-16T00:00:00Z/P1M'))).toThrow('moneda del grupo')
+  })
+})
+
 describe('startJoin y finishJoin', () => {
   beforeEach(() => resetMock())
   afterEach(() => resetMock())

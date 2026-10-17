@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cuidadoDeMama, destinoParecido } from '../../../contracts/ejemplo.js'
-import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
+import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, topeDelContrato, urlInvitacion } from './unirse.js'
 
 describe('qrComoSvg', () => {
   it('genera un SVG para la URL de invitación', async () => {
@@ -92,5 +92,34 @@ describe('enlace "Unirse al grupo" cuando no hay wallet propia', () => {
     const html = renderSinWalletPropia('w-mama-a1b2c3')
     expect(html).toContain('href="#/unirse?grupo=w-mama-a1b2c3"')
     expect(renderSinWalletPropia('a&b"c')).toContain('href="#/unirse?grupo=a%26b%22c"')
+  })
+})
+
+describe('unirse con el tope del contrato', () => {
+  const conTope = () => {
+    const w = structuredClone(cuidadoDeMama)
+    w.rules.memberCap = { cap: { value: '4000000', assetCode: 'COP', assetScale: 2 }, interval: 'R12/2026-10-16T00:00:00Z/P1M' }
+    return w
+  }
+
+  it('con memberCap, tope e intervalo vienen llenos y en solo lectura, con su texto', () => {
+    const html = renderUnirse(conTope(), '<svg></svg>')
+    expect(html).toContain('id="tope-miembro" name="cap" type="text" inputmode="decimal" value="40000" readonly')
+    expect(html).toContain('id="intervalo-miembro" name="interval" type="text" value="R12/2026-10-16T00:00:00Z/P1M" readonly')
+    expect(html).toContain('Lo fija el contrato del grupo.')
+    expect(html).not.toContain('<p id="nota-tope-contrato" class="nota-configuracion" hidden>')
+  })
+
+  it('sin memberCap los campos siguen editables y sin nota', () => {
+    const html = renderUnirse(cuidadoDeMama, '<svg></svg>')
+    expect(html).toContain('value="100000" required')
+    expect(html).not.toContain('readonly')
+    expect(html).toContain('id="nota-tope-contrato" class="nota-configuracion" hidden')
+  })
+
+  it('topeDelContrato: fijo en la moneda del grupo; editable, con otra nota, en otra moneda', () => {
+    expect(topeDelContrato(conTope(), 'COP')).toEqual({ fijo: true, tope: '40000', interval: 'R12/2026-10-16T00:00:00Z/P1M', nota: 'Lo fija el contrato del grupo.' })
+    expect(topeDelContrato(conTope(), 'EUR')).toEqual({ fijo: false, nota: 'En otra moneda, el tope lo defines tú.' })
+    expect(topeDelContrato(cuidadoDeMama, 'EUR')).toEqual({ fijo: false, nota: '' })
   })
 })

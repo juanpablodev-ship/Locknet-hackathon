@@ -195,7 +195,14 @@ export function startJoin(
 ): { redirectUrl: string; grantWarning: Verdict } {
   const wallet = wallets.find((item) => item.id === walletId)
   if (!wallet) throw new Error('Grupo no encontrado')
-  if (member.cap.assetCode !== wallet.currency) {
+  const fijado = wallet.rules.memberCap
+  if (fijado && member.cap.assetCode === wallet.currency) {
+    // Misma regla que el servidor: el contrato fija el tope y la periodicidad en la moneda del grupo.
+    const c = fijado.cap
+    if (member.cap.value !== c.value || member.cap.assetScale !== c.assetScale || member.interval !== fijado.interval) {
+      throw new Error('El tope y la periodicidad los fija el contrato del grupo.')
+    }
+  } else if (member.cap.assetCode !== wallet.currency && !fijado) {
     throw new Error('El tope debe estar en la moneda del grupo')
   }
 

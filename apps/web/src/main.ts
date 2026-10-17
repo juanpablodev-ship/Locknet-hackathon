@@ -33,7 +33,7 @@ import { renderHistorial } from './historial.js'
 import { renderPorAprobar } from './por-aprobar.js'
 import { DEMO_MODE } from './config.js'
 import { renderAppChrome } from './navegacion.js'
-import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
+import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, topeDelContrato, urlInvitacion } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
 import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
 import { moneyFromMajor } from './money-input.js'
@@ -475,6 +475,17 @@ function pintarFormularioUnirse(
   const updateWallet = () => {
     const m = joinSetup?.members.find(m => m.walletAddress === direccion?.value.trim())
     const label = document.getElementById('moneda-tope'); if (label) label.textContent = m ? `${m.assetCode}, escala ${m.assetScale}` : wallet.currency
+    // El contrato fija tope y periodicidad solo en la moneda del grupo; en otra, vuelven a ser editables.
+    const contrato = topeDelContrato(wallet, m?.assetCode ?? wallet.currency)
+    const intervalo = document.getElementById('intervalo-miembro') as HTMLInputElement | null
+    const nota = document.getElementById('nota-tope-contrato')
+    if (nota) { nota.textContent = contrato.nota; nota.hidden = !contrato.nota }
+    if (tope && intervalo) {
+      const estabaFijo = tope.readOnly
+      tope.readOnly = intervalo.readOnly = contrato.fijo
+      if (contrato.fijo) { tope.value = contrato.tope ?? tope.value; intervalo.value = contrato.interval ?? intervalo.value }
+      else if (estabaFijo) { tope.value = ''; intervalo.value = joinSetup?.interval ?? intervalo.value }
+    }
   }
   direccion?.addEventListener('input', updateWallet)
   document.getElementById('wallet-configurada')?.addEventListener('change', event => {
