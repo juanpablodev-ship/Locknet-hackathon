@@ -64,7 +64,7 @@ function renderTarjetaEspera(spends: Spend[]): string {
   `
 }
 
-function renderReglas(w: SharedWallet, spends: Spend[]): string {
+export function renderReglas(w: SharedWallet, spends: Spend[]): string {
   if (w.kind === 'care') {
     const approval = w.rules.groupApproval
     const aprobaciones = approval.approvalsRequired === 1 ? '1 aprobación' : `${approval.approvalsRequired} aprobaciones`
