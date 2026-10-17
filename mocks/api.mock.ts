@@ -54,7 +54,7 @@ const hornoDeLaPanaderia: SharedWallet = {
   authorizedCapacity: cop(1_500_000),
 }
 
-const WALLETS_INICIALES: SharedWallet[] = [cuidadoDeMama, arregloDelParque, hornoDeLaPanaderia]
+const WALLETS_INICIALES: SharedWallet[] = [{ ...cuidadoDeMama, name: 'Medicinas de mamá' }, arregloDelParque, hornoDeLaPanaderia]
 
 let wallets: SharedWallet[] = structuredClone(WALLETS_INICIALES)
 

@@ -49,7 +49,7 @@ describe('getWallet', () => {
     primera.members.pop()
 
     const segunda = getWallet('w-mama')
-    expect(segunda.name).toBe('Cuidado de mamá')
+    expect(segunda.name).toBe('Medicinas de mamá')
     expect(segunda.members).toHaveLength(3)
   })
 })
@@ -80,7 +80,7 @@ describe('resetMock', () => {
 
     resetMock()
 
-    expect(getWallet('w-mama').name).toBe('Cuidado de mamá')
+    expect(getWallet('w-mama').name).toBe('Medicinas de mamá')
     expect(getSpends('w-mama')).toHaveLength(1)
   })
 })
@@ -183,7 +183,7 @@ describe('playEscenario1', () => {
     vi.advanceTimersByTime(10_000)
 
     expect(eventos).toHaveLength(1)
-    expect(getWallet('w-mama')).toEqual(cuidadoDeMama)
+    expect(getWallet('w-mama')).toEqual({ ...cuidadoDeMama, name: 'Medicinas de mamá' })
   })
 })
 

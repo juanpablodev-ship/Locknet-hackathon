@@ -11,6 +11,7 @@ describe('semillas y reinicio local de R1', () => {
   it('tres billeteras tipadas, independientes y explícitamente simuladas', () => {
     const seeds = createDemoSeeds()
     expect(seeds.map(w => w.kind)).toEqual(['care', 'goal', 'investment'])
+    expect(seeds[0].name).toBe('Medicinas de mamá')
     expect(new Set(seeds.flatMap(w => w.members.map(m => m.id))).size).toBe(9)
     expect(seeds.flatMap(w => w.members).every(m => new URL(m.walletAddress).hostname === 'simulation.invalid')).toBe(true)
     seeds[0].members[0].name = 'changed'
