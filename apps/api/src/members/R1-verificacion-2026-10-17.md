@@ -94,3 +94,27 @@ flujo existente del repositorio. Nunca se registran llaves ni tokens.
 ## Formulario real preparado (no es consentimiento bancario)
 
 ![Formulario EUR, sin enviar permiso](evidence/2026-10-17/union-preparada.png)
+
+## Nueva comprobación del destino indicado por R5
+
+Se volvió a consultar farmacia-medellin: USD, escala 2. farmacia-medel1in devuelve
+HTTP 404. far sigue en COP, escala 2. No se modificó pharmacy en los dos archivos
+locales porque loadLiveConfig exige destino COP y rechazaría el destino USD.
+
+Se reprodujo con checkDestination real, sin red de pagos:
+- Destino conocido far frente a farmacia-medel1in: warn, 20 puntos.
+- Destino conocido farmacia-medellin frente a farmacia-medel1in: warn, 94 puntos.
+
+La comparación de nombres es correcta, pero no confirma la moneda ni la propiedad
+de la dirección receptora. Falta confirmar con su dueño una dirección COP adecuada
+y la dirección parecida controlada. No se crearon cuentas ni direcciones externas.
+
+## Configuración definitiva indicada por R1
+
+El usuario confirmó que la farmacia del equipo es far, COP escala 2.
+La dirección farmacia-medellin consultada no correspondía a esa cuenta.
+Se alinearon .env.integration.json, .env.r1-live.json y el ejemplo público
+demo/live-config.example.json usando far y las tres direcciones existentes.
+El detalle operativo y la limitación del ataque están en demo/CONFIGURACION-R1.md.
+No se afirma que farmacia-medellin haya cambiado de moneda ni que el escenario
+del juez esté confirmado en vivo.
