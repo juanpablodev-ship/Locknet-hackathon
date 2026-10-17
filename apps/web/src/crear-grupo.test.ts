@@ -106,7 +106,7 @@ describe('validarGrupo', () => {
   })
 
   it('acepta direcciones con $', () => {
-    expect(validarGrupo({ ...completo, destinoDireccion: '$ilp.example/farmacia' }).body).toBeDefined()
+    expect(validarGrupo({ ...completo, destinoDireccion: '$ilp.example/farmacia' }).body?.knownDestinations[0].walletAddress).toBe('https://ilp.example/farmacia')
   })
 
   it('campos vacíos dan un error por campo y no hay cuerpo', () => {

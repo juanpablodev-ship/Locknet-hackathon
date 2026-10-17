@@ -1,3 +1,4 @@
+import { walletAddressUrl } from './wallet-address.js'
 import type { SharedWallet } from '../../../contracts/index.js'
 import type { NuevoGrupo } from './api.js'
 import { NOMBRE_GUARDIAN } from './config.js'
@@ -26,8 +27,7 @@ export const VALORES_INICIALES: ValoresGrupo = {
 const MONEDAS = ['COP', 'EUR', 'USD']
 
 function direccionValida(a: string): boolean {
-  if (!(a.startsWith('https://') || a.startsWith('$'))) return false
-  try { return new URL(a.startsWith('$') ? `https://${a.slice(1)}` : a).host !== '' } catch { return false }
+  try { walletAddressUrl(a); return true } catch { return false }
 }
 
 // Revisa el formulario antes de enviar. Si todo está bien devuelve el cuerpo de POST /api/wallets.
@@ -58,7 +58,7 @@ export function validarGrupo(v: ValoresGrupo): { errores: ErroresGrupo; body?: N
     errores,
     body: {
       name: nombre, currency: v.moneda, approvalsRequired: aprobaciones, aboveAmount, riskThreshold: riesgo,
-      memberCap: { cap }, knownDestinations: [{ name: destinoNombre, walletAddress: direccion }],
+      memberCap: { cap }, knownDestinations: [{ name: destinoNombre, walletAddress: walletAddressUrl(direccion) }],
     },
   }
 }

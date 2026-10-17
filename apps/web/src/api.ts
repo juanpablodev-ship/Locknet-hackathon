@@ -1,3 +1,4 @@
+import { walletAddressUrl } from './wallet-address.js'
 // Única puerta entre las pantallas y los datos. Las pantallas importan SOLO de aquí,
 // nunca del simulado directamente (sección 14 del plan: cambiar de simulado a real es
 // cambiar esta línea de importación).
@@ -69,8 +70,9 @@ export async function getWallets(): Promise<SharedWallet[]> {
 }
 
 export async function createWallet(body: NuevoGrupo): Promise<SharedWallet> {
-  if (MODO === 'live') return pedir('POST', '/api/wallets', body)
-  return mock.createWallet(body)
+  const canonical = { ...body, knownDestinations: body.knownDestinations.map(destination => ({ ...destination, walletAddress: walletAddressUrl(destination.walletAddress) })) }
+  if (MODO === 'live') return pedir('POST', '/api/wallets', canonical)
+  return mock.createWallet(canonical)
 }
 
 export async function getWallet(id: string): Promise<SharedWallet> {
@@ -118,6 +120,7 @@ export async function castApproval(spendId: string, memberId: string, yes: boole
 }
 
 export async function requestSpend(walletId: string, destination: Spend['destination'], amount: Money): Promise<Spend> {
+  destination = { ...destination, walletAddress: walletAddressUrl(destination.walletAddress) }
   if (MODO === 'live') {
     return pedir('POST', `/api/wallets/${encodeURIComponent(walletId)}/spends`, { destination, amount })
   }
