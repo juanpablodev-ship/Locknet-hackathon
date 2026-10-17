@@ -334,14 +334,38 @@ export function createEngine(deps: EngineDeps) {
       const spend = spendOf(spendId); const wallet = walletOf(spend.walletId)
       setStatus(spend, 'paying')
       for (const share of spend.shares) {
-        const attempt = share.attempts?.at(-1)
-        if (!attempt?.outgoingId || share.status === 'paid') continue
-        try {
-          const status = await deps.payments.track(attempt.outgoingId)
-          attempt.status = status
-          share.status = status === 'completed' ? 'paid' : status === 'failed' ? 'failed' : 'pending'
-          share.failReason = status === 'pending' ? 'Resultado pendiente; consulta sin volver a pagar.' : status === 'failed' ? 'El proveedor confirmo el fallo.' : undefined
-        } catch { share.status = 'pending'; attempt.status = 'unknown'; share.failReason = 'No se pudo consultar el intento existente.' }
+        const attempts = share.attempts ?? []
+        // Un reintento rechazado antes de crear el pago no oculta outgoings anteriores.
+        for (const attempt of attempts) {
+          if (!attempt.outgoingId) continue
+          try { attempt.status = await deps.payments.track(attempt.outgoingId) }
+          catch { attempt.status = 'unknown' }
+        }
+        if (attempts.some(a => a.status === 'unknown' || a.status === 'pending' || a.status === 'prepared')) {
+          share.status = 'pending'
+          share.failReason = 'Resultado pendiente o desconocido; consulta sin volver a pagar.'
+        } else if (attempts.some(a => a.status === 'completed')) {
+          share.status = 'paid'
+          delete share.failReason
+          if (deps.incomingPerShare) {
+            try {
+              let received = zero(share.share)
+              for (const url of new Set(attempts.map(a => a.incomingPaymentUrl))) {
+                received = add(received, await deps.payments.received(url))
+              }
+              if (BigInt(received.value) < BigInt(share.share.value)) {
+                share.status = 'failed'
+                share.failReason = 'Recepción parcial confirmada; falta completar el aporte.'
+              }
+            } catch {
+              share.status = 'pending'
+              share.failReason = 'No se pudo confirmar la recepción; consulta sin volver a pagar.'
+            }
+          }
+        } else if (attempts.length) {
+          share.status = 'failed'
+          share.failReason ??= 'El proveedor confirmó el fallo.'
+        }
       }
       updateProgress(spend)
       return finish(wallet, spend)

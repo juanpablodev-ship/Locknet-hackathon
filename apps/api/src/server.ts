@@ -175,7 +175,15 @@ export function createApp(deps: {
   app.post('/api/spends/:id/execute', wrap(background('approved', (id) => engine.executeSpend(id))))
   app.post('/api/spends/:id/retry', wrap(background('incomplete', (id) => engine.retryShare(id))))
 
-  app.post('/api/spends/:id/recheck', wrap(background('incomplete', (id) => engine.recheckSpend(id))))
+  // Consultar espera el resultado: no es una nueva ejecución de pago.
+  app.post('/api/spends/:id/recheck', wrap(async (req, res) => {
+    const spend = engine.getSpend(req.params.id)
+    if (secure) identity(spend.walletId)
+    if (spend.status !== 'incomplete') throw new Error(`El gasto debe estar en incomplete (estado: ${spend.status})`)
+    const updated = await engine.recheckSpend(spend.id)
+    refreshLater(spend.walletId)
+    res.json(updated)
+  }))
 
   app.post('/api/wallets/:id/members/:memberId/revoke', wrap(async (req, res) => {
     if (secure) identity(req.params.id, req.params.memberId)

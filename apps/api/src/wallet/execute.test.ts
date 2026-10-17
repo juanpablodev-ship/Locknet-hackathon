@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { WalletEvent } from '../../../../contracts'
 import { cuidadoDeMama } from '../../../../contracts/ejemplo'
 import { createEngine } from './engine'
@@ -138,5 +138,52 @@ describe('executeSpend: pagos por aporte', () => {
     const { engine, id } = setup()
     await engine.executeSpend(id)
     await expect(engine.retryShare(id)).rejects.toThrow(/paid → paying/)
+  })
+})
+
+describe('recheckSpend: historial de intentos', () => {
+  async function historicalAttempt() {
+    const result = setup({ trackAs: { 'm-madrid': 'failed' } }, true)
+    await result.engine.executeSpend(result.id)
+    result.payments.opts.failMember = { 'm-madrid': 'Permiso no utilizable' }
+    await result.engine.retryShare(result.id)
+    const share = result.engine.getSpend(result.id).shares[2]
+    expect(share.attempts).toHaveLength(2)
+    expect(share.attempts![0].outgoingId).toBeDefined()
+    expect(share.attempts![1].outgoingId).toBeUndefined()
+    return { ...result, share }
+  }
+
+  it('consulta el outgoing anterior aunque el último intento no creó pago, sin crear otro', async () => {
+    const { engine, payments, id, share } = await historicalAttempt()
+    payments.opts.trackAs!['m-madrid'] = 'pending'
+    const track = vi.spyOn(payments.svc, 'track')
+    const previousCalls = payments.calls.payShare
+    await engine.recheckSpend(id)
+    expect(track).toHaveBeenCalledWith(share.attempts![0].outgoingId)
+    expect(share.status).toBe('pending')
+    expect(share.attempts![0].status).toBe('pending')
+    expect(payments.calls.payShare).toBe(previousCalls)
+    await expect(engine.retryShare(id)).rejects.toThrow(/desconocidos/)
+  })
+
+  it('confirma el aporte histórico completado y concilia sin volver a pagar', async () => {
+    const { engine, payments, id } = await historicalAttempt()
+    payments.opts.trackAs!['m-madrid'] = 'completed'
+    const previousCalls = payments.calls.payShare
+    const spend = await engine.recheckSpend(id)
+    expect(spend.status).toBe('paid')
+    expect(spend.progress.confirmed).toBe(3)
+    expect(spend.shares[2].received).toEqual(cop(40_000))
+    expect(payments.calls.payShare).toBe(previousCalls)
+  })
+
+  it('una consulta fallida conserva el intento desconocido y bloquea reintentos', async () => {
+    const { engine, payments, id, share } = await historicalAttempt()
+    vi.spyOn(payments.svc, 'track').mockRejectedValue(new Error('timeout'))
+    await engine.recheckSpend(id)
+    expect(share.status).toBe('pending')
+    expect(share.attempts![0].status).toBe('unknown')
+    await expect(engine.retryShare(id)).rejects.toThrow(/desconocidos/)
   })
 })
