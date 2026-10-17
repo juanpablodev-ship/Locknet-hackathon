@@ -7,6 +7,14 @@ describe('renderGastoNuevo', () => {
     expect(renderGastoNuevo(cuidadoDeMama)).toContain('Farmacia Medellín')
   })
 
+  it('mantiene los selectores del flujo real dentro del nuevo formulario visual', () => {
+    const html = renderGastoNuevo(cuidadoDeMama)
+    expect(html).toContain('id="form-gasto"')
+    expect(html).toContain('id="destino"')
+    expect(html).toContain('id="otro-destino"')
+    expect(html).toContain('class="btn lleno" type="submit"')
+  })
+
   it('muestra la moneda actual en el monto', () => {
     const wallet = structuredClone(cuidadoDeMama)
     wallet.currency = 'EUR'

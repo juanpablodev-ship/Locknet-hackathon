@@ -23,16 +23,21 @@ export function renderGastoNuevo(wallet: SharedWallet): string {
     .join('')
 
   return `
-    <div class="contenedor">
-      <h1>Pedir un gasto</h1>
-      <form id="form-gasto" class="formulario">
+    <div class="contenedor pagina-formulario">
+      <header class="encabezado-formulario">
+        <p class="formulario-ceja">Nuevo gasto</p>
+        <h1>Pedir un gasto</h1>
+        <p>El grupo revisará el destino, el monto y las aprobaciones necesarias antes de pagar.</p>
+      </header>
+      <form id="form-gasto" class="formulario formulario-panel">
+        <h2>Detalles del gasto</h2>
         <label for="destino">Destino</label>
         <select id="destino" name="destination" required>
           <option value="" disabled selected>Elige un destino</option>
           ${destinos}
           <option value="otra">Otra cuenta</option>
         </select>
-        <div id="otro-destino" hidden>
+        <div id="otro-destino" class="campos-extra" hidden>
           <label for="nombre-destino">Nombre del destino</label>
           <input id="nombre-destino" name="destinationName" type="text" />
           <label for="direccion-destino">Dirección de la billetera</label>
@@ -44,7 +49,7 @@ export function renderGastoNuevo(wallet: SharedWallet): string {
         <label for="motivo-gasto">Motivo (solo informativo)</label>
         <textarea id="motivo-gasto" name="reason" rows="3"></textarea>
         <div id="mensaje" role="status"></div>
-        <button class="boton" type="submit">Pedir el gasto</button>
+        <button class="btn lleno" type="submit">Pedir el gasto</button>
       </form>
     </div>
   `

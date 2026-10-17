@@ -1,6 +1,6 @@
 import type { Route } from './router.js'
 import type { ApiModeInfo } from './api.js'
-import type { Tema } from './tema.js'
+import { NOMBRE_PRODUCTO } from './config.js'
 import { escapeHtml } from './inicio.js'
 
 export function renderBandaRespaldo(mode: ApiModeInfo['mode'], label?: string): string {
@@ -10,12 +10,11 @@ export function renderBandaRespaldo(mode: ApiModeInfo['mode'], label?: string): 
   )}</div>`
 }
 
-export function renderEncabezado(nombreBilletera: string, numeroMiembros: number, tema: Tema): string {
+export function renderEncabezado(nombreBilletera: string, numeroMiembros: number): string {
   const plural = numeroMiembros === 1 ? 'miembro' : 'miembros'
   return `
     <header class="cab">
-      <div><small class="cab-marca">Kivor</small><b>${escapeHtml(nombreBilletera)}</b><span>${numeroMiembros} ${plural}</span></div>
-      <button id="tema" type="button" data-accion="alternar-tema">${tema === 'dark' ? 'Tema claro' : 'Tema oscuro'}</button>
+      <div><b>${escapeHtml(NOMBRE_PRODUCTO)}</b><span>${escapeHtml(nombreBilletera)} · ${numeroMiembros} ${plural}</span></div>
     </header>
   `
 }
@@ -53,17 +52,19 @@ export interface AppChromeInfo {
   error?: string
   nombreBilletera: string
   numeroMiembros: number
-  tema: Tema
   contadorPorAprobar: number
+  mostrarReinicio?: boolean
 }
 
 export function renderAppChrome(info: AppChromeInfo): string {
   const mensaje = info.error ? `<span role="status">${escapeHtml(info.error)}</span>` : ''
+  const reinicio =
+    info.mostrarReinicio === false
+      ? ''
+      : '<button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>'
+  const acciones = mensaje || reinicio ? `<div class="acciones-demo">${mensaje}${reinicio}</div>` : ''
   return `${renderBandaRespaldo(info.mode, info.label)}
-    ${renderEncabezado(info.nombreBilletera, info.numeroMiembros, info.tema)}
-    <div class="acciones-demo">
-      ${mensaje}
-      <button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>
-    </div>
+    ${renderEncabezado(info.nombreBilletera, info.numeroMiembros)}
+    ${acciones}
     ${renderPestanas(info.route, info.contadorPorAprobar)}`
 }

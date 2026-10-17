@@ -31,6 +31,14 @@ describe('renderHistorial', () => {
     const html = renderHistorial([], cuidadoDeMama)
     expect(html).toContain('class="sin-historial"')
     expect(html).toContain('Todavía no hay gastos en este grupo')
+    expect(html).toContain('href="#/gasto/nuevo"')
+    expect(html).toContain('class="contador-historial">0 gastos')
+  })
+
+  it('resume la cantidad de gastos y da acceso a cada recibo', () => {
+    const html = renderHistorial([medicina], cuidadoDeMama)
+    expect(html).toContain('class="contador-historial">1 gasto')
+    expect(html).toContain('class="btn peq" href="#/gasto/s-medicina"')
   })
 
   it('escapa el nombre del destino', () => {

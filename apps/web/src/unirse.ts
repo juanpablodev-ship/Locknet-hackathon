@@ -52,8 +52,8 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
           <p class="panel-titulo">Revisa este permiso</p>
           <p>${escapeHtml(warning.userMessage)}</p>
           <div class="acciones">
-            <button type="button" class="boton" data-accion="confirmar-unirse">Unirme de todas formas</button>
-            <button type="button" class="boton boton-rechazar" data-accion="cancelar-unirse">Cancelar</button>
+            <button type="button" class="btn lleno" data-accion="confirmar-unirse">Unirme de todas formas</button>
+            <button type="button" class="btn btn-contorno" data-accion="cancelar-unirse">Cancelar</button>
           </div>
         </div>
       `
@@ -61,14 +61,21 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
 
   const contrato = topeDelContrato(wallet, wallet.currency)
   return `
-    <div class="contenedor">
+    <div class="contenedor pagina-formulario pagina-unirse">
       ${grupoCreado ? '<div class="panel panel-verde aviso-grupo-creado" role="status"><p class="panel-titulo">Grupo creado. Comparte esta invitación; empieza por unirte tú.</p></div>' : ''}
-      <h1>Unirse a ${escapeHtml(wallet.name)}</h1>
-      <p>Escanea para unirte a ${escapeHtml(wallet.name)}</p>
-      <div class="qr-unirse" aria-label="Código QR para unirse">${qrSvg}</div>
-      ${enlace ? `<label for="enlace-invitacion">Enlace de la invitación</label><input id="enlace-invitacion" type="text" readonly value="${escapeHtml(enlace)}" />` : ''}
+      <header class="encabezado-formulario">
+        <p class="formulario-ceja">Invitación al grupo</p>
+        <h1>Unirse a ${escapeHtml(wallet.name)}</h1>
+        <p>Escanea para unirte a ${escapeHtml(wallet.name)}</p>
+      </header>
+      <section class="tarjeta-invitacion" aria-label="Invitación con código QR">
+        <div class="qr-unirse" aria-label="Código QR para unirse">${qrSvg}</div>
+        ${enlace ? `<label for="enlace-invitacion">Enlace de la invitación</label><input id="enlace-invitacion" type="text" readonly value="${escapeHtml(enlace)}" />` : ''}
+        <p>Tu billetera conserva el dinero. Antes de quedar activo, autorizas un tope y un intervalo.</p>
+      </section>
       ${advertencia}
-      <form id="form-unirse" class="formulario">
+      <form id="form-unirse" class="formulario formulario-panel">
+        <h2>Configura tu permiso</h2>
         ${setup ? `<label for="wallet-configurada">Wallet de prueba (sin autorizar todavía)</label><select id="wallet-configurada"><option value="">Selecciona tu propia wallet</option>${setup.members.map(m => `<option value="${escapeHtml(m.walletAddress)}">${escapeHtml(m.name)} · ${escapeHtml(m.assetCode)} · escala ${m.assetScale}</option>`).join('')}</select>` : ''}
         <label for="nombre-miembro">Nombre</label>
         <input id="nombre-miembro" name="name" type="text" autocomplete="name" required />
@@ -81,8 +88,8 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
         <p id="nota-tope-contrato" class="nota-configuracion"${contrato.nota ? '' : ' hidden'}>${escapeHtml(contrato.nota)}</p>
         <p>El tope está en la moneda de tu wallet. Solo quedarás activo después de autorizar.</p>
         <div id="mensaje" role="status"></div>
-        <button class="boton" type="submit">Continuar</button>
-        <button class="boton" type="button" id="cancelar-union">Descartar unión pendiente local (no revoca permisos)</button>
+        <button class="btn lleno" type="submit">Continuar</button>
+        <button class="btn btn-contorno" type="button" id="cancelar-union">Descartar unión pendiente local (no revoca permisos)</button>
       </form>
     </div>
   `
@@ -90,11 +97,11 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
 
 export function renderVueltaUnirse(ok: boolean): string {
   return `
-    <div class="contenedor">
-      <div class="panel ${ok ? 'panel-verde' : 'panel-rojo'}">
+    <div class="contenedor pagina-formulario resultado-unirse">
+      <div class="panel ${ok ? 'panel-verde' : 'panel-rojo'} resultado-unirse-panel">
         <p class="panel-titulo">${ok ? 'Ya eres parte del grupo' : 'No pudimos confirmar que vienes de tu banco. No te uniste.'}</p>
       </div>
-      <a class="boton" href="#/inicio">Volver al inicio</a>
+      <a class="btn lleno" href="#/inicio">Volver al inicio</a>
     </div>
   `
 }

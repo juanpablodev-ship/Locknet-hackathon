@@ -3,9 +3,8 @@ import { renderAppChrome, renderBandaRespaldo, renderEncabezado, renderPestanas 
 
 const base = {
   mode: 'live' as const,
-  nombreBilletera: 'Cuidado de mamá',
+  nombreBilletera: 'Medicinas de mamá',
   numeroMiembros: 3,
-  tema: 'light' as const,
   contadorPorAprobar: 0,
 }
 
@@ -23,31 +22,28 @@ describe('banda de modo respaldo', () => {
 })
 
 describe('encabezado', () => {
-  it('muestra el nombre de la billetera y el número de miembros', () => {
-    const html = renderEncabezado('Cuidado de mamá', 3, 'light')
-    expect(html).toContain('Cuidado de mamá')
-    expect(html).toContain('3 miembros')
-  })
-
-  it('muestra "Kivor" junto al nombre del grupo, antes de él', () => {
-    const html = renderEncabezado('Cuidado de mamá', 3, 'light')
-    expect(html).toContain('<small class="cab-marca">Kivor</small>')
-    expect(html.indexOf('Kivor')).toBeLessThan(html.indexOf('Cuidado de mamá'))
+  it('muestra "Kivor" y el nombre del grupo con el número de miembros', () => {
+    const html = renderEncabezado('Medicinas de mamá', 3)
+    expect(html).toContain('<b>Kivor</b>')
+    expect(html).toContain('Medicinas de mamá · 3 miembros')
   })
 
   it('escapa el nombre del grupo sin perder la marca', () => {
-    const html = renderEncabezado('<img src=x>', 1, 'light')
+    const html = renderEncabezado('<img src=x>', 1)
     expect(html).toContain('Kivor')
     expect(html).not.toContain('<img')
+    expect(html).toContain('&lt;img')
   })
 
   it('usa el singular con un solo miembro', () => {
-    expect(renderEncabezado('Billetera', 1, 'light')).toContain('1 miembro<')
+    expect(renderEncabezado('Billetera', 1)).toContain('1 miembro<')
   })
 
-  it('el botón de tema ofrece el tema contrario al actual', () => {
-    expect(renderEncabezado('Billetera', 1, 'light')).toContain('Tema oscuro')
-    expect(renderEncabezado('Billetera', 1, 'dark')).toContain('Tema claro')
+  it('no tiene botón de tema: la interfaz es solo clara', () => {
+    const html = renderEncabezado('Billetera', 1)
+    expect(html).not.toContain('id="tema"')
+    expect(html).not.toContain('Tema oscuro')
+    expect(html).not.toContain('Tema claro')
   })
 })
 
@@ -84,6 +80,16 @@ describe('renderAppChrome', () => {
       const html = renderAppChrome({ ...base, route: { name: 'inicio' }, mode })
       expect(html).toContain('data-accion="reiniciar-demo">Reiniciar</button>')
     }
+  })
+
+  it('permite ocultar el reinicio global cuando se muestra dentro del panel de demo', () => {
+    const html = renderAppChrome({
+      ...base,
+      route: { name: 'inicio' },
+      mode: 'fixtures',
+      mostrarReinicio: false,
+    })
+    expect(html).not.toContain('data-accion="reiniciar-demo"')
   })
 })
 
