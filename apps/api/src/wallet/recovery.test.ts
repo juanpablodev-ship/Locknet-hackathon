@@ -11,6 +11,17 @@ function setup(options: Parameters<typeof fakePayments>[0] = {}) {
   return { engine, fake, spend }
 }
 describe('recuperacion sin repetir pagos', () => {
+  it('crear otro gasto no evita el bloqueo por un resultado anterior desconocido', async () => {
+    const f = setup({ trackAs: { 'm-madrid': 'pending' } })
+    await f.engine.executeSpend(f.spend.id)
+    const next = f.engine.requestSpend('w-mama', cuidadoDeMama.knownDestinations[0], cop(120000))
+    await expect(f.engine.executeSpend(next.id)).rejects.toThrow('Otro gasto')
+    expect(f.fake.calls.payShare).toBe(3)
+    f.fake.opts.trackAs!['m-madrid'] = 'completed'
+    await f.engine.recheckSpend(f.spend.id)
+    await expect(f.engine.executeSpend(next.id)).resolves.toMatchObject({ status: 'paid' })
+    expect(f.fake.calls.payShare).toBe(6)
+  })
   it('pending conserva IDs, bloquea reintento/reset y reconsulta sin crear otro pago', async () => {
     const f = setup({ trackAs: { 'm-madrid': 'pending' } })
     await f.engine.executeSpend(f.spend.id)

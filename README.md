@@ -141,6 +141,8 @@ importe de la suma y marca que el cupo no se pudo confirmar.
 4. Si aparece **pendiente/desconocido**, usa **Consultar intentos y recepción
    (sin pagar)**. Se conservan los IDs y se consulta el mismo intento; no se crea
    otro outgoing. Un timeout no es un fallo confirmado y bloquea el reintento.
+   También bloquea ejecutar otros gastos del grupo hasta resolver ese resultado;
+   crear otra solicitud no evita la protección.
 5. Si el fallo es definitivo, corrige tú la causa y reintenta solo el aporte que
    falta. Antes se vuelve a consultar lo recibido y se descuenta cualquier parte
    que ya hubiera llegado. Si esa consulta falla, no se inicia otro pago.
@@ -206,7 +208,7 @@ npm run build -w web
 git diff --check
 ```
 
-Resultado de esta corrección: **495 pruebas aprobadas en 47 archivos**, typecheck,
+Resultado de esta corrección: **496 pruebas aprobadas en 47 archivos**, typecheck,
 build y revisión de formato correctos. Se revisaron 134 archivos de texto sin
 coincidencias con los patrones de secretos comprobados. `.env`, la llave, la
 configuración local y el diario están ignorados y no versionados. Se conservaron

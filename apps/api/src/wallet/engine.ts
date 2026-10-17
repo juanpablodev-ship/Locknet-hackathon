@@ -51,6 +51,13 @@ export function createEngine(deps: EngineDeps) {
     return s
   }
 
+  function assertNoOtherUnresolved(walletId: string, spendId: string): void {
+    if ([...spends.values()].some(s => s.walletId === walletId && s.id !== spendId &&
+        (s.status === 'paying' || s.shares.some(sh => sh.attempts?.some(a => a.status === 'unknown' || a.status === 'pending'))))) {
+      throw new Error('Otro gasto del grupo tiene un pago en curso o desconocido. Consulta ese intento antes de pagar otro gasto.')
+    }
+  }
+
   function setStatus(spend: Spend, to: SpendStatus): void {
     assertTransition(spend.status, to)
     spend.status = to
@@ -310,6 +317,7 @@ export function createEngine(deps: EngineDeps) {
     async executeSpend(spendId: string): Promise<Spend> {
       const spend = spendOf(spendId)
       const wallet = walletOf(spend.walletId)
+      assertNoOtherUnresolved(wallet.id, spendId)
       setStatus(spend, 'paying')
       return payShares(wallet, spend, spend.shares.filter((s) => s.status === 'pending'), spend.amount)
     },
@@ -341,6 +349,7 @@ export function createEngine(deps: EngineDeps) {
 
     async retryShare(spendId: string): Promise<Spend> {
       const spend = spendOf(spendId); const wallet = walletOf(spend.walletId)
+      assertNoOtherUnresolved(wallet.id, spendId)
       if (spend.shares.some(s => s.status === 'pending' && s.attempts?.length)) throw new Error('Hay resultados desconocidos; consulta antes de reintentar.')
       setStatus(spend, 'paying')
       // Consultar recepcion antes de crear nada, incluso si el proveedor ya marco fallo.
