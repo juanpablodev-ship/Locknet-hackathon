@@ -7,13 +7,13 @@ const SIMBOLOS: Record<string, string> = {
 }
 
 export function formatMoney(m: Money): string {
-  const valor = Number(m.value) / 10 ** m.assetScale
-  const d = m.assetCode === 'COP' ? 0 : 2
-  const numero = new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: d,
-    maximumFractionDigits: d
-  }).format(valor)
-
+  if (!Number.isInteger(m.assetScale) || m.assetScale < 0 || m.assetScale > 20 || !/^-?\d+$/.test(m.value)) throw new Error('Monto inválido')
+  const raw = BigInt(m.value); const absolute = raw < 0n ? -raw : raw; const unit = 10n ** BigInt(m.assetScale)
+  const whole = new Intl.NumberFormat('es-CO').format(absolute / unit)
+  let fraction = (absolute % unit).toString().padStart(m.assetScale, '0')
+  if (m.assetCode === 'COP') fraction = fraction.replace(/0+$/, '')
+  else fraction = m.assetScale ? fraction : '00'
+  const numero = `${raw < 0n ? '-' : ''}${whole}${fraction ? ',' + fraction : ''}`
   const simbolo = SIMBOLOS[m.assetCode]
   if (simbolo) return `${simbolo}${numero}`
   return `${m.assetCode} ${numero}`

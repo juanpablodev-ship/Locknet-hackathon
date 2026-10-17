@@ -156,6 +156,7 @@ function renderAporte(share: Share, wallet: SharedWallet): string {
       <p class="aporte-nombre">${nombre}</p>
       <p>Aporta: ${share.debit ? escapeHtml(formatMoney(share.debit)) : '—'}</p>
       <p>Llegó: ${share.received ? escapeHtml(formatMoney(share.received)) : '—'}</p>
+      ${share.debit && share.debit.assetCode !== share.share.assetCode ? '<p>Conversión cotizada por el proveedor. Sin tasa independiente no se verifica el costo de cambio.</p>' : ''}
       <p class="estado estado-${estado.tono}">${estado.texto}</p>
     </div>
   `
@@ -188,6 +189,7 @@ function cuerpoBloqueado(spend: Spend): string {
 }
 
 function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
+  const unknown = spend.shares.some(s => s.status === 'pending')
   const fallido = spend.shares.find((s) => s.status === 'failed')
   const nombreFallido = fallido
     ? escapeHtml(wallet.members.find((m) => m.id === fallido.memberId)?.name ?? fallido.memberId)
@@ -199,8 +201,11 @@ function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
       ${fallido ? `<p>${nombreFallido}: ${escapeHtml(fallido.failReason ?? 'no se pudo confirmar el aporte')}</p>` : ''}
     </div>
     ${cuerpoProgreso(spend, wallet)}
+    <p>No se devuelven autom?ticamente aportes ya recibidos.</p>
+    <button class="boton" data-accion="consultar" data-spend="${escapeHtml(spend.id)}">Consultar intentos y recepci?n (sin pagar)</button>
+    ${unknown ? "<p>Hay un resultado pendiente o desconocido. No se habilita otro pago.</p>" : ""}
     ${
-      fallido
+      fallido && !unknown
         ? `<div class="acciones">
              <button type="button" class="boton" data-accion="reintentar" data-spend="${escapeHtml(spend.id)}">Reintentar el aporte de ${nombreFallido}</button>
            </div>`

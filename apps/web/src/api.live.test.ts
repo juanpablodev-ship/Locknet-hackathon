@@ -122,6 +122,14 @@ describe('api.ts en modo live', () => {
     expect(api.MODO).toBe('live')
   })
 
+  it('el comando live prevalece sobre una configuracion mock anterior', async () => {
+    vi.stubEnv('VITE_API_MODE', 'mock')
+    vi.stubEnv('MODE', 'live')
+    vi.resetModules()
+    api = await import('./api.js')
+    expect(api.MODO).toBe('live')
+  })
+
   it('rechaza con el mensaje exacto que devuelve la API', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(409, { error: 'Ya votó: m1' }))
 
@@ -149,11 +157,9 @@ describe('api.ts en modo live', () => {
       cap: { value: '5000000', assetCode: 'COP', assetScale: 2 },
     }
 
-    await expect(api.startJoin('w-mama', member)).rejects.toThrow('Unirse todavía no está conectado a la API')
-    await expect(api.finishJoin({ ok: false, memberId: '' })).rejects.toThrow(
-      'Unirse todavía no está conectado a la API'
-    )
-    expect(fetchMock).not.toHaveBeenCalled()
+    await api.startJoin('w-mama', member)
+    expectRequest('/api/wallets/w-mama/join', 'POST', member)
+    expect(fetchMock.mock.calls.at(-1)?.[1]?.credentials).toBe('same-origin')
   })
 
   it('procesa mensajes SSE válidos, ignora JSON inválido y cierra la conexión', () => {

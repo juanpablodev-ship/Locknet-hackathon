@@ -1,4 +1,4 @@
-import type { Member, SharedWallet, Spend, Verdict } from '../../../contracts/index.js'
+import type { JoinSetup, Member, SharedWallet, Spend, Verdict } from '../../../contracts/index.js'
 import { parseHash, type Route } from './router.js'
 import {
   MODO,
@@ -8,6 +8,7 @@ import {
   executeSpend,
   finishJoin,
   getApiMode,
+  getJoinSetup, cancelJoin, getSession, recheckSpend, revokeMember, refreshCapacity,
   getSpend,
   getWallet,
   getWallets,
@@ -33,6 +34,7 @@ import { renderAppChrome } from './navegacion.js'
 import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
 import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
+import { moneyFromMajor } from './money-input.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -51,6 +53,8 @@ let desuscribirChrome: (() => void) | null = null
 let votaComoActual: string | undefined
 let redireccionUnirsePendiente: string | null = null
 let hashInvalidoActual = false
+let joinSetup: JoinSetup | undefined
+let ownedIds: string[] = []
 let modoServidor: ApiModeInfo | null = null
 let errorModoServidor: string | null = null
 const turnos = crearTurnos()
@@ -76,6 +80,7 @@ function alternarTema(): void {
 
 function navegarA(hash: string): void {
   if (location.hash === hash) render()
+  else if (/^https:\/\//.test(hash)) location.assign(hash)
   else location.hash = hash
 }
 
@@ -99,7 +104,7 @@ function panelDevHtml(): string {
   const soloMama = getWalletActual() === 'w-mama'
   return `
     <div class="panel-dev">
-      <span>Modo respaldo</span>
+      <span>Modo MOCK - datos simulados</span>
       ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
       <button type="button" data-accion="escenario2">Escenario 2</button>
       ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
@@ -172,7 +177,15 @@ async function pintarInicio(): Promise<void> {
   }
   if (!turnos.esVigente(miTurno)) return
 
-  app.innerHTML = renderInicio(wallet, spends, wallets) + panelDevHtml()
+  if (MODO === 'live') ownedIds = (await getSession()).memberIds
+  if (!turnos.esVigente(miTurno)) return
+  const result = new URLSearchParams(location.hash.split('?')[1] ?? '').get('union')
+  const message = result === 'ok' ? 'Union confirmada; ya puedes actuar como tu miembro.' : result ? 'No se confirmo la union. No se activo un miembro; vuelve a intentarlo desde Unirse.' : ''
+  app.innerHTML = renderInicio(wallet, spends, wallets) + `<p role="status">${escapeHtml(message)}</p><button id="consultar-cupo">Consultar cupos</button>` + (MODO === 'live' ? wallet.members.filter(m => ownedIds.includes(m.id) && m.status === 'active').map(m => `<button data-revoke="${escapeHtml(m.id)}">Revocar mi permiso: ${escapeHtml(m.name)}</button>`).join('') : '') + panelDevHtml()
+  document.getElementById('consultar-cupo')?.addEventListener('click', () => { void refreshCapacity(wallet.id).then(() => pintarInicio()).catch(err => pintarError(app, err, () => void pintarInicio())) })
+  app.querySelectorAll('[data-revoke]').forEach(button => button.addEventListener('click', () => {
+    if (confirm('Revocar explicitamente este permiso en la wallet?')) void revokeMember(wallet.id, (button as HTMLElement).dataset.revoke!).then(() => pintarInicio()).catch(err => pintarError(app, err, () => void pintarInicio()))
+  }))
   enlazarPanelDev()
   app.querySelector('.selector-billeteras')?.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest('[data-wallet-id]') as HTMLElement | null
@@ -184,7 +197,7 @@ async function pintarInicio(): Promise<void> {
   })
 
   desuscribir = onEvents(wallet.id, (e) => {
-    if (e.type === 'member-active' || e.type === 'member-revoked' || e.type === 'capacity-updated') {
+    if (e.type === 'spend-updated' || e.type === 'member-active' || e.type === 'member-revoked' || e.type === 'capacity-updated') {
       render()
     }
   })
@@ -208,10 +221,12 @@ function selectVotanteHtml(activos: Member[]): string {
 }
 
 const EVENTOS_GASTO = new Set([
+  'spend-updated',
   'spend-reviewed',
   'approval-cast',
   'spend-approved',
   'spend-rejected',
+  'spend-approved',
   'share-paid',
   'share-failed',
   'spend-paid'
@@ -252,7 +267,9 @@ async function pintarGasto(id: string): Promise<void> {
   }
   if (!turnos.esVigente(miTurno)) return
 
-  const activos = wallet.members.filter((m) => m.status === 'active')
+  if (MODO === 'live') ownedIds = (await getSession()).memberIds
+  if (!turnos.esVigente(miTurno)) return
+  const activos = wallet.members.filter((m) => m.status === 'active' && (MODO === 'mock' || ownedIds.includes(m.id)))
   if (!votaComoActual || !activos.some((m) => m.id === votaComoActual)) {
     votaComoActual = activos[0]?.id
   }
@@ -289,6 +306,9 @@ async function pintarGasto(id: string): Promise<void> {
           await castApproval(spendId, votaComoActual, accion === 'aprobar')
         } else if (accion === 'pagar') {
           await executeSpend(spendId)
+        } else if (accion === 'consultar') {
+          await recheckSpend(spendId)
+          await pintarGasto(spendId)
         } else if (accion === 'reintentar') {
           await retryShare(spendId)
         }
@@ -304,7 +324,7 @@ async function pintarGasto(id: string): Promise<void> {
   // Se suscribe al final, ya con el turno todavía vigente: evita dejar una suscripción
   // de un pintado que quedó obsoleto mientras se esperaban las promesas de arriba.
   desuscribir = onEvents(wallet.id, (e) => {
-    if (e.type === 'capacity-updated' || (EVENTOS_GASTO.has(e.type) && e.spendId === id)) {
+    if (e.type === 'capacity-updated' || (e.type === 'spend-updated' && !e.spendId) || (EVENTOS_GASTO.has(e.type) && e.spendId === id)) {
       render()
     }
   })
@@ -378,6 +398,7 @@ interface ValoresUnirse {
   nombre: string
   direccion: string
   tope: string
+  interval?: string
 }
 
 function leerValoresUnirse(): ValoresUnirse {
@@ -385,6 +406,7 @@ function leerValoresUnirse(): ValoresUnirse {
     nombre: (document.getElementById('nombre-miembro') as HTMLInputElement | null)?.value ?? '',
     direccion: (document.getElementById('direccion-miembro') as HTMLInputElement | null)?.value ?? '',
     tope: (document.getElementById('tope-miembro') as HTMLInputElement | null)?.value ?? '',
+    interval: (document.getElementById('intervalo-miembro') as HTMLInputElement | null)?.value,
   }
 }
 
@@ -392,28 +414,49 @@ function pintarFormularioUnirse(
   wallet: SharedWallet,
   qrSvg: string,
   warning?: Verdict,
-  values: ValoresUnirse = { nombre: '', direccion: '', tope: '50000' },
+  values: ValoresUnirse = { nombre: '', direccion: '', tope: '100000' },
 ): void {
   const app = document.getElementById('app')
   if (!app) return
 
-  app.innerHTML = renderUnirse(wallet, qrSvg, warning) + panelDevHtml()
+  app.innerHTML = renderUnirse(wallet, qrSvg, warning, joinSetup) + panelDevHtml()
   const form = document.getElementById('form-unirse') as HTMLFormElement | null
   const nombre = document.getElementById('nombre-miembro') as HTMLInputElement | null
   const direccion = document.getElementById('direccion-miembro') as HTMLInputElement | null
   const tope = document.getElementById('tope-miembro') as HTMLInputElement | null
   if (nombre) nombre.value = values.nombre
   if (direccion) direccion.value = values.direccion
+  if (values.interval) (document.getElementById('intervalo-miembro') as HTMLInputElement).value = values.interval
   if (tope) tope.value = values.tope
+  const updateWallet = () => {
+    const m = joinSetup?.members.find(m => m.walletAddress === direccion?.value.trim())
+    const label = document.getElementById('moneda-tope'); if (label) label.textContent = m ? `${m.assetCode}, escala ${m.assetScale}` : wallet.currency
+  }
+  direccion?.addEventListener('input', updateWallet)
+  document.getElementById('wallet-configurada')?.addEventListener('change', event => {
+    const m = joinSetup?.members.find(m => m.walletAddress === (event.target as HTMLSelectElement).value)
+    if (m && direccion && nombre && tope) { direccion.value = m.walletAddress; nombre.value = m.name; tope.value = m.assetCode === 'EUR' ? '22' : '100000'; updateWallet() }
+  })
+  updateWallet()
+  document.getElementById('cancelar-union')?.addEventListener('click', () => {
+    void cancelJoin().then(() => {
+      const status = document.getElementById('mensaje')
+      if (status) status.textContent = 'Interacción local descartada. Puedes iniciar una nueva; los permisos externos no se revocaron.'
+    }).catch(error => {
+      const status = document.getElementById('mensaje')
+      if (status) status.textContent = error instanceof Error ? error.message : 'No se pudo descartar la interacción local.'
+    })
+  })
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault()
     const mensaje = document.getElementById('mensaje')
-    const capPesos = Number(tope?.value)
-    if (!Number.isSafeInteger(capPesos) || capPesos <= 0) {
-      if (mensaje) mensaje.textContent = `Escribe un tope mensual mayor que cero en ${wallet.currency} y sin decimales.`
-      return
-    }
+    const publicWallet = joinSetup?.members.find(m => m.walletAddress === direccion?.value.trim())
+    let cap: Member['cap']
+    try {
+      if (MODO === 'live' && !publicWallet) throw new Error('Selecciona una wallet de la configuracion local verificada.')
+      cap = moneyFromMajor(tope?.value.trim() ?? '', publicWallet?.assetCode ?? wallet.currency, publicWallet?.assetScale ?? 2)
+    } catch (error) { if (mensaje) mensaje.textContent = error instanceof Error ? error.message : 'Monto invalido'; return }
 
     const memberName = nombre?.value.trim() ?? ''
     const walletAddress = direccion?.value.trim() ?? ''
@@ -423,19 +466,15 @@ function pintarFormularioUnirse(
     }
 
     const miTurno = turnos.nuevo()
-    const submitted = { nombre: memberName, direccion: walletAddress, tope: String(capPesos) }
+    const submitted = { nombre: memberName, direccion: walletAddress, tope: tope?.value ?? '', interval: (document.getElementById('intervalo-miembro') as HTMLInputElement).value.trim() }
     void (async () => {
       try {
-        const interval = wallet.members.find((member) => member.interval)?.interval
+        const interval = (document.getElementById('intervalo-miembro') as HTMLInputElement).value.trim()
         const join = await startJoin(wallet.id, {
           name: memberName,
           walletAddress,
-          assetCode: wallet.currency,
-          cap: {
-            value: (BigInt(capPesos) * 100n).toString(),
-            assetCode: wallet.currency,
-            assetScale: 2,
-          },
+          assetCode: cap.assetCode,
+          cap,
           ...(interval ? { interval } : {}),
         })
         if (!turnos.esVigente(miTurno)) return
@@ -467,7 +506,8 @@ function pintarFormularioUnirse(
       navegarA(redireccionUnirsePendiente)
     } else if (action === 'cancelar-unirse') {
       redireccionUnirsePendiente = null
-      pintarFormularioUnirse(wallet, qrSvg, undefined, leerValoresUnirse())
+      void cancelJoin().then(() => pintarFormularioUnirse(wallet, qrSvg, undefined, leerValoresUnirse()))
+      return
     }
   })
   enlazarPanelDev()
@@ -481,6 +521,7 @@ async function pintarUnirse(): Promise<void> {
 
   try {
     const wallet = await getWallet(getWalletActual())
+    joinSetup = await getJoinSetup()
     if (!turnos.esVigente(miTurno)) return
     const qrSvg = await qrComoSvg(`${location.origin}${location.pathname}#/unirse`)
     if (!turnos.esVigente(miTurno)) return
@@ -569,6 +610,7 @@ const EVENTOS_CHROME = new Set([
   'member-active',
   'member-revoked',
   'spend-requested',
+  'spend-updated',
   'spend-reviewed',
   'spend-approved',
   'spend-rejected',
@@ -584,7 +626,7 @@ async function pintarChrome(route: Route): Promise<void> {
     if (!app) return
     document.body.insertBefore(shell, app)
   }
-  const mode = modoServidor?.mode ?? DEMO_MODE
+  const mode = MODO === 'mock' ? 'fixtures' : modoServidor?.mode ?? DEMO_MODE
 
   let nombreBilletera = ''
   let numeroMiembros = 0
@@ -601,10 +643,10 @@ async function pintarChrome(route: Route): Promise<void> {
   }
 
   shell.className = `app-shell${mode === 'fixtures' ? ' app-shell-fixtures' : ''}`
-  shell.innerHTML = renderAppChrome({
+  shell.innerHTML = (MODO === 'live' && mode !== 'fixtures' ? `<p role="status">${modoServidor ? 'Modo LIVE - Test Wallet. Las acciones pueden mover dinero de prueba.' : 'Comprobando modo del servidor...'}</p>` : '') + renderAppChrome({
     route,
     mode,
-    label: modoServidor?.label,
+    label: MODO === 'mock' ? 'Modo MOCK — datos y pagos simulados, sin backend' : modoServidor?.label,
     error: errorModoServidor ?? undefined,
     nombreBilletera,
     numeroMiembros,
@@ -630,6 +672,7 @@ async function pintarChrome(route: Route): Promise<void> {
 }
 
 async function reiniciarDemo(boton: HTMLButtonElement): Promise<void> {
+  if (MODO === 'live' && !confirm('Esto elimina estado LOCAL y sesiones. NO revoca permisos externos. No lo hagas con resultados desconocidos. Continuar?')) return
   boton.disabled = true
   try {
     if (MODO === 'mock') {
