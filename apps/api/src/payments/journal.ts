@@ -11,10 +11,11 @@ export async function openAttemptJournal(path: string) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Diario de intentos inválido; no se habilitan pagos.')
   }
-  const blocked = Object.values(records).some(a => ['prepared', 'unknown', 'pending'].includes(a.status))
+  const pendingAtStartup = new Set(Object.entries(records).filter(([,a]) => ['prepared', 'unknown', 'pending'].includes(a.status)).map(([key]) => key))
   let queue: Promise<void> = Promise.resolve()
   return {
-    blocked,
+    get blocked() { return [...pendingAtStartup].some(key => ['prepared', 'unknown', 'pending'].includes(records[key]?.status)) },
+    entries() { return structuredClone(records) },
     record(key: string, attempt: PaymentAttempt): Promise<void> {
       // Lista blanca: un llamador no puede serializar otras propiedades.
       records[key] = { incomingPaymentUrl: attempt.incomingPaymentUrl, status: attempt.status,

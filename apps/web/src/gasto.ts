@@ -201,6 +201,7 @@ function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
       ${fallido ? `<p>${nombreFallido}: ${escapeHtml(fallido.failReason ?? 'no se pudo confirmar el aporte')}</p>` : ''}
     </div>
     ${cuerpoProgreso(spend, wallet)}
+    <p>Un cobro vencido (EXPIRED) muestra el importe solicitado, no prueba que ese dinero haya llegado. Solo cuenta la recepción confirmada.</p>
     <p>No se devuelven automáticamente aportes ya recibidos.</p>
     ${unknown ? "<p>Hay un resultado pendiente o desconocido. No se habilita otro pago.</p>" : ""}
     <div class="acciones">

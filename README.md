@@ -213,3 +213,44 @@ build y revisión de formato correctos. Se revisaron 134 archivos de texto sin
 coincidencias con los patrones de secretos comprobados. `.env`, la llave, la
 configuración local y el diario están ignorados y no versionados. Se conservaron
 los procesos anteriores en 3000/5173; el arranque comprobado usa 3100/5180.
+
+## Recuperar intentos existentes sin volver a pagar
+
+Un incoming con importe COP 60.000 y estado EXPIRED describe un cobro solicitado
+que venció. No demuestra un abono: la conciliación lee `receivedAmount`.
+Tampoco demuestra por sí solo que el outgoing haya fallado.
+
+El servicio distingue el permiso del miembro, la lectura del cobro y la vigencia
+de la quote. Rechaza cobros cerrados/vencidos y cotizaciones vencidas antes de
+crear un outgoing. Una lectura 401/403 intenta obtener únicamente acceso `read`;
+no solicita un permiso nuevo de creación de pagos. Si necesita consentimiento,
+no elimina la incertidumbre ni atribuye el fallo a fondos insuficientes.
+
+Para recuperar IDs ya existentes cuando la lectura original dejó de funcionar:
+
+1. Conserva el proceso anterior y el diario. Guarda sus respuestas públicas de
+   `/api/wallets` y `/api/wallets/w-mama/spends` como arrays en el archivo ignorado
+   `.env.recovery-state.json`: `{ capturedAt, wallets, spends }`. No contiene tokens.
+2. Ejecuta `npm run op -- demo/recovery-server.ts` desde la raíz. Escucha en
+   `http://localhost:3345` (RECOVERY_PORT opcional). No puede crear cobros,
+   cotizaciones ni pagos. No cancela permisos existentes.
+3. Cada dueño abre ese origen en su propio perfil y solicita un permiso de lectura.
+   El callback valida cookie, state, vencimiento, uso único y hash de Open Sentinels.
+   Solo acepta exactamente `outgoing-payment/read` para la wallet solicitada.
+4. Pulsa el botón de consulta. Solo usa GET de los IDs existentes; los permisos
+   automáticos para incoming tienen únicamente acción `read`. Los tokens quedan
+   en memoria y nunca se guardan ni se imprimen.
+5. El informe `.env.recovery-report.json` muestra los resultados saneados. El diario
+   conserva `pending/unknown` hasta comprobar recepción o un outgoing fallido.
+   Un error de lectura y un cobro vencido NO desbloquean por sí solos el historial.
+6. Reinicia la API principal solamente cuando se haya resuelto el informe.
+   Los permisos y sesiones anteriores de la app no se restauran: los dueños se
+   unen de nuevo. Conserva la copia del historial; nunca borres el diario para
+   saltarte el bloqueo. Reiniciar no cancela pagos del proveedor.
+
+`npm run op -- demo/recover-existing-payments.ts` es un diagnóstico de lectura
+sin modificar el diario por defecto. `--apply` registra solo los estados que se
+pudieron consultar y conserva desconocidos cuando no se pudieron verificar;
+si el proveedor exige interacción utiliza el servidor anterior. Ninguno de los
+comandos ejecuta pagos. La aceptación real de grants read y los resultados de
+la red deben comprobarlos los dueños en su navegador; los tests usan SDK simulado.

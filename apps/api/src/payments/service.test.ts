@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AuthenticatedClient } from '@interledger/open-payments'
+import { OpenPaymentsClientError, type AuthenticatedClient } from '@interledger/open-payments'
 import type { Money } from '../../../../contracts'
 import { createPaymentsService } from './service'
 
@@ -126,5 +126,44 @@ describe('PaymentsService con SDK oficial', () => {
     expect(await service.received(incoming.id)).toEqual(cop('2000000'))
     incoming.receivedAmount = cop('4000000')
     expect(await service.received(incoming.id)).toEqual(cop('4000000'))
+  })
+})
+
+describe('vencimientos y lectura independiente del permiso de pago', () => {
+  it('no crea un outgoing contra un cobro vencido', async () => {
+    const f = setup()
+    await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
+    const q = await f.service.quoteShare('bogota', f.incoming.id, cop('4000000'))
+    Object.assign(f.incoming, { expiresAt: '2000-01-01T00:00:00Z' })
+    await expect(f.service.payShare('bogota', q.quoteId)).rejects.toThrow('cobro ya está cerrado o vencido')
+    expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
+  })
+  it('no crea un outgoing con una quote vencida', async () => {
+    const f = setup()
+    await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
+    Object.assign(f.quote, { expiresAt: '2000-01-01T00:00:00Z' })
+    const q = await f.service.quoteShare('bogota', f.incoming.id, cop('4000000'))
+    await expect(f.service.payShare('bogota', q.quoteId)).rejects.toThrow('cotización venció')
+    expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
+  })
+  it('un cobro vencido con outgoing no fallido no se transforma en fallo confirmado', async () => {
+    const f = setup()
+    await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
+    const q = await f.service.quoteShare('bogota', f.incoming.id, cop('4000000'))
+    await f.service.payShare('bogota', q.quoteId)
+    Object.assign(f.incoming, { expiresAt: '2000-01-01T00:00:00Z' })
+    expect(await f.service.track(f.outgoing.id)).toBe('pending')
+  })
+  it('renueva solo lectura para consultar un incoming cuyo token devolvió 401', async () => {
+    const f = setup()
+    f.incoming.id = 'https://resources.example/incoming-payments/1'
+    await f.service.createIncoming('https://pharmacy.example', cop('4000000'))
+    f.client.incomingPayment.get.mockRejectedValueOnce(new OpenPaymentsClientError('private-detail', { code: 'invalid_token', status: 401, description: 'synthetic-detail' }))
+    expect(await f.service.received(f.incoming.id)).toEqual(cop('0'))
+    expect(f.client.grant.request).toHaveBeenLastCalledWith(
+      { url: 'https://auth.example' }, { access_token: { access: [{ type: 'incoming-payment', actions: ['read'] }] } },
+    )
+    expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
+    expect(f.memberToken).not.toHaveBeenCalled()
   })
 })
