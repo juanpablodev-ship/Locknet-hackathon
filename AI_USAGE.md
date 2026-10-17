@@ -52,4 +52,4 @@ No hay evidencia suficiente para certificar archivos concretos en esta categorí
 - `distributeReturn` continúa pendiente: el contrato actual no fija destinatarios, importes por inversor ni redondeo. Requiere una definición con R3 antes de implementarse.
 - Los tests locales cubren el plan B de tres cobros separados, pero no verifican la red ni la idempotencia distribuida. Coordinar con R3 que la configuración real active el modo de cobro por aporte y que el motor conserve los intentos para consulta.
 - Coordinar con R3/R5 una clasificación de `failReason` usando únicamente los campos existentes en el contrato; no se añadió ninguna interfaz nueva.
-- R1 documentó que las uniones reales están preparadas, pero todavía no aprobadas; faltan las confirmaciones de R3, R4 y R5 para completar su trazabilidad de IA.
+- R1 documentó que las uniones reales están preparadas, pero todavía no aprobadas; faltan las confirmaciones de R4 y R5 para completar su trazabilidad de IA (R3 ya declaró su fila).
