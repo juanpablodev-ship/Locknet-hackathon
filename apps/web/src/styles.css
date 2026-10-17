@@ -117,12 +117,18 @@ body {
 }
 
 .banda-respaldo {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   padding: 10px 16px;
   background: var(--ambar);
   border-bottom: 2px solid var(--ambar);
   color: var(--fondo);
   font-weight: 700;
+  line-height: 1.25;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .cab {
@@ -150,7 +156,7 @@ body {
 }
 
 .cab button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--borde);
   border-radius: 6px;
@@ -162,7 +168,7 @@ body {
 
 .acciones-demo {
   display: flex;
-  min-height: 48px;
+  min-height: 52px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -173,7 +179,7 @@ body {
 }
 
 .boton-reiniciar-demo {
-  min-height: 40px;
+  min-height: 44px;
   padding: 4px 12px;
   border: 1px solid var(--borde);
   border-radius: 6px;
@@ -186,6 +192,14 @@ body {
 .boton-reiniciar-demo:disabled {
   opacity: 0.6;
   cursor: wait;
+}
+
+.cab button:focus-visible,
+.boton-reiniciar-demo:focus-visible,
+.panel-dev button:focus-visible,
+.panel-dev input:focus-visible {
+  outline: 3px solid var(--morado);
+  outline-offset: 2px;
 }
 
 /* Barra de pestañas fija abajo (del borrador): reemplaza el menú de la Fase C.
@@ -258,6 +272,12 @@ body {
 @media (max-width: 375px) {
   .contenedor {
     overflow-x: hidden;
+  }
+}
+
+@media (max-width: 600px) {
+  #app:has(.panel-dev) .contenedor {
+    padding-bottom: calc(var(--altura-tabs) + 200px);
   }
 }
 
@@ -746,9 +766,9 @@ body {
 
 .panel-dev {
   position: fixed;
-  bottom: var(--altura-tabs);
-  left: 0;
-  right: 0;
+  bottom: calc(var(--altura-tabs) + env(safe-area-inset-bottom, 0px));
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
   z-index: 6;
   display: flex;
   flex-wrap: wrap;
@@ -757,11 +777,18 @@ body {
   padding: 8px 16px;
   background: var(--fondo);
   color: var(--texto);
-  border-top: 1px solid var(--borde);
+  border-top: 2px solid var(--borde);
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 0.12);
+}
+
+.panel-dev > span {
+  padding: 4px;
+  font-weight: 700;
 }
 
 .panel-dev button {
-  padding: 8px 12px;
+  min-height: 40px;
+  padding: 6px 12px;
   border: 1px solid var(--borde);
   border-radius: 6px;
   background: var(--fondo);
@@ -772,8 +799,27 @@ body {
 
 .interruptor {
   display: flex;
+  min-height: 40px;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.interruptor input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--verde);
+}
+
+@media (max-width: 600px) {
+  .panel-dev {
+    justify-content: flex-start;
+    gap: 4px 8px;
+    padding: 6px 8px;
+  }
 }
 
 .sello {
