@@ -133,7 +133,7 @@ export function startJoin(
   const wallet = wallets.find((item) => item.id === walletId)
   if (!wallet) throw new Error('Grupo no encontrado')
   if (member.cap.assetCode !== wallet.currency) {
-    throw new Error('El tope debe estar en la moneda de la billetera')
+    throw new Error('El tope debe estar en la moneda del grupo')
   }
 
   const id = `m-nuevo-${++joinCounter}`
@@ -148,7 +148,7 @@ export function startJoin(
         check: 'grant',
         status: 'warn',
         riskPoints: 60,
-        userMessage: `Esta billetera te pide autorizar hasta ${formatCap(member.cap)} sin límite de tiempo. Es mucho más de lo normal.`,
+        userMessage: `Esta app te pide autorizar hasta ${formatCap(member.cap)} sin límite de tiempo. Es mucho más de lo normal.`,
         reasons: [
           ...(superaTope ? ['El tope supera $1.000.000 COP equivalentes.'] : []),
           ...(sinIntervalo ? ['No se indicó un límite de tiempo.'] : []),

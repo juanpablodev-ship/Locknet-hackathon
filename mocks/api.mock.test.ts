@@ -342,7 +342,7 @@ describe('startJoin y finishJoin', () => {
 
     expect(resultado.grantWarning.status).toBe('warn')
     expect(resultado.grantWarning.userMessage).toBe(
-      'Esta billetera te pide autorizar hasta $5.000.000 sin límite de tiempo. Es mucho más de lo normal.'
+      'Esta app te pide autorizar hasta $5.000.000 sin límite de tiempo. Es mucho más de lo normal.'
     )
   })
 
