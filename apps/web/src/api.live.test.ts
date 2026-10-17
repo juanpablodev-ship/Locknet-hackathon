@@ -72,6 +72,8 @@ describe('api.ts en modo live', () => {
     await api.requestSpend('w-mama', destination, medicina.amount)
     expectRequest('/api/wallets/w-mama/spends', 'POST', { destination, amount: medicina.amount })
 
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
     await api.executeSpend('s-medicina')
     expectRequest('/api/spends/s-medicina/execute', 'POST')
 
@@ -103,6 +105,38 @@ describe('api.ts en modo live', () => {
     expectRequest('/api/demo/reset', 'POST')
   })
 
+  it('devuelve el estado final de una consulta sin ejecutar ni reintentar pagos', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    await expect(api.recheckSpend(medicina.id)).resolves.toEqual(medicina)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expectRequest(`/api/spends/${medicina.id}/recheck`, 'POST')
+  })
+
+  it('tolera la API anterior con 202 consultando su resultado mediante GET', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(202, { spendId: medicina.id, status: 'paying' }))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    await expect(api.recheckSpend(medicina.id)).resolves.toEqual(medicina)
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      [`/api/spends/${medicina.id}/recheck`, 'POST'],
+      [`/api/spends/${medicina.id}`, 'GET'],
+    ])
+  })
+
+  it('muestra el error de consulta sin reenviar un pago', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(409, { error: 'Consulta no disponible' }))
+    await expect(api.recheckSpend(medicina.id)).rejects.toThrow('Consulta no disponible')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+  it('no envía POST de pago si otro gasto tiene un intento desconocido', async () => {
+    const previous = structuredClone(medicina)
+    previous.id = 'gasto-anterior'; previous.status = 'incomplete'
+    previous.shares[0].status = 'pending'
+    previous.shares[0].attempts = [{ incomingPaymentUrl: 'https://test.invalid/incoming-payments/old', status: 'unknown' }]
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [previous]))
+    await expect(api.executeSpend(medicina.id)).rejects.toThrow('Otro gasto')
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === 'GET')).toBe(true)
+  })
   it('conserva la base VITE_API_URL configurada', async () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.test')
     vi.resetModules()
@@ -119,6 +153,14 @@ describe('api.ts en modo live', () => {
     vi.resetModules()
     api = await import('./api.js')
 
+    expect(api.MODO).toBe('live')
+  })
+
+  it('el comando live prevalece sobre una configuracion mock anterior', async () => {
+    vi.stubEnv('VITE_API_MODE', 'mock')
+    vi.stubEnv('MODE', 'live')
+    vi.resetModules()
+    api = await import('./api.js')
     expect(api.MODO).toBe('live')
   })
 
@@ -149,11 +191,9 @@ describe('api.ts en modo live', () => {
       cap: { value: '5000000', assetCode: 'COP', assetScale: 2 },
     }
 
-    await expect(api.startJoin('w-mama', member)).rejects.toThrow('Unirse todavía no está conectado a la API')
-    await expect(api.finishJoin({ ok: false, memberId: '' })).rejects.toThrow(
-      'Unirse todavía no está conectado a la API'
-    )
-    expect(fetchMock).not.toHaveBeenCalled()
+    await api.startJoin('w-mama', member)
+    expectRequest('/api/wallets/w-mama/join', 'POST', member)
+    expect(fetchMock.mock.calls.at(-1)?.[1]?.credentials).toBe('same-origin')
   })
 
   it('procesa mensajes SSE válidos, ignora JSON inválido y cierra la conexión', () => {

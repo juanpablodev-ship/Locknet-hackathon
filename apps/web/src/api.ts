@@ -1,11 +1,13 @@
 // Única puerta entre las pantallas y los datos. Las pantallas importan SOLO de aquí,
 // nunca del simulado directamente (sección 14 del plan: cambiar de simulado a real es
 // cambiar esta línea de importación).
-import type { Member, Money, SharedWallet, Spend, Verdict, WalletEvent } from '../../../contracts/index.js'
+import type { JoinSetup, Member, Money, SharedWallet, Spend, Verdict, WalletEvent } from '../../../contracts/index.js'
 import * as mock from '../../../mocks/api.mock.js'
 
 export const MODO: 'live' | 'mock' =
-  import.meta.env.VITE_API_MODE === 'live' || import.meta.env.MODE === 'live' ? 'live' : 'mock'
+  import.meta.env.MODE === 'live' ? 'live' : import.meta.env.MODE === 'mock' ? 'mock' :
+  import.meta.env.VITE_API_MODE === 'live' ? 'live' :
+  import.meta.env.VITE_API_MODE === 'mock' || import.meta.env.MODE === 'test' ? 'mock' : 'live'
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
 export interface ApiModeInfo {
@@ -27,6 +29,7 @@ async function pedir<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown):
   try {
     respuesta = await fetch(`${BASE}${ruta}`, {
       method: metodo,
+      credentials: 'same-origin',
       ...(cuerpo === undefined
         ? {}
         : {
@@ -85,6 +88,8 @@ export async function getSpend(spendId: string): Promise<Spend> {
 export function onEvents(walletId: string, cb: (e: WalletEvent) => void): () => void {
   if (MODO === 'mock') return mock.onEvents(walletId, cb)
   const source = new EventSource(`${BASE}/api/wallets/${encodeURIComponent(walletId)}/events`)
+  let opened = false
+  source.onopen = () => { if (opened) cb({ walletId, type: 'spend-updated', message: 'Conexion recuperada; consultar estado.', ts: Date.now() }); opened = true }
   source.onmessage = (event) => {
     let parsed: WalletEvent
     try {
@@ -111,8 +116,17 @@ export async function requestSpend(walletId: string, destination: Spend['destina
   return mock.requestSpend(walletId, destination, amount)
 }
 
+export async function getPaymentBlocker(spend: Spend): Promise<Spend | undefined> {
+  const others = await getSpends(spend.walletId)
+  return others.find(other => other.id !== spend.id && (other.status === 'paying' ||
+    other.shares.some(share => share.attempts?.some(attempt =>
+      attempt.status === 'unknown' || attempt.status === 'pending' || attempt.status === 'prepared'))))
+}
 export async function executeSpend(spendId: string): Promise<void> {
   if (MODO === 'live') {
+    const spend = await getSpend(spendId)
+    const blocker = await getPaymentBlocker(spend)
+    if (blocker) throw new Error('Otro gasto tiene un pago pendiente o desconocido. Consulta el gasto anterior antes de pagar; no se envió un pago nuevo.')
     await pedir<{ spendId: string; status: 'paying' }>('POST', `/api/spends/${encodeURIComponent(spendId)}/execute`)
     return
   }
@@ -131,13 +145,45 @@ export async function startJoin(
   walletId: string,
   member: Omit<Member, 'id' | 'status'>,
 ): Promise<{ redirectUrl: string; grantWarning: Verdict }> {
-  if (MODO === 'live') unirsePendiente()
+  if (MODO === 'live') return pedir('POST', `/api/wallets/${encodeURIComponent(walletId)}/join`, member)
   return mock.startJoin(walletId, member)
 }
 
 export async function finishJoin(p: { ok: boolean; memberId: string }): Promise<Member | Verdict> {
   if (MODO === 'live') unirsePendiente()
   return mock.finishJoin(p)
+}
+
+export async function cancelJoin(): Promise<void> {
+  if (MODO === 'live') await pedir('POST', '/api/join/cancel')
+}
+export async function getJoinSetup(): Promise<JoinSetup | undefined> {
+  if (MODO === 'mock') return undefined
+  const setup = await pedir<Partial<JoinSetup>>('GET', '/api/setup')
+  return setup.members && setup.interval ? setup as JoinSetup : undefined
+}
+export async function getSession(): Promise<{ memberIds: string[] }> {
+  if (MODO === 'mock') return { memberIds: mock.getWallets().flatMap(w => w.members.map(m => m.id)) }
+  return pedir('GET', '/api/session')
+}
+export async function recheckSpend(id: string): Promise<Spend> {
+  if (MODO !== 'live') return getSpend(id)
+  const result = await pedir<Spend | { spendId: string }>('POST', `/api/spends/${encodeURIComponent(id)}/recheck`)
+  if ('shares' in result) return result
+  // Compatibilidad con la API 202 aún abierta: solo consultar, nunca reenviar el POST.
+  for (let i = 0; i < 60; i++) {
+    const current = await getSpend(id)
+    if (current.status !== 'paying') return current
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  throw new Error('La consulta sigue en curso. No se enviaron nuevos pagos; vuelve a consultar el estado.')
+}
+export async function revokeMember(walletId: string, memberId: string): Promise<void> {
+  if (MODO !== 'live') throw new Error('Revocacion real solo disponible en modo live')
+  await pedir('POST', `/api/wallets/${encodeURIComponent(walletId)}/members/${encodeURIComponent(memberId)}/revoke`)
+}
+export async function refreshCapacity(walletId: string): Promise<void> {
+  if (MODO === 'live') await pedir('POST', `/api/wallets/${encodeURIComponent(walletId)}/capacity/refresh`)
 }
 
 export function setFalloAporte(memberId: string | null): void {

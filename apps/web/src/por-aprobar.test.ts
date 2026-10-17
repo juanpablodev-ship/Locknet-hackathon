@@ -6,7 +6,7 @@ describe('renderPorAprobar', () => {
   it('muestra una fila por gasto awaiting-approval, con enlace a su gasto', () => {
     const html = renderPorAprobar([ataque], cuidadoDeMama)
     expect(html).toContain('Farmacia (cuenta nueva)')
-    expect(html).toContain('Billetera: Cuidado de mamá')
+    expect(html).toContain('Grupo: Cuidado de mamá')
     expect(html).toContain('$120.000')
     expect(html).toContain('Riesgo alto · 94')
     expect(html).toContain(`href="#/gasto/${ataque.id}"`)

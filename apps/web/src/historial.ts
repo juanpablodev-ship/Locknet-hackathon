@@ -29,7 +29,7 @@ export function renderHistorial(spends: Spend[], wallet: SharedWallet): string {
     return `
       <div class="contenedor historial">
         <h1>Historial · ${escapeHtml(wallet.name)}</h1>
-        <p class="sin-historial">Todavía no hay gastos en esta billetera</p>
+        <p class="sin-historial">Todavía no hay gastos en este grupo</p>
       </div>
     `
   }

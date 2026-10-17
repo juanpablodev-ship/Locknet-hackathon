@@ -1,6 +1,7 @@
 // Servicios falsos SOLO para las pruebas del motor. No son los simulados de /mocks:
 // se reemplazan por /mocks/*.mock.ts (R1, R2, R5) o por los servicios reales a las 15:00.
 import type { Guardian, Money, PaymentsService, Verdict } from '../../../../contracts'
+import { PaymentError } from '../payments/errors'
 import { add, zero } from './model'
 
 export const cop = (pesos: number): Money => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
@@ -40,7 +41,8 @@ export function fakePayments(opts: {
   const quotes = new Map<string, { memberId: string; url: string; receive: Money }>()
   const outgoing = new Map<string, { memberId: string; url: string; receive: Money }>()
   let n = 0
-  const calls = { createIncoming: [] as Money[] }
+  const calls = { createIncoming: [] as Money[], payShare: 0 }
+  const accounted = new Set<string>()
 
   const svc: PaymentsService = {
     async createIncoming(_walletAddress, amount) {
@@ -57,7 +59,8 @@ export function fakePayments(opts: {
       return { quoteId, debitAmount: debit, receiveAmount: share }
     },
     async payShare(memberId, quoteId) {
-      if (opts.failMember?.[memberId]) throw new Error(opts.failMember[memberId])
+      calls.payShare++
+      if (opts.failMember?.[memberId]) throw new PaymentError(opts.failMember[memberId], 'not-created')
       const outgoingId = `o-${++n}`
       outgoing.set(outgoingId, quotes.get(quoteId)!)
       return { outgoingId }
@@ -65,7 +68,8 @@ export function fakePayments(opts: {
     async track(outgoingId) {
       const o = outgoing.get(outgoingId)!
       const state = opts.trackAs?.[o.memberId] ?? 'completed'
-      if (state === 'completed') {
+      if (state === 'completed' && !accounted.has(outgoingId)) {
+        accounted.add(outgoingId)
         const got = opts.shortReceive ? { ...o.receive, value: (BigInt(o.receive.value) - 1n).toString() } : o.receive
         received.set(o.url, add(received.get(o.url)!, got))
       }

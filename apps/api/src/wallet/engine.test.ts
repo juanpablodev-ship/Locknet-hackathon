@@ -58,7 +58,7 @@ describe('addMember: unirse sin depositar', () => {
     engine.addMember('w-vacia', nuevo('a'))
     const w = engine.addMember('w-vacia', nuevo('b'))
     expect(w.members.map((m) => m.id)).toEqual(['a', 'b'])
-    expect(w.authorizedCapacity).toEqual(cop(200_000))
+    expect(w.authorizedCapacity).toEqual(cop(0))
     expect(events.filter((e) => e.walletId === 'w-vacia').map((e) => e.type))
       .toEqual(['member-active', 'capacity-updated', 'member-active', 'capacity-updated'])
   })
@@ -87,13 +87,15 @@ describe('refreshCapacity: cupo real con available()', () => {
     expect(events.at(-1)).toMatchObject({ type: 'capacity-updated', amount: cop(160_000) })
   })
 
-  it('si available() falla para un miembro, conserva su último valor', async () => {
+  it('si available() falla excluye ese importe y declara cupo incompleto, sin mezclar EUR', async () => {
     const w = await engine.refreshCapacity('w-mama', async (id) => {
       if (id === 'm-bogota') throw new Error('No se pudo consultar el cupo autorizado')
       return id === 'm-madrid' ? { value: '2200', assetCode: 'EUR', assetScale: 2 } : cop(10_000)
     })
-    expect(w.members[0].available).toEqual(cop(100_000))
-    expect(w.authorizedCapacity).toEqual(cop(110_000))
+    expect(w.members[0].available).toBeUndefined()
+    expect(w.capacityStale).toBe(true)
+    expect(w.authorizedCapacity).toEqual(cop(10_000))
+    expect(w.capacityByAsset).toEqual([cop(10_000), { value: '2200', assetCode: 'EUR', assetScale: 2 }])
   })
 })
 
@@ -127,11 +129,23 @@ describe('castApproval: aprobación del grupo (2 de 3)', () => {
     expect(engine.castApproval(id, 'm-madrid', true).status).toBe('approved')
   })
 
-  it('dos no → rejected (ya no se alcanzan 2 sí)', () => {
+  it('destino falso (riesgo alto): un solo no → rejected', () => {
     const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))
-    engine.castApproval(id, 'm-bogota', false)
+    expect(engine.castApproval(id, 'm-bogota', false).status).toBe('rejected')
+    expect(events.at(-1)).toMatchObject({ type: 'spend-rejected', message: 'Un miembro del grupo rechazó un pago riesgoso.' })
+  })
+
+  it('destino falso: un solo sí no basta, sigue en awaiting-approval', () => {
+    const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))
+    expect(engine.castApproval(id, 'm-bogota', true).status).toBe('awaiting-approval')
+  })
+
+  it('aprobación solo por monto (riesgo bajo): un no no rechaza, dos no sí', () => {
+    const { id, risk } = engine.requestSpend('w-mama', farmacia, cop(250_000))
+    expect(risk).toBe(0)
+    expect(engine.castApproval(id, 'm-bogota', false).status).toBe('awaiting-approval')
     expect(engine.castApproval(id, 'm-medellin', false).status).toBe('rejected')
-    expect(events.at(-1)!.type).toBe('spend-rejected')
+    expect(events.at(-1)).toMatchObject({ type: 'spend-rejected', message: 'El grupo rechazó el gasto.' })
   })
 
   it('no deja votar dos veces ni a quien no es miembro', () => {

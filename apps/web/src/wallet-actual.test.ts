@@ -15,7 +15,7 @@ describe('walletActual', () => {
 
   it('rechaza un id vacío sin perder la selección actual', () => {
     setWalletActual('w-horno')
-    expect(() => setWalletActual('')).toThrow('Selecciona una billetera')
+    expect(() => setWalletActual('')).toThrow('Selecciona un grupo')
     expect(getWalletActual()).toBe('w-horno')
   })
 })

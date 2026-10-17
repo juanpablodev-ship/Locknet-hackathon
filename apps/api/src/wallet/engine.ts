@@ -5,6 +5,7 @@ import type {
   Guardian, Member, Money, PaymentsService, SharedWallet, Spend, SpendStatus, WalletEvent,
 } from '../../../../contracts'
 import { activeMembers, add, gt, newSpend, zero } from './model'
+import { PaymentError, safePaymentError } from '../payments/errors'
 import { assertTransition } from './state'
 
 type Share = Spend['shares'][number]
@@ -50,6 +51,13 @@ export function createEngine(deps: EngineDeps) {
     return s
   }
 
+  function assertNoOtherUnresolved(walletId: string, spendId: string): void {
+    if ([...spends.values()].some(s => s.walletId === walletId && s.id !== spendId &&
+        (s.status === 'paying' || s.shares.some(sh => sh.attempts?.some(a => a.status === 'unknown' || a.status === 'pending'))))) {
+      throw new Error('Otro gasto del grupo tiene un pago en curso o desconocido. Consulta ese intento antes de pagar otro gasto.')
+    }
+  }
+
   function setStatus(spend: Spend, to: SpendStatus): void {
     assertTransition(spend.status, to)
     spend.status = to
@@ -61,10 +69,17 @@ export function createEngine(deps: EngineDeps) {
     const scale = wallet.authorizedCapacity.assetScale
     let total = zero({ assetCode: wallet.currency, assetScale: scale })
     for (const m of activeMembers(wallet)) {
-      const left = m.available ?? m.cap
+      const left = m.available ?? zero(m.cap)
       if (left.assetCode === wallet.currency && left.assetScale === scale) total = add(total, left)
     }
     wallet.authorizedCapacity = total
+    const buckets = new Map<string, Money>()
+    for (const m of activeMembers(wallet)) {
+      if (!m.available) continue
+      const key = m.available.assetCode + ':' + m.available.assetScale
+      buckets.set(key, add(buckets.get(key) ?? zero(m.available), m.available))
+    }
+    wallet.capacityByAsset = [...buckets.values()]
   }
 
   function memberName(wallet: SharedWallet, memberId: string): string {
@@ -84,62 +99,70 @@ export function createEngine(deps: EngineDeps) {
   }
 
   // Un aporte: cotizar (receiveAmount = su parte) → revisar cotización → pagar → seguir hasta que termine.
-  async function payOne(wallet: SharedWallet, spend: Spend, share: Share, incomingPaymentUrl: string): Promise<void> {
+  async function payOne(wallet: SharedWallet, spend: Spend, share: Share, incomingPaymentUrl: string, target = share.share): Promise<void> {
+    const attempt: NonNullable<Share['attempts']>[number] = { incomingPaymentUrl, status: 'prepared' }
+    ;(share.attempts ??= []).push(attempt)
+    let submitted = false
     try {
-      const quote = await deps.payments.quoteShare(share.memberId, incomingPaymentUrl, share.share)
+      const quote = await deps.payments.quoteShare(share.memberId, incomingPaymentUrl, target)
+      attempt.quoteId = quote.quoteId
       const qv = deps.guardian.checkQuote({ debitAmount: quote.debitAmount, receiveAmount: quote.receiveAmount, maxFeePercent })
       spend.verdicts.push(qv)
-      if (qv.status === 'block') return failShare(wallet, spend, share, qv.userMessage)
+      if (qv.status === 'block') { attempt.status = 'failed'; return failShare(wallet, spend, share, qv.userMessage) }
       share.debit = quote.debitAmount
-
+      submitted = true
+      attempt.status = 'unknown' // antes del await: una perdida de respuesta no prueba rechazo
       const { outgoingId } = await deps.payments.payShare(share.memberId, quote.quoteId)
-      let state = await deps.payments.track(outgoingId)
-      for (let i = 1; state === 'pending' && i < maxPolls; i++) {
-        await sleep(pollMs)
-        state = await deps.payments.track(outgoingId)
-      }
-      if (state !== 'completed') {
-        return failShare(wallet, spend, share, state === 'pending' ? 'El pago no se confirmó a tiempo' : 'El pago falló')
-      }
-      share.status = 'paid'
-      delete share.failReason
+      attempt.outgoingId = outgoingId
+      let result = await deps.payments.track(outgoingId)
+      for (let i = 1; result === 'pending' && i < maxPolls; i++) { await sleep(pollMs); result = await deps.payments.track(outgoingId) }
+      attempt.status = result
+      if (result === 'failed') return failShare(wallet, spend, share, 'El proveedor confirmo que el pago fallo.')
+      share.status = result === 'completed' ? 'paid' : 'pending'
+      share.failReason = result === 'pending' ? 'Resultado pendiente; consulta otra vez. No vuelvas a pagar.' : undefined
       updateProgress(spend)
-      const { confirmed, total } = spend.progress
-      emit({ walletId: wallet.id, type: 'share-paid', spendId: spend.id, memberId: share.memberId, amount: share.share,
-             message: `${confirmed} de ${total} aportes confirmados` })
-    } catch (e) {
-      failShare(wallet, spend, share, e instanceof Error ? e.message : String(e))
+      emit({ walletId: wallet.id, type: result === 'completed' ? 'share-paid' : 'share-failed', spendId: spend.id,
+        memberId: share.memberId, message: result === 'completed' ? `${spend.progress.confirmed} de ${spend.progress.total} aportes confirmados` : 'Resultado pendiente; no reintentar pago.' })
+    } catch (error) {
+      const unknown = submitted && (!(error instanceof PaymentError) || error.outcome === 'unknown')
+      attempt.status = unknown ? 'unknown' : 'failed'
+      if (unknown) {
+        share.status = 'pending'; share.failReason = 'Resultado desconocido; no se creara otro pago. Consulta el intento existente.'
+      } else failShare(wallet, spend, share, safePaymentError(error).message)
     }
   }
 
   // Cierre: nunca "pagado" sin que reconcile confirme lo RECIBIDO en todos los cobros del gasto.
   async function finish(wallet: SharedWallet, spend: Spend): Promise<Spend> {
     let received = zero(spend.amount)
+    let completeRead = true
     const receivedByUrl = new Map<string, Money>()
-    for (const url of incomings.get(spend.id) ?? []) {
+    for (const url of new Set(incomings.get(spend.id) ?? [])) {
       let got: Money
       // Un cobro sin confirmar no suma: reconcile no dará "pagado" y el gasto queda incompleto.
-      try { got = await deps.payments.received(url) } catch { continue }
+      try { got = await deps.payments.received(url); received = add(received, got) } catch { completeRead = false; continue }
       receivedByUrl.set(url, got)
-      received = add(received, got)
     }
     // Plan B: cada aporte tiene su propio cobro, así que lo que llegó ahí es lo que llegó de ese miembro.
     // Con un cobro compartido (plan A) no se puede atribuir por miembro y `received` queda vacío.
     for (const share of spend.shares) {
-      const url = shareIncoming.get(`${spend.id}:${share.memberId}`)
-      const got = url ? receivedByUrl.get(url) : undefined
-      if (got) share.received = got
+      const urls = share.attempts?.map(a => a.incomingPaymentUrl) ?? []
+      const values = [...new Set(urls)].map(url => receivedByUrl.get(url))
+      if (deps.incomingPerShare && values.length && values.every((v): v is Money => !!v)) {
+        share.received = values.reduce((sum, got) => add(sum, got), zero(share.share))
+      }
     }
     const rv = deps.guardian.reconcile({ expected: spend.amount, received })
     spend.verdicts = [...spend.verdicts.filter((v) => v.check !== 'reconcile'), rv]
 
-    if (spend.shares.every((s) => s.status === 'paid') && rv.status === 'pass') {
+    if (completeRead && spend.shares.every((s) => s.status === 'paid') && rv.status === 'pass') {
       setStatus(spend, 'paid')
       emit({ walletId: wallet.id, type: 'spend-paid', spendId: spend.id, amount: received,
              message: 'Gasto verificado' })
     } else {
       setStatus(spend, 'incomplete')
     }
+    if (spend.status !== 'paid') emit({ walletId: wallet.id, type: 'spend-updated', spendId: spend.id, message: completeRead ? 'Estado consultado.' : 'Recepcion no confirmada; vuelve a consultar sin pagar.' })
     return spend
   }
 
@@ -150,7 +173,7 @@ export function createEngine(deps: EngineDeps) {
       incomings.set(spend.id, [...(incomings.get(spend.id) ?? []), url])
       return url
     } catch (e) {
-      const reason = `No se pudo crear el cobro: ${e instanceof Error ? e.message : String(e)}`
+      const reason = safePaymentError(e).message
       shares.forEach((s) => failShare(wallet, spend, s, reason))
       return undefined
     }
@@ -160,10 +183,12 @@ export function createEngine(deps: EngineDeps) {
     if (deps.incomingPerShare) {
       // Plan B: cada aporte paga su propio cobro (probado con un pagador en la Test Wallet).
       for (const share of shares) {
-        const url = await newIncoming(wallet, spend, [share], share.share)
+        const left = { ...share.share, value: (BigInt(share.share.value) - BigInt(share.received?.value ?? '0')).toString() }
+        if (BigInt(left.value) <= 0n) { share.status = 'paid'; continue }
+        const url = await newIncoming(wallet, spend, [share], left)
         if (url) {
           shareIncoming.set(`${spend.id}:${share.memberId}`, url)   // el reintento lo reemplaza por su cobro nuevo
-          await payOne(wallet, spend, share, url)
+          await payOne(wallet, spend, share, url, left)
         }
       }
     } else {
@@ -183,11 +208,12 @@ export function createEngine(deps: EngineDeps) {
     },
 
     // Cupo real (plan 12.2): lo que le queda a cada miembro según MembersService.available() de R1.
-    // Si la consulta de un miembro falla, se conserva su último valor y se sigue con los demás.
+    // Un importe no consultable se excluye; no se presenta como cupo actualizado.
     async refreshCapacity(walletId: string, available: (memberId: string) => Promise<Money>): Promise<SharedWallet> {
       const wallet = walletOf(walletId)
+      wallet.capacityStale = false
       for (const m of activeMembers(wallet)) {
-        try { m.available = await available(m.id) } catch { /* último valor conocido */ }
+        try { m.available = await available(m.id) } catch { m.available = undefined; wallet.capacityStale = true }
       }
       recomputeCapacity(wallet)
       emit({ walletId, type: 'capacity-updated', amount: wallet.authorizedCapacity,
@@ -197,7 +223,7 @@ export function createEngine(deps: EngineDeps) {
 
     // Reinicio de demo: reemplaza billeteras y borra gastos y cobros. No revoca permisos externos.
     reset(next: SharedWallet[]): void {
-      if ([...spends.values()].some((s) => s.status === 'paying')) {
+      if ([...spends.values()].some((s) => s.status === 'paying' || s.shares.some(sh => sh.attempts?.some(a => a.status === 'unknown' || a.status === 'pending')))) {
         throw new Error('No se puede reiniciar con un pago en curso')
       }
       wallets.clear()
@@ -211,7 +237,7 @@ export function createEngine(deps: EngineDeps) {
     addMember(walletId: string, member: Member): SharedWallet {
       const wallet = walletOf(walletId)
       if (member.status !== 'active') throw new Error(`Solo se agregan miembros activos (estado: ${member.status})`)
-      if (wallet.members.some((m) => m.id === member.id)) throw new Error(`Ya es miembro: ${member.id}`)
+      if (wallet.members.some((m) => m.id === member.id || (m.walletAddress === member.walletAddress && m.status === 'active'))) throw new Error(`Ya es miembro: ${member.id}`)
       wallet.members.push(structuredClone(member))
       emit({ walletId, type: 'member-active', memberId: member.id, amount: member.cap,
              message: `${member.name} se unió. No depositó nada.` })
@@ -274,7 +300,12 @@ export function createEngine(deps: EngineDeps) {
       emit({ walletId: wallet.id, type: 'approval-cast', spendId, memberId,
              message: yes ? 'Aprobó el gasto.' : 'Rechazó el gasto.' })
 
-      const required = wallet.rules.groupApproval.approvalsRequired
+      const { approvalsRequired: required, riskThreshold } = wallet.rules.groupApproval
+      if (!yes && spend.risk >= riskThreshold) {   // un rechazo detiene un pago riesgoso
+        setStatus(spend, 'rejected')
+        emit({ walletId: wallet.id, type: 'spend-rejected', spendId, message: 'Un miembro del grupo rechazó un pago riesgoso.' })
+        return spend
+      }
       const yesCount = spend.approvals.filter((a) => a.yes).length
       const pending = voters.length - spend.approvals.length
       if (yesCount >= required) {
@@ -291,21 +322,77 @@ export function createEngine(deps: EngineDeps) {
     async executeSpend(spendId: string): Promise<Spend> {
       const spend = spendOf(spendId)
       const wallet = walletOf(spend.walletId)
+      assertNoOtherUnresolved(wallet.id, spendId)
       setStatus(spend, 'paying')
       return payShares(wallet, spend, spend.shares.filter((s) => s.status === 'pending'), spend.amount)
     },
 
-    // INCOMPLETO → PAGANDO: reintenta solo los aportes fallidos, con un cobro nuevo por lo que falta.
-    // No devuelve automáticamente los aportes ya hechos (límite dicho en el plan).
-    async retryShare(spendId: string): Promise<Spend> {
-      const spend = spendOf(spendId)
-      const wallet = walletOf(spend.walletId)
+    revokeMember(walletId: string, memberId: string): void {
+      const wallet = walletOf(walletId)
+      const member = wallet.members.find(m => m.id === memberId)
+      if (!member) throw new Error('Miembro no encontrado')
+      member.status = 'revoked'; member.available = zero(member.cap); recomputeCapacity(wallet)
+      emit({ walletId, type: 'member-revoked', memberId, message: 'Permiso revocado.' })
+    },
+
+    async recheckSpend(spendId: string): Promise<Spend> {
+      const spend = spendOf(spendId); const wallet = walletOf(spend.walletId)
       setStatus(spend, 'paying')
-      const failed = spend.shares.filter((s) => s.status === 'failed')
-      if (failed.length === 0) return finish(wallet, spend)   // solo faltaba confirmar lo recibido
-      failed.forEach((s) => { s.status = 'pending'; delete s.failReason })
+      for (const share of spend.shares) {
+        const attempts = share.attempts ?? []
+        // Un reintento rechazado antes de crear el pago no oculta outgoings anteriores.
+        for (const attempt of attempts) {
+          if (!attempt.outgoingId) continue
+          try { attempt.status = await deps.payments.track(attempt.outgoingId) }
+          catch { attempt.status = 'unknown' }
+        }
+        if (attempts.some(a => a.status === 'unknown' || a.status === 'pending' || a.status === 'prepared')) {
+          share.status = 'pending'
+          share.failReason = 'Resultado pendiente o desconocido; consulta sin volver a pagar.'
+        } else if (attempts.some(a => a.status === 'completed')) {
+          share.status = 'paid'
+          delete share.failReason
+          if (deps.incomingPerShare) {
+            try {
+              let received = zero(share.share)
+              for (const url of new Set(attempts.map(a => a.incomingPaymentUrl))) {
+                received = add(received, await deps.payments.received(url))
+              }
+              if (BigInt(received.value) < BigInt(share.share.value)) {
+                share.status = 'failed'
+                share.failReason = 'Recepción parcial confirmada; falta completar el aporte.'
+              }
+            } catch {
+              share.status = 'pending'
+              share.failReason = 'No se pudo confirmar la recepción; consulta sin volver a pagar.'
+            }
+          }
+        } else if (attempts.length) {
+          share.status = 'failed'
+          share.failReason ??= 'El proveedor confirmó el fallo.'
+        }
+      }
       updateProgress(spend)
-      const missing = failed.reduce((sum, s) => add(sum, s.share), zero(spend.amount))
+      return finish(wallet, spend)
+    },
+
+    async retryShare(spendId: string): Promise<Spend> {
+      const spend = spendOf(spendId); const wallet = walletOf(spend.walletId)
+      assertNoOtherUnresolved(wallet.id, spendId)
+      if (spend.shares.some(s => s.status === 'pending' && s.attempts?.length)) throw new Error('Hay resultados desconocidos; consulta antes de reintentar.')
+      setStatus(spend, 'paying')
+      // Consultar recepcion antes de crear nada, incluso si el proveedor ya marco fallo.
+      try {
+        for (const share of spend.shares.filter(s => s.status === 'failed')) {
+          if (!deps.incomingPerShare && share.attempts?.some(a => a.outgoingId)) throw new Error('Reintento compartido requiere conciliacion manual')
+          const urls = deps.incomingPerShare ? [...new Set(share.attempts?.map(a => a.incomingPaymentUrl) ?? [])] : []
+          share.received = zero(share.share)
+          for (const url of urls) share.received = add(share.received, await deps.payments.received(url))
+        }
+      } catch { setStatus(spend, 'incomplete'); throw new Error('Consulta de recepcion pendiente; no se creo otro pago.') }
+      const failed = spend.shares.filter(s => s.status === 'failed')
+      failed.forEach(s => { s.status = 'pending'; delete s.failReason })
+      const missing = failed.reduce((sum, s) => add(sum, { ...s.share, value: (BigInt(s.share.value) - BigInt(s.received?.value ?? '0')).toString() }), zero(spend.amount))
       return payShares(wallet, spend, failed, missing)
     },
   }

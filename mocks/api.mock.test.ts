@@ -40,7 +40,7 @@ describe('getWallet', () => {
   })
 
   it('lanza error si la billetera no existe', () => {
-    expect(() => getWallet('nada')).toThrow('Billetera no encontrada')
+    expect(() => getWallet('nada')).toThrow('Grupo no encontrado')
   })
 
   it('mutar el resultado no afecta una segunda llamada', () => {
@@ -49,7 +49,7 @@ describe('getWallet', () => {
     primera.members.pop()
 
     const segunda = getWallet('w-mama')
-    expect(segunda.name).toBe('Cuidado de mamá')
+    expect(segunda.name).toBe('Medicinas de mamá')
     expect(segunda.members).toHaveLength(3)
   })
 })
@@ -80,7 +80,7 @@ describe('resetMock', () => {
 
     resetMock()
 
-    expect(getWallet('w-mama').name).toBe('Cuidado de mamá')
+    expect(getWallet('w-mama').name).toBe('Medicinas de mamá')
     expect(getSpends('w-mama')).toHaveLength(1)
   })
 })
@@ -183,7 +183,7 @@ describe('playEscenario1', () => {
     vi.advanceTimersByTime(10_000)
 
     expect(eventos).toHaveLength(1)
-    expect(getWallet('w-mama')).toEqual(cuidadoDeMama)
+    expect(getWallet('w-mama')).toEqual({ ...cuidadoDeMama, name: 'Medicinas de mamá' })
   })
 })
 
@@ -267,20 +267,30 @@ describe('castApproval', () => {
     expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'approval-cast', 'spend-approved'])
   })
 
-  it('1 voto en contra no rechaza el gasto', () => {
-    const resultado = castApproval('s-ataque', 'm-bogota', false)
-    expect(resultado.status).toBe('awaiting-approval')
-  })
-
-  it('2 votos en contra rechazan el gasto', () => {
+  it('pago riesgoso: 1 voto en contra lo rechaza de inmediato', () => {
     const eventos: WalletEvent[] = []
     onEvents('w-mama', (e) => eventos.push(e))
 
-    castApproval('s-ataque', 'm-bogota', false)
-    const resultado = castApproval('s-ataque', 'm-medellin', false)
+    const resultado = castApproval('s-ataque', 'm-bogota', false)
 
     expect(resultado.status).toBe('rejected')
-    expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'approval-cast', 'spend-rejected'])
+    expect(eventos.map((e) => e.type)).toEqual(['approval-cast', 'spend-rejected'])
+    expect(eventos.at(-1)!.message).toBe('Un miembro del grupo rechazó un pago riesgoso.')
+  })
+
+  it('pago riesgoso: 1 voto a favor no basta, sigue awaiting-approval', () => {
+    expect(castApproval('s-ataque', 'm-bogota', true).status).toBe('awaiting-approval')
+  })
+
+  it('aprobación solo por monto (riesgo bajo): 1 no no rechaza, 2 no sí', () => {
+    const monto250 = { value: '25000000', assetCode: 'COP', assetScale: 2 }
+    const { id } = requestSpend('w-mama', FARMACIA_CONOCIDA, monto250)
+    const eventos: WalletEvent[] = []
+    onEvents('w-mama', (e) => eventos.push(e))
+
+    expect(castApproval(id, 'm-bogota', false).status).toBe('awaiting-approval')
+    expect(castApproval(id, 'm-medellin', false).status).toBe('rejected')
+    expect(eventos.at(-1)).toMatchObject({ type: 'spend-rejected', message: 'El grupo rechazó el gasto.' })
   })
 
   it('votar dos veces con el mismo miembro lanza "Ya votó"', () => {
@@ -290,7 +300,6 @@ describe('castApproval', () => {
 
   it('votar sobre un gasto ya rejected lanza el error de estado', () => {
     castApproval('s-ataque', 'm-bogota', false)
-    castApproval('s-ataque', 'm-medellin', false)
 
     expect(() => castApproval('s-ataque', 'm-madrid', true)).toThrow(
       'El gasto no está esperando aprobación (estado: rejected)'
@@ -333,7 +342,7 @@ describe('startJoin y finishJoin', () => {
 
     expect(resultado.grantWarning.status).toBe('warn')
     expect(resultado.grantWarning.userMessage).toBe(
-      'Esta billetera te pide autorizar hasta $5.000.000 sin límite de tiempo. Es mucho más de lo normal.'
+      'Esta app te pide autorizar hasta $5.000.000 sin límite de tiempo. Es mucho más de lo normal.'
     )
   })
 

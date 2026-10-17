@@ -148,18 +148,18 @@ describe('renderGasto - otros estados', () => {
     expect(html).not.toContain('data-accion')
   })
 
-  it('approved muestra el panel verde y el botón "Pagar ahora"', () => {
+  it('approved muestra el panel verde y el botón "Pagar la cuota del mes"', () => {
     const spend = { ...ataque, status: 'approved' as const }
     const html = renderGasto(spend, cuidadoDeMama)
     expect(html).toContain('El grupo aprobó el gasto.')
-    expect(html).toContain('Pagar ahora')
+    expect(html).toContain('Pagar la cuota del mes')
     expect(html).toContain('data-accion="pagar"')
   })
 
-  it('"Pagar ahora" solo aparece en approved', () => {
+  it('"Pagar la cuota del mes" solo aparece en approved', () => {
     for (const estado of ['requested', 'paying', 'incomplete', 'paid', 'rejected'] as const) {
       const spend = estado === 'paying' ? gastoPagando : estado === 'incomplete' ? gastoIncompleto : { ...ataque, status: estado }
-      expect(renderGasto(spend, cuidadoDeMama)).not.toContain('Pagar ahora')
+      expect(renderGasto(spend, cuidadoDeMama)).not.toContain('Pagar la cuota del mes')
     }
   })
 
@@ -216,4 +216,26 @@ describe('renderGasto - otros estados', () => {
     expect(renderGasto(gastoPagando, cuidadoDeMama)).not.toContain('Gasto verificado')
     expect(renderGasto(gastoIncompleto, cuidadoDeMama)).not.toContain('Gasto verificado')
   })
+})
+
+describe('consulta accesible en gastos incompletos', () => {
+  it.each(['failed', 'pending'] as const)('con aporte %s el botón está en el contenedor que escucha clics', status => {
+    const spend = structuredClone(gastoIncompleto)
+    spend.shares[2].status = status
+    const html = renderGasto(spend, cuidadoDeMama)
+    const actions = [...html.matchAll(/<div class="acciones">([\s\S]*?)<\/div>/g)].map(m => m[1])
+    expect(actions.some(content => content.includes('data-accion="consultar"'))).toBe(true)
+    expect(html).toContain('Consultar intentos y recepción (sin pagar)')
+  })
+})
+
+it('muestra enlace al gasto bloqueante y oculta pagar cuando existe otro intento pendiente', () => {
+  const approved = structuredClone(medicina)
+  approved.status = 'approved'
+  const blockedBy = structuredClone(gastoIncompleto)
+  blockedBy.id = 'anterior'
+  const html = renderGasto(approved, cuidadoDeMama, undefined, blockedBy)
+  expect(html).toContain('Hay un pago anterior sin resolver')
+  expect(html).toContain('href="#/gasto/anterior"')
+  expect(html).not.toContain('data-accion="pagar"')
 })

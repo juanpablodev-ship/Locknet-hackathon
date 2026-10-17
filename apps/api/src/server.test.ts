@@ -20,7 +20,7 @@ beforeEach(async () => {
     pollMs: 0, sleep: async () => {},
   })
   engine.addWallet(structuredClone(cuidadoDeMama))
-  server = createApp({ engine, bus }).listen(0)
+  server = createApp({ engine, bus, security: false }).listen(0)
   await new Promise((r) => server.once('listening', r))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })

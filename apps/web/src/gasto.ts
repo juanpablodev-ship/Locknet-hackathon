@@ -156,6 +156,7 @@ function renderAporte(share: Share, wallet: SharedWallet): string {
       <p class="aporte-nombre">${nombre}</p>
       <p>Aporta: ${share.debit ? escapeHtml(formatMoney(share.debit)) : '—'}</p>
       <p>Llegó: ${share.received ? escapeHtml(formatMoney(share.received)) : '—'}</p>
+      ${share.debit && share.debit.assetCode !== share.share.assetCode ? '<p>Conversión cotizada por el proveedor. Sin tasa independiente no se verifica el costo de cambio.</p>' : ''}
       <p class="estado estado-${estado.tono}">${estado.texto}</p>
     </div>
   `
@@ -188,6 +189,7 @@ function cuerpoBloqueado(spend: Spend): string {
 }
 
 function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
+  const unknown = spend.shares.some(s => s.status === 'pending')
   const fallido = spend.shares.find((s) => s.status === 'failed')
   const nombreFallido = fallido
     ? escapeHtml(wallet.members.find((m) => m.id === fallido.memberId)?.name ?? fallido.memberId)
@@ -199,30 +201,40 @@ function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
       ${fallido ? `<p>${nombreFallido}: ${escapeHtml(fallido.failReason ?? 'no se pudo confirmar el aporte')}</p>` : ''}
     </div>
     ${cuerpoProgreso(spend, wallet)}
-    ${
-      fallido
-        ? `<div class="acciones">
-             <button type="button" class="boton" data-accion="reintentar" data-spend="${escapeHtml(spend.id)}">Reintentar el aporte de ${nombreFallido}</button>
-           </div>`
-        : ''
-    }
+    <p>Un cobro vencido (EXPIRED) muestra el importe solicitado, no prueba que ese dinero haya llegado. Solo cuenta la recepción confirmada.</p>
+    <p>No se devuelven automáticamente aportes ya recibidos.</p>
+    ${unknown ? "<p>Hay un resultado pendiente o desconocido. No se habilita otro pago.</p>" : ""}
+    <div class="acciones">
+      <button type="button" class="boton" data-accion="consultar" data-spend="${escapeHtml(spend.id)}">Consultar intentos y recepción (sin pagar)</button>
+      ${fallido && !unknown
+        ? `<button type="button" class="boton" data-accion="reintentar" data-spend="${escapeHtml(spend.id)}">Reintentar el aporte de ${nombreFallido}</button>`
+        : ''}
+    </div>
     <div id="mensaje" role="status"></div>
   `
 }
 
-function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string): string {
+function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string, paymentBlocker?: Spend): string {
   switch (spend.status) {
     case 'requested':
       return `<p class="revisando">Revisando el gasto con ${NOMBRE_GUARDIAN}…</p>`
     case 'awaiting-approval':
       return cuerpoEsperandoAprobacion(spend, wallet, votaComo)
     case 'approved':
+      if (paymentBlocker) return `
+        <div class="panel panel-ambar" role="status">
+          <p class="panel-titulo">Hay un pago anterior sin resolver</p>
+          <p>Este gasto está aprobado, pero no puede pagarse mientras otro gasto del grupo tenga un resultado pendiente o desconocido. Recargar fondos no elimina ese bloqueo.</p>
+          <a class="boton" href="#/gasto/${encodeURIComponent(paymentBlocker.id)}">Consultar el gasto anterior (sin pagar)</a>
+        </div>
+        <div id="mensaje" role="status"></div>
+      `
       return `
         <div class="panel panel-verde">
           <p class="panel-titulo">El grupo aprobó el gasto.</p>
         </div>
         <div class="acciones">
-          <button type="button" class="boton" data-accion="pagar" data-spend="${escapeHtml(spend.id)}">Pagar ahora</button>
+          <button type="button" class="boton" data-accion="pagar" data-spend="${escapeHtml(spend.id)}">Pagar la cuota del mes</button>
         </div>
         <div id="mensaje" role="status"></div>
       `
@@ -252,11 +264,11 @@ function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string):
   }
 }
 
-export function renderGasto(spend: Spend, wallet: SharedWallet, votaComo?: string): string {
+export function renderGasto(spend: Spend, wallet: SharedWallet, votaComo?: string, paymentBlocker?: Spend): string {
   return `
     <div class="contenedor">
       <p class="sello">Protegido por ${NOMBRE_GUARDIAN}</p>
-      ${cuerpoPorEstado(spend, wallet, votaComo)}
+      ${cuerpoPorEstado(spend, wallet, votaComo, paymentBlocker)}
     </div>
   `
 }
