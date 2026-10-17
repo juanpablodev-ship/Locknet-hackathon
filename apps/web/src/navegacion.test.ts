@@ -86,3 +86,16 @@ describe('renderAppChrome', () => {
     }
   })
 })
+
+describe('enlace "Crear grupo"', () => {
+  it('aparece en el menú y lleva a #/crear-grupo', () => {
+    expect(renderPestanas({ name: 'inicio' }, 0)).toContain('<a class="" href="#/crear-grupo">Crear grupo</a>')
+  })
+
+  it('se marca como activo solo en esa pantalla', () => {
+    const enCrear = renderPestanas({ name: 'crear-grupo' }, 0)
+    expect(enCrear).toContain('class="tab-activa" href="#/crear-grupo" aria-current="page"')
+    expect(enCrear).not.toContain('class="tab-activa" href="#/inicio"')
+    expect(renderPestanas({ name: 'inicio' }, 0)).not.toContain('href="#/crear-grupo" aria-current')
+  })
+})
