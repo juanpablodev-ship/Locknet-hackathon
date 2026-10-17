@@ -4,6 +4,10 @@
 
 // ---------- Comunes ----------
 export interface Money { value: string; assetCode: string; assetScale: number }
+export interface JoinSetup {
+  members: { name: string; walletAddress: string; assetCode: string; assetScale: number }[]
+  interval: string
+}
 
 // ---------- Guardián (R5) ----------
 export type Status = 'pass' | 'warn' | 'block'
@@ -52,6 +56,15 @@ export interface SharedWallet {
   members: Member[]; rules: Rules
   knownDestinations: { name: string; walletAddress: string }[]
   authorizedCapacity: Money            // cupo del grupo: capacidad autorizada, NO saldo
+  capacityByAsset?: Money[]            // sin conversión entre monedas
+  capacityStale?: boolean
+}
+
+export interface PaymentAttempt {
+  incomingPaymentUrl: string
+  quoteId?: string
+  outgoingId?: string
+  status: 'prepared' | 'unknown' | 'pending' | 'completed' | 'failed'
 }
 
 export interface Spend {
@@ -61,12 +74,13 @@ export interface Spend {
   risk: number; verdicts: Verdict[]
   approvals: { memberId: string; yes: boolean }[]
   shares: { memberId: string; share: Money; debit?: Money; received?: Money
-            status: 'pending' | 'paid' | 'failed'; failReason?: string }[]
+            status: 'pending' | 'paid' | 'failed'; failReason?: string; attempts?: PaymentAttempt[] }[]
   progress: { confirmed: number; total: number }   // "2 de 3 aportes confirmados"
 }
 
 // ---------- Servicios ----------
 export interface MembersService {      // R1
+  cancelJoin?(state?: string): void // solo borra la interacción local de esta sesión; no revoca grants
   startJoin(walletId: string, member: Omit<Member, 'id' | 'status'>): Promise<{ redirectUrl: string; grantWarning: Verdict }>
   finishJoin(p: { interactRef: string; hash: string; state: string }): Promise<{ member: Member; hashVerdict: Verdict }>
   available(memberId: string): Promise<Money>
@@ -91,7 +105,7 @@ export interface WalletEvent {
   walletId: string
   type: 'member-active' | 'member-revoked' | 'capacity-updated'
       | 'spend-requested' | 'spend-reviewed' | 'approval-cast' | 'wallet-confirm-requested' | 'spend-approved'
-      | 'spend-blocked' | 'spend-rejected' | 'share-paid' | 'share-failed'
+      | 'spend-updated' | 'spend-blocked' | 'spend-rejected' | 'share-paid' | 'share-failed'
       | 'spend-paid' | 'goal-reached' | 'goal-failed' | 'return-paid'
   spendId?: string; memberId?: string; amount?: Money; risk?: number
   message: string; ts: number

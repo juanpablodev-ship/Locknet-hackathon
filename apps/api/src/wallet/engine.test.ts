@@ -58,7 +58,7 @@ describe('addMember: unirse sin depositar', () => {
     engine.addMember('w-vacia', nuevo('a'))
     const w = engine.addMember('w-vacia', nuevo('b'))
     expect(w.members.map((m) => m.id)).toEqual(['a', 'b'])
-    expect(w.authorizedCapacity).toEqual(cop(200_000))
+    expect(w.authorizedCapacity).toEqual(cop(0))
     expect(events.filter((e) => e.walletId === 'w-vacia').map((e) => e.type))
       .toEqual(['member-active', 'capacity-updated', 'member-active', 'capacity-updated'])
   })
@@ -87,13 +87,15 @@ describe('refreshCapacity: cupo real con available()', () => {
     expect(events.at(-1)).toMatchObject({ type: 'capacity-updated', amount: cop(160_000) })
   })
 
-  it('si available() falla para un miembro, conserva su último valor', async () => {
+  it('si available() falla excluye ese importe y declara cupo incompleto, sin mezclar EUR', async () => {
     const w = await engine.refreshCapacity('w-mama', async (id) => {
       if (id === 'm-bogota') throw new Error('No se pudo consultar el cupo autorizado')
       return id === 'm-madrid' ? { value: '2200', assetCode: 'EUR', assetScale: 2 } : cop(10_000)
     })
-    expect(w.members[0].available).toEqual(cop(100_000))
-    expect(w.authorizedCapacity).toEqual(cop(110_000))
+    expect(w.members[0].available).toBeUndefined()
+    expect(w.capacityStale).toBe(true)
+    expect(w.authorizedCapacity).toEqual(cop(10_000))
+    expect(w.capacityByAsset).toEqual([cop(10_000), { value: '2200', assetCode: 'EUR', assetScale: 2 }])
   })
 })
 
