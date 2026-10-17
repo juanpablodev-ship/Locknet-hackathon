@@ -289,7 +289,7 @@ async function pintarGasto(id: string): Promise<void> {
     if (botonAprobarRiesgo) botonAprobarRiesgo.disabled = !checkboxRiesgo.checked
   })
 
-  app.querySelector('.acciones')?.addEventListener('click', (ev) => {
+  app.querySelector('.gasto-pantalla')?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
     if (!boton) return
     const accion = boton.dataset.accion
