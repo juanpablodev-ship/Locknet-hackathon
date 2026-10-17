@@ -40,7 +40,7 @@ describe('getWallet', () => {
   })
 
   it('lanza error si la billetera no existe', () => {
-    expect(() => getWallet('nada')).toThrow('Billetera no encontrada')
+    expect(() => getWallet('nada')).toThrow('Grupo no encontrado')
   })
 
   it('mutar el resultado no afecta una segunda llamada', () => {

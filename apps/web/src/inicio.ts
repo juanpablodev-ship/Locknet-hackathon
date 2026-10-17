@@ -116,7 +116,7 @@ function renderReglas(w: SharedWallet, spends: Spend[]): string {
       : ''
     return `
       <section class="reglas-billetera">
-        <h2>Reglas de esta billetera</h2>
+        <h2>Reglas de este grupo</h2>
         <p>${descripcionMeta}</p>
         <p>${participantes}</p>
         ${barra}
@@ -130,7 +130,7 @@ function renderReglas(w: SharedWallet, spends: Spend[]): string {
     const rule = w.rules.return
     return `
       <section class="reglas-billetera">
-        <h2>Reglas de esta billetera</h2>
+        <h2>Reglas de este grupo</h2>
         <p>Cada venta devuelve el ${rule.percentPerSale}% hasta ${escapeHtml(formatMoney(rule.cap))}</p>
         <p class="nota-configuracion">Configuración en pantalla: este caso aún no ejecuta pagos reales</p>
       </section>
@@ -142,8 +142,8 @@ function renderReglas(w: SharedWallet, spends: Spend[]): string {
 
 export function renderSelectorBilleteras(wallets: SharedWallet[], currentId: string): string {
   return `
-    <nav class="selector-billeteras" aria-label="Selector de billeteras">
-      <p>Misma billetera, otra regla</p>
+    <nav class="selector-billeteras" aria-label="Selector de grupos">
+      <p>Mismo motor, otro contrato</p>
       <div class="acciones">
         ${wallets
           .map(

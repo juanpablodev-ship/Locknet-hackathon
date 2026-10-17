@@ -5,6 +5,6 @@ export function getWalletActual(): string {
 }
 
 export function setWalletActual(id: string): void {
-  if (!id) throw new Error('Selecciona una billetera')
+  if (!id) throw new Error('Selecciona un grupo')
   actualId = id
 }

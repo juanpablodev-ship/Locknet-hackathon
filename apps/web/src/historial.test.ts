@@ -30,7 +30,7 @@ describe('renderHistorial', () => {
   it('muestra el estado vacío sin gastos', () => {
     const html = renderHistorial([], cuidadoDeMama)
     expect(html).toContain('class="sin-historial"')
-    expect(html).toContain('Todavía no hay gastos en esta billetera')
+    expect(html).toContain('Todavía no hay gastos en este grupo')
   })
 
   it('escapa el nombre del destino', () => {

@@ -64,7 +64,7 @@ export function getWallets(): SharedWallet[] {
 
 export function getWallet(id: string): SharedWallet {
   const wallet = wallets.find((w) => w.id === id)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
   return structuredClone(wallet)
 }
 
@@ -131,7 +131,7 @@ export function startJoin(
   member: Omit<Member, 'id' | 'status'>,
 ): { redirectUrl: string; grantWarning: Verdict } {
   const wallet = wallets.find((item) => item.id === walletId)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
   if (member.cap.assetCode !== wallet.currency) {
     throw new Error('El tope debe estar en la moneda de la billetera')
   }
@@ -189,7 +189,7 @@ export function finishJoin({ ok, memberId }: { ok: boolean; memberId: string }):
   if (memberId === ultimoJoinPendiente) ultimoJoinPendiente = null
 
   const wallet = wallets.find((item) => item.id === pendiente.walletId)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
   wallet.members.push(pendiente.member)
   wallet.authorizedCapacity = {
     ...wallet.authorizedCapacity,
@@ -385,7 +385,7 @@ let contadorGastos = 0
 
 export function requestSpend(walletId: string, destination: Spend['destination'], amount: Money): Spend {
   const wallet = wallets.find((w) => w.id === walletId)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
 
   const activos = wallet.members.filter((m) => m.status === 'active')
   const partes = repartirIgual(amount, activos.length)

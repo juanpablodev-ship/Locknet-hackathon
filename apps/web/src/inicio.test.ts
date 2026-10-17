@@ -151,7 +151,7 @@ describe('renderInicio', () => {
     const wallets = getWallets()
     const html = renderSelectorBilleteras(wallets, 'w-parque')
 
-    expect(html).toContain('Misma billetera, otra regla')
+    expect(html).toContain('Mismo motor, otro contrato')
     expect(html).toContain('data-wallet-id="w-parque" aria-pressed="true"')
   })
 })
