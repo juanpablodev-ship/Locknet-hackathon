@@ -508,6 +508,16 @@ body {
   cursor: pointer;
 }
 
+.chip:hover:not(.billetera-seleccionada) {
+  border-color: var(--texto);
+  background: var(--sup);
+}
+
+.chip:focus-visible {
+  outline: 3px solid var(--verde);
+  outline-offset: 2px;
+}
+
 .billetera-seleccionada {
   border-color: var(--texto);
   background: var(--texto);
@@ -777,6 +787,50 @@ body {
   max-width: 720px;
 }
 
+.pagina-formulario {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.encabezado-formulario {
+  margin: 0;
+}
+
+.formulario-ceja {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.encabezado-formulario h1 {
+  margin: 0;
+  font-size: clamp(28px, 7vw, 36px);
+  line-height: 1.15;
+}
+
+.encabezado-formulario > p:last-child {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.formulario-panel {
+  max-width: none;
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--sup);
+}
+
+.formulario-panel h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
 .formulario label {
   margin-top: 8px;
   font-weight: 700;
@@ -804,6 +858,28 @@ body {
   resize: vertical;
 }
 
+.formulario input:focus-visible,
+.formulario select:focus-visible,
+.formulario textarea:focus-visible {
+  outline: 3px solid var(--texto);
+  outline-offset: 2px;
+}
+
+.campos-extra:not([hidden]) {
+  display: grid;
+  gap: 12px;
+}
+
+.formulario-panel > p {
+  margin: 4px 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.formulario-panel > .btn {
+  min-height: 52px;
+}
+
 .vista-previa {
   margin: 4px 0;
   padding: 12px 16px;
@@ -821,6 +897,40 @@ body {
   border: 1px solid var(--borde);
   border-radius: 12px;
   background: #ffffff;
+}
+
+.tarjeta-invitacion {
+  display: grid;
+  justify-items: center;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--sup);
+  text-align: center;
+}
+
+.tarjeta-invitacion > p {
+  max-width: 38ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.pagina-unirse .qr-unirse {
+  margin-top: 0;
+  background: var(--fondo);
+}
+
+.resultado-unirse {
+  align-content: start;
+}
+
+.resultado-unirse-panel {
+  margin-top: 8px;
+}
+
+.advertencia-unirse .acciones {
+  margin-top: 16px;
 }
 
 .lista-historial {
@@ -1711,4 +1821,5 @@ body {
   .panel { padding: 16px; }
   .panel-titulo { font-size: clamp(24px, 7vw, 32px); }
   .acciones > button { width: 100%; }
+  .formulario-panel > .btn { width: 100%; }
 }
