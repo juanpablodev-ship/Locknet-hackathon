@@ -4,6 +4,7 @@ export type Route =
   | { name: 'unirse-volver'; ok?: boolean; memberId?: string }
   | { name: 'gasto-nuevo' }
   | { name: 'gasto'; id: string }
+  | { name: 'por-aprobar' }
   | { name: 'historial' }
   | { name: 'no-encontrada' }
 
@@ -23,6 +24,7 @@ export function parseHash(hash: string): Route {
       ...(params.has('miembro') ? { memberId: params.get('miembro') ?? undefined } : {}),
     }
   }
+  if (parts.length === 1 && parts[0] === 'por-aprobar') return { name: 'por-aprobar' }
   if (parts.length === 1 && parts[0] === 'historial') return { name: 'historial' }
   if (parts.length === 1 && parts[0] === 'gasto-nuevo') return { name: 'gasto-nuevo' }
   if (parts.length === 2 && parts[0] === 'gasto' && parts[1] === 'nuevo') return { name: 'gasto-nuevo' }

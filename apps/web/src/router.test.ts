@@ -38,6 +38,12 @@ describe('parseHash', () => {
     expect(parseHash('#/historial')).toEqual({ name: 'historial' })
   })
 
+  it('reconoce #/por-aprobar, distinta de #/gasto/:id y #/gasto/nuevo', () => {
+    expect(parseHash('#/por-aprobar')).toEqual({ name: 'por-aprobar' })
+    expect(parseHash('#/gasto/nuevo')).toEqual({ name: 'gasto-nuevo' })
+    expect(parseHash('#/gasto/abc')).toEqual({ name: 'gasto', id: 'abc' })
+  })
+
   it('da no-encontrada para una ruta desconocida', () => {
     expect(parseHash('#/xyz')).toEqual({ name: 'no-encontrada' })
   })

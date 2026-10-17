@@ -12,6 +12,7 @@
   --fondo: #ffffff;
   --texto: #222222;
   --borde: #b2b2b2;
+  --altura-tabs: 64px;
   color-scheme: light;
 }
 
@@ -93,11 +94,46 @@ body {
 
 .banda-respaldo {
   padding: 10px 16px;
-  background: #fff1c2;
+  background: var(--ambar);
   border-bottom: 2px solid var(--ambar);
-  color: var(--texto);
+  color: var(--fondo);
   font-weight: 700;
   text-align: center;
+}
+
+.cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--fondo);
+  color: var(--texto);
+  border-bottom: 1px solid var(--borde);
+}
+
+.cab b {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.cab span {
+  display: block;
+  margin-top: 2px;
+  font-size: 16px;
+  opacity: 0.75;
+}
+
+.cab button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
 }
 
 .acciones-demo {
@@ -128,41 +164,70 @@ body {
   cursor: wait;
 }
 
-.menu-navegacion {
+/* Barra de pestañas fija abajo (del borrador): reemplaza el menú de la Fase C.
+   "Pedir un gasto" e "Invitar a alguien" quedan como botones grandes en Inicio. */
+.tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  padding: 8px 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: var(--altura-tabs);
   background: var(--fondo);
-  border-bottom: 1px solid var(--borde);
+  border-top: 1px solid var(--borde);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-.menu-navegacion a {
+.tabs a {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: 56px;
   padding: 8px;
-  border: 1px solid var(--borde);
-  border-radius: 6px;
   color: var(--texto);
-  font-size: 20px;
-  font-weight: 700;
+  opacity: 0.75;
+  font-size: 16px;
+  font-weight: 400;
   text-align: center;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-.menu-navegacion .menu-activo {
-  background: var(--verde);
-  border-color: var(--verde);
+.tabs a.tab-activa {
+  opacity: 1;
+  font-weight: 700;
+}
+
+.tabs a.tab-activa::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 24%;
+  right: 24%;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: var(--morado);
+}
+
+.tabs i {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--rojo);
   color: #fff;
+  font-size: 13px;
+  font-style: normal;
 }
 
 .contenedor {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 16px 16px 96px;
+  /* Deja espacio para las pestañas fijas de abajo y, en modo simulado, el panel de
+     desarrollo apilado encima de ellas (ver .panel-dev). */
+  padding: 16px 16px calc(var(--altura-tabs) + 140px);
   box-sizing: border-box;
 }
 
@@ -361,9 +426,10 @@ body {
 
 .panel-dev {
   position: fixed;
-  bottom: 0;
+  bottom: var(--altura-tabs);
   left: 0;
   right: 0;
+  z-index: 6;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
