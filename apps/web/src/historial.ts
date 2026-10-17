@@ -12,8 +12,8 @@ function renderFila(spend: Spend): string {
   const tone = tonoEstado(spend.status)
   const sello = spend.status === 'paid' ? '<span class="sello sello-verificado">Gasto verificado</span>' : ''
   return `
-    <article class="fila-gasto">
-      <div>
+    <article class="fila-gasto fila-gasto-${tone}">
+      <div class="fila-gasto-detalle">
         <p class="fila-gasto-destino">${escapeHtml(spend.destination.name)}</p>
         <p class="estado estado-${tone}">${escapeHtml(statusLabel(spend.status))}</p>
         ${sello}
@@ -27,16 +27,16 @@ function renderFila(spend: Spend): string {
 export function renderHistorial(spends: Spend[], wallet: SharedWallet): string {
   if (spends.length === 0) {
     return `
-      <div class="contenedor">
+      <div class="contenedor historial">
         <h1>Historial · ${escapeHtml(wallet.name)}</h1>
-        <p>Todavía no hay gastos en esta billetera</p>
+        <p class="sin-historial">Todavía no hay gastos en esta billetera</p>
       </div>
     `
   }
 
   // Spend no tiene fecha; conservar el orden de la API hasta que R3 agregue ese campo.
   return `
-    <div class="contenedor">
+    <div class="contenedor historial">
       <h1>Historial · ${escapeHtml(wallet.name)}</h1>
       <div class="lista-historial">${spends.map(renderFila).join('')}</div>
     </div>

@@ -52,8 +52,52 @@ describe('renderGasto - awaiting-approval', () => {
 
   it('tiene los dos botones de voto', () => {
     const html = renderGasto(ataque, cuidadoDeMama)
+    expect(html).toContain('data-accion="abrir-confirmacion"')
     expect(html).toContain('data-accion="aprobar"')
     expect(html).toContain('data-accion="rechazar"')
+  })
+
+  it('presenta confirmación accesible de riesgo alto y exige marcar antes de aprobar', () => {
+    const html = renderGasto(ataque, cuidadoDeMama)
+
+    expect(html).toContain('role="alertdialog"')
+    expect(html).toContain('Cuenta conocida · Farmacia Medellín')
+    expect(html).toContain('<mark>l</mark>')
+    expect(html).toContain('<mark>1</mark>')
+    expect(html).toContain('Confirmo que revisé la cuenta')
+    expect(html).toContain('Aprobar $120.000 de todos modos')
+    expect(html).toContain('id="aprobar-riesgo"')
+    expect(html).toMatch(/id="aprobar-riesgo"[^>]*disabled/)
+    expect(html).toContain('<button type="submit" formnovalidate')
+    expect(html).toContain(`Confirma con ${ataque.destination.name}`)
+  })
+
+  it('muestra una cuenta nueva sin comparar una cuenta no parecida', () => {
+    const wallet = structuredClone(cuidadoDeMama)
+    wallet.knownDestinations = [{ name: 'Cuenta cercana', walletAddress: 'https://totally-different.example/tienda' }]
+    const html = renderGasto(ataque, wallet)
+
+    expect(html).toContain('Es una cuenta nueva para este grupo')
+    expect(html).not.toContain('Cuenta conocida ·')
+  })
+
+  it('mantiene aprobación de un clic bajo el umbral y activa confirmación desde el umbral', () => {
+    const bajoUmbral = { ...ataque, risk: cuidadoDeMama.rules.groupApproval.riskThreshold - 1 }
+    const desdeUmbral = { ...ataque, risk: cuidadoDeMama.rules.groupApproval.riskThreshold }
+
+    expect(renderGasto(bajoUmbral, cuidadoDeMama)).toContain('data-accion="aprobar"')
+    expect(renderGasto(bajoUmbral, cuidadoDeMama)).not.toContain('role="alertdialog"')
+    expect(renderGasto(desdeUmbral, cuidadoDeMama)).toContain('data-accion="abrir-confirmacion"')
+    expect(renderGasto(desdeUmbral, cuidadoDeMama)).toContain('role="alertdialog"')
+  })
+
+  it('muestra una tarjeta por miembro activo en la cuadrícula de votos', () => {
+    const html = renderGasto(ataque, cuidadoDeMama)
+
+    expect(html.match(/class="voto voto-ambar"/g)).toHaveLength(3)
+    expect(html).toContain('Hermano en Bogotá')
+    expect(html).toContain('Hermana en Medellín')
+    expect(html).toContain('Hermano en Madrid')
   })
 
   it('deshabilita los botones y muestra "Ya votaste" si votaComo ya votó', () => {
@@ -133,6 +177,19 @@ describe('renderGasto - otros estados', () => {
   it('paying muestra el progreso "2 de 3 aportes confirmados · falta Madrid"', () => {
     const html = renderGasto(gastoPagando, cuidadoDeMama)
     expect(html).toContain('2 de 3 aportes confirmados · falta Hermano en Madrid')
+    expect(html).toContain('aria-valuemax="3" aria-valuenow="2"')
+    expect(html).toContain('class="barra-progreso-relleno barra-progreso-ambar" style="width: 67%"')
+    expect(html).toContain('class="aporte aporte-verde"')
+    expect(html).toContain('class="aporte aporte-ambar"')
+  })
+
+  it('muestra el progreso completo y verde solo después del pago', () => {
+    const spend = { ...structuredClone(medicina), status: 'paid' as const }
+    const html = renderGasto(spend, cuidadoDeMama)
+
+    expect(html).toContain('Gasto verificado: llegó completo a Farmacia Medellín')
+    expect(html).toContain('aria-valuemax="3" aria-valuenow="3"')
+    expect(html).toContain('class="barra-progreso-relleno barra-progreso-verde" style="width: 100%"')
   })
 
   it('incomplete muestra panel ámbar, el motivo del fallo y el botón de reintentar', () => {

@@ -1,18 +1,107 @@
+@import './fonts.css';
+
+/* Paleta de la Test Wallet de Interledger (borrador de diseño). Los NOMBRES de los
+   tokens son los del proyecto; los VALORES vienen del borrador: --verde = su teal,
+   --rojo = su magenta (riesgo alto), --morado = riesgo medio. --ambar es propio del
+   proyecto (no viene del borrador): se usa para "pendiente de unirse" e "incompleto". */
 :root {
-  --verde: #1e7d34;
-  --ambar: #b8860b;
-  --rojo: #b00020;
+  --verde: #00797f;
+  --ambar: #8a5a00;
+  --morado: #7e1ac0;
+  --rojo: #c011a0;
   --fondo: #ffffff;
-  --texto: #1a1a1a;
-  --borde: #4a4a4a;
+  --texto: #222222;
+  --borde: #b2b2b2;
+  --fondo-panel-rojo: #fdecea;
+  --texto-panel-rojo: #c011a0;
+  --fondo-panel-verde: #e8f5e9;
+  --texto-panel-verde: #00797f;
+  --fondo-panel-ambar: #fff8e1;
+  --texto-panel-ambar: #8a5a00;
+  --texto-sobre-verde: #ffffff;
+  --texto-sobre-rojo: #ffffff;
+  --altura-tabs: 64px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --verde: #08ffff;
+    --ambar: #ffc107;
+    --morado: #c9a0ff;
+    --rojo: #ed4dc8;
+    --fondo: #2a0f49;
+    --texto: #ffffff;
+    --borde: rgb(255 194 243 / 0.3);
+    --fondo-panel-rojo: #361330;
+    --texto-panel-rojo: #ed4dc8;
+    --fondo-panel-verde: #0b3434;
+    --texto-panel-verde: #08ffff;
+    --fondo-panel-ambar: #3a2a05;
+    --texto-panel-ambar: #ffc107;
+    --texto-sobre-verde: #2a0f49;
+    --texto-sobre-rojo: #2a0f49;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --verde: #08ffff;
+  --ambar: #ffc107;
+  --morado: #c9a0ff;
+  --rojo: #ed4dc8;
+  --fondo: #2a0f49;
+  --texto: #ffffff;
+  --borde: rgb(255 194 243 / 0.3);
+  --fondo-panel-rojo: #361330;
+  --texto-panel-rojo: #ed4dc8;
+  --fondo-panel-verde: #0b3434;
+  --texto-panel-verde: #08ffff;
+  --fondo-panel-ambar: #3a2a05;
+  --texto-panel-ambar: #ffc107;
+  --texto-sobre-verde: #2a0f49;
+  --texto-sobre-rojo: #2a0f49;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--fondo);
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 body {
-  font-size: 20px;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  font-family: var(--mono), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--fondo);
   color: var(--texto);
   margin: 0;
+  min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Proyector: 1366×768 y más grande. El diseño de a pie (móvil) es la columna angosta
+   del borrador; aquí se escala la letra base y, por pantalla, el ancho del contenedor. */
+@media (min-width: 1024px) {
+  body {
+    font-size: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 #app {
@@ -28,17 +117,58 @@ body {
 }
 
 .banda-respaldo {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   padding: 10px 16px;
-  background: #fff1c2;
+  background: var(--ambar);
   border-bottom: 2px solid var(--ambar);
-  color: var(--texto);
+  color: var(--fondo);
   font-weight: 700;
+  line-height: 1.25;
   text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--fondo);
+  color: var(--texto);
+  border-bottom: 1px solid var(--borde);
+}
+
+.cab b {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.cab span {
+  display: block;
+  margin-top: 2px;
+  font-size: 16px;
+  opacity: 0.75;
+}
+
+.cab button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
 }
 
 .acciones-demo {
   display: flex;
-  min-height: 48px;
+  min-height: 52px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -49,7 +179,7 @@ body {
 }
 
 .boton-reiniciar-demo {
-  min-height: 40px;
+  min-height: 44px;
   padding: 4px 12px;
   border: 1px solid var(--borde);
   border-radius: 6px;
@@ -64,47 +194,90 @@ body {
   cursor: wait;
 }
 
-.menu-navegacion {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--fondo);
-  border-bottom: 1px solid var(--borde);
+.cab button:focus-visible,
+.boton-reiniciar-demo:focus-visible,
+.panel-dev button:focus-visible,
+.panel-dev input:focus-visible {
+  outline: 3px solid var(--morado);
+  outline-offset: 2px;
 }
 
-.menu-navegacion a {
+/* Barra de pestañas fija abajo (del borrador): reemplaza el menú de la Fase C.
+   "Pedir un gasto" e "Invitar a alguien" quedan como botones grandes en Inicio. */
+.tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: var(--altura-tabs);
+  background: var(--fondo);
+  border-top: 1px solid var(--borde);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.tabs a {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: 56px;
   padding: 8px;
-  border: 1px solid var(--borde);
-  border-radius: 6px;
   color: var(--texto);
-  font-size: 20px;
-  font-weight: 700;
+  opacity: 0.75;
+  font-size: 16px;
+  font-weight: 400;
   text-align: center;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-.menu-navegacion .menu-activo {
-  background: var(--verde);
-  border-color: var(--verde);
-  color: #fff;
+.tabs a.tab-activa {
+  opacity: 1;
+  font-weight: 700;
+}
+
+.tabs a.tab-activa::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 24%;
+  right: 24%;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: var(--morado);
+}
+
+.tabs i {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--rojo);
+  color: var(--texto-sobre-verde);
+  font-size: 13px;
+  font-style: normal;
 }
 
 .contenedor {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 16px 16px 96px;
+  /* Deja espacio para las pestañas fijas de abajo y, en modo simulado, el panel de
+     desarrollo apilado encima de ellas (ver .panel-dev). */
+  padding: 16px 16px calc(var(--altura-tabs) + 140px);
   box-sizing: border-box;
 }
 
 @media (max-width: 375px) {
   .contenedor {
     overflow-x: hidden;
+  }
+}
+
+@media (max-width: 600px) {
+  #app:has(.panel-dev) .contenedor {
+    padding-bottom: calc(var(--altura-tabs) + 200px);
   }
 }
 
@@ -120,10 +293,50 @@ body {
 
 .cupo {
   margin: 4px 0 16px;
-  font-size: 72px;
+  font-size: clamp(38px, 11.5vw, 56px);
   font-weight: 700;
   line-height: 1.1;
   word-break: break-word;
+}
+
+@media (min-width: 1024px) {
+  .cupo {
+    font-size: clamp(56px, 6vw, 96px);
+  }
+}
+
+/* Una casilla del mismo ancho por miembro (decisión 8): el relleno es SU propio
+   porcentaje available/cap, nunca una suma entre monedas distintas. */
+.barra-cupo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 3px;
+  height: 30px;
+  margin: 18px 0;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.casilla-cupo {
+  position: relative;
+  background: var(--borde);
+}
+
+.casilla-cupo span {
+  display: block;
+  height: 100%;
+  background: var(--verde);
+}
+
+.casilla-cupo-vacia {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--texto);
 }
 
 .miembros {
@@ -173,16 +386,23 @@ body {
 }
 
 .selector-billeteras .acciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   margin-top: 0;
 }
 
 .selector-billeteras .boton {
+  width: 100%;
   max-width: 100%;
+  min-height: 64px;
+  border: 2px solid var(--borde);
   overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: center;
 }
 
 .billetera-seleccionada {
-  outline: 4px solid var(--texto);
+  outline: 3px solid var(--texto);
   outline-offset: 2px;
 }
 
@@ -194,7 +414,65 @@ body {
 
 .miembro-nombre {
   margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
+}
+
+.marca {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.marca-verde {
+  background: var(--verde);
+}
+
+.marca-ambar {
+  background: var(--ambar);
+}
+
+.marca-rojo {
+  background: var(--rojo);
+}
+
+/* Tarjeta "espera" del borrador: el primer gasto que espera el voto del grupo. */
+.espera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 26px;
+  padding: 16px 18px;
+  border: 1px solid var(--borde);
+  border-left: 6px solid var(--morado);
+  border-radius: 6px;
+  color: var(--texto);
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.espera b {
+  display: block;
+  font-weight: 700;
+}
+
+.espera small {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.8;
+  font-size: 16px;
+}
+
+.espera em {
+  flex: none;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--morado);
 }
 
 .estado {
@@ -227,7 +505,7 @@ body {
   border: none;
   border-radius: 8px;
   background: var(--verde);
-  color: #fff;
+  color: var(--texto-sobre-verde);
   font-family: inherit;
   font-size: 20px;
   font-weight: 700;
@@ -239,6 +517,11 @@ body {
   display: grid;
   gap: 12px;
   max-width: 720px;
+}
+
+.formulario label {
+  margin-top: 8px;
+  font-weight: 700;
 }
 
 .formulario input,
@@ -253,14 +536,33 @@ body {
   font: inherit;
 }
 
+.formulario input,
+.formulario select {
+  min-height: 52px;
+}
+
+.formulario textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
 .vista-previa {
   margin: 4px 0;
+  padding: 12px 16px;
+  border-left: 4px solid var(--verde);
+  border-radius: 4px;
+  background: var(--fondo);
   font-weight: 700;
 }
 
 .qr-unirse {
+  box-sizing: border-box;
   width: min(280px, 100%);
-  margin: 16px auto;
+  margin: 16px auto 24px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 .lista-historial {
@@ -268,21 +570,188 @@ body {
   gap: 16px;
 }
 
-.fila-gasto {
-  display: flex;
-  flex-wrap: wrap;
+.lista-aprobar {
+  display: grid;
+  gap: 12px;
+}
+
+.pedido {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--borde);
+  border-left: 6px solid var(--morado);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+  text-decoration: none;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.pedido:hover,
+.pedido:focus-visible {
+  border-color: var(--morado);
+  transform: translateY(-1px);
+}
+
+.pedido-datos,
+.pedido-detalle {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pedido-destino,
+.pedido-monto {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.pedido-billetera {
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+.insignia-riesgo {
+  width: fit-content;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.riesgo-verde {
+  color: var(--verde);
+}
+
+.riesgo-ambar {
+  color: var(--morado);
+}
+
+.riesgo-rojo {
+  color: var(--rojo);
+}
+
+.pedido-revisar {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.vacio {
+  margin: 24px 0;
+  padding: 32px 20px;
+  border: 1px dashed var(--borde);
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.fila-gasto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 16px;
   padding: 16px;
   border: 1px solid var(--borde);
   border-radius: 8px;
 }
 
+.fila-gasto-verde {
+  border-left: 6px solid var(--verde);
+}
+
+.fila-gasto-ambar {
+  border-left: 6px solid var(--ambar);
+}
+
+.fila-gasto-rojo {
+  border-left: 6px solid var(--rojo);
+}
+
+.fila-gasto-detalle {
+  min-width: 0;
+}
+
 .fila-gasto-destino,
 .fila-gasto-monto {
   margin: 0 0 8px;
+  font-size: 24px;
   font-weight: 700;
+}
+
+.fila-gasto-destino {
+  overflow-wrap: anywhere;
+}
+
+.fila-gasto-monto {
+  white-space: nowrap;
+}
+
+.fila-gasto .estado {
+  display: inline-block;
+  margin: 0 8px 8px 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.fila-gasto .estado-verde {
+  background: var(--fondo-panel-verde);
+  color: var(--texto-panel-verde);
+}
+
+.fila-gasto .estado-ambar {
+  background: var(--fondo-panel-ambar);
+  color: var(--texto-panel-ambar);
+}
+
+.fila-gasto .estado-rojo {
+  background: var(--fondo-panel-rojo);
+  color: var(--texto-panel-rojo);
+}
+
+.fila-gasto .boton {
+  white-space: nowrap;
+}
+
+.sin-historial {
+  margin: 24px 0;
+  padding: 32px 20px;
+  border: 1px dashed var(--borde);
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .pedido {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .pedido-detalle {
+    grid-column: 1 / 2;
+    grid-row: 2;
+  }
+
+  .pedido-revisar {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .fila-gasto {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .fila-gasto .boton {
+    text-align: center;
+  }
 }
 
 .qr-unirse svg {
@@ -297,30 +766,60 @@ body {
 
 .panel-dev {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: calc(var(--altura-tabs) + env(safe-area-inset-bottom, 0px));
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+  z-index: 6;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #f2f2f2;
-  border-top: 1px solid var(--borde);
+  background: var(--fondo);
+  color: var(--texto);
+  border-top: 2px solid var(--borde);
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 0.12);
+}
+
+.panel-dev > span {
+  padding: 4px;
+  font-weight: 700;
 }
 
 .panel-dev button {
-  padding: 8px 12px;
+  min-height: 40px;
+  padding: 6px 12px;
   border: 1px solid var(--borde);
   border-radius: 6px;
-  background: #fff;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
   cursor: pointer;
 }
 
 .interruptor {
   display: flex;
+  min-height: 40px;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.interruptor input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--verde);
+}
+
+@media (max-width: 600px) {
+  .panel-dev {
+    justify-content: flex-start;
+    gap: 4px 8px;
+    padding: 6px 8px;
+  }
 }
 
 .sello {
@@ -340,6 +839,196 @@ body {
   line-height: 1;
 }
 
+.aprobacion-gasto {
+  display: grid;
+  gap: 16px;
+}
+
+.pedido-gasto,
+.veredicto,
+.votos {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--fondo);
+}
+
+.pedido-gasto h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+}
+
+.destino {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+
+.direccion-destino {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--mono), monospace;
+}
+
+.veredicto {
+  border-left: 6px solid var(--rojo);
+}
+
+.veredicto .puntaje-etiqueta {
+  margin-top: 8px;
+}
+
+.veredicto .advertencia {
+  font-size: 24px;
+}
+
+.veredicto .motivos {
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.votos {
+  align-self: start;
+}
+
+.cuadricula-votos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.voto {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-left: 5px solid currentColor;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.voto-verde {
+  color: var(--verde);
+}
+
+.voto-rojo {
+  color: var(--rojo);
+}
+
+.voto-ambar {
+  color: var(--ambar);
+}
+
+.voto span {
+  font-weight: 700;
+}
+
+.acciones-aprobacion {
+  align-content: start;
+}
+
+.confirma {
+  width: min(760px, calc(100% - 32px));
+  max-height: min(90vh, 900px);
+  padding: 0;
+  overflow: auto;
+  border: 2px solid var(--rojo);
+  border-radius: 12px;
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.confirma::backdrop {
+  background: rgb(0 0 0 / 0.72);
+}
+
+.confirma-contenido {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.confirma-contenido h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.comparacion-cuentas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cuenta-dato {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.cuenta-dato code {
+  overflow-wrap: anywhere;
+  font-family: var(--mono), monospace;
+}
+
+.cuenta-dato mark {
+  border-radius: 2px;
+  background: var(--morado);
+  color: var(--fondo);
+  font-weight: 700;
+}
+
+.cuenta-nueva {
+  margin: 0;
+  padding: 12px;
+  border-left: 5px solid var(--ambar);
+  font-weight: 700;
+}
+
+.avisos-riesgo {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 24px;
+}
+
+.aceptar-riesgo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.aceptar-riesgo input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.confirma-acciones {
+  justify-content: flex-end;
+}
+
+.boton-secundario {
+  border: 1px solid var(--borde);
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.boton-peligro {
+  background: var(--rojo);
+  color: var(--texto-sobre-rojo);
+}
+
+.boton-peligro:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .puntaje-etiqueta {
   margin: 0 0 16px;
   font-size: 24px;
@@ -350,8 +1039,11 @@ body {
   color: var(--verde);
 }
 
+/* Riesgo medio usa --morado, no --ambar: --ambar queda reservado para los estados
+   genéricos del proyecto (miembro pendiente de unirse, pago incompleto) que el
+   borrador no cubre, para no mezclar dos significados distintos bajo el mismo tono. */
 .puntaje-ambar {
-  color: var(--ambar);
+  color: var(--morado);
 }
 
 .puntaje-rojo {
@@ -386,15 +1078,66 @@ body {
   margin: 4px 0;
 }
 
+@media (min-width: 1024px) {
+  .aprobacion-gasto {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'pedido votos'
+      'veredicto votos'
+      'veredicto acciones';
+    align-items: start;
+  }
+
+  .pedido-gasto {
+    grid-area: pedido;
+  }
+
+  .veredicto {
+    grid-area: veredicto;
+  }
+
+  .votos {
+    grid-area: votos;
+  }
+
+  .acciones-aprobacion {
+    grid-area: acciones;
+  }
+
+  .veredicto .puntaje {
+    font-size: clamp(96px, 9vw, 144px);
+  }
+
+  .veredicto .motivos,
+  .direccion-destino,
+  .pedido-gasto p {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 600px) {
+  .comparacion-cuentas {
+    grid-template-columns: 1fr;
+  }
+
+  .confirma-contenido {
+    padding: 18px;
+  }
+
+  .confirma-acciones {
+    display: grid;
+  }
+}
+
 .boton-rechazar {
-  background: #fff;
+  background: var(--fondo);
   color: var(--rojo);
   border: 2px solid var(--rojo);
 }
 
 .boton-rechazar-destacado {
   background: var(--rojo);
-  color: #fff;
+  color: var(--texto-sobre-rojo);
   font-size: 24px;
 }
 
@@ -434,26 +1177,50 @@ body {
 }
 
 .panel-rojo {
-  background: #fdecea;
+  background: var(--fondo-panel-rojo);
   border: 2px solid var(--rojo);
-  color: var(--rojo);
+  color: var(--texto-panel-rojo);
 }
 
 .panel-verde {
-  background: #e8f5e9;
+  background: var(--fondo-panel-verde);
   border: 2px solid var(--verde);
-  color: var(--verde);
+  color: var(--texto-panel-verde);
 }
 
 .panel-ambar {
-  background: #fff8e1;
+  background: var(--fondo-panel-ambar);
   border: 2px solid var(--ambar);
-  color: var(--ambar);
+  color: var(--texto-panel-ambar);
 }
 
 .progreso {
   margin: 16px 0 8px;
   font-weight: 700;
+}
+
+.barra-progreso {
+  height: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo);
+}
+
+.barra-progreso-relleno {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.barra-progreso-verde {
+  background: var(--verde);
+}
+
+.barra-progreso-ambar {
+  background: var(--ambar);
 }
 
 .aportes {
@@ -469,6 +1236,39 @@ body {
   padding: 16px;
 }
 
+.aporte-verde {
+  border-left: 4px solid var(--verde);
+}
+
+.aporte-ambar {
+  border-left: 4px solid var(--ambar);
+}
+
+.aporte-rojo {
+  border-left: 4px solid var(--rojo);
+}
+
+.aporte .estado {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.aporte .estado-verde {
+  background: var(--fondo-panel-verde);
+  color: var(--texto-panel-verde);
+}
+
+.aporte .estado-ambar {
+  background: var(--fondo-panel-ambar);
+  color: var(--texto-panel-ambar);
+}
+
+.aporte .estado-rojo {
+  background: var(--fondo-panel-rojo);
+  color: var(--texto-panel-rojo);
+}
+
 .aporte-nombre {
   margin: 0 0 8px;
   font-weight: 700;
@@ -480,7 +1280,7 @@ body {
   padding: 8px 16px;
   border-radius: 999px;
   background: var(--verde);
-  color: #fff;
+  color: var(--texto-sobre-verde);
   font-weight: 700;
 }
 

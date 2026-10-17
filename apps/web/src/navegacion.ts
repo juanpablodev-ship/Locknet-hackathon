@@ -1,51 +1,67 @@
 import type { Route } from './router.js'
 import type { ApiModeInfo } from './api.js'
+import type { Tema } from './tema.js'
 import { escapeHtml } from './inicio.js'
 
-export function renderBandaRespaldo(
-  mode: ApiModeInfo['mode'],
-  label?: string,
-): string {
+export function renderBandaRespaldo(mode: ApiModeInfo['mode'], label?: string): string {
   if (mode !== 'fixtures') return ''
   return `<div class="banda-respaldo" role="status">${escapeHtml(
     label ?? 'MODO RESPALDO · respuestas reales grabadas',
   )}</div>`
 }
 
-function current(route: Route, item: 'inicio' | 'gasto' | 'unirse' | 'historial'): boolean {
-  if (item === 'inicio') return route.name === 'inicio'
-  if (item === 'gasto') return route.name === 'gasto-nuevo' || route.name === 'gasto'
-  if (item === 'unirse') return route.name === 'unirse' || route.name === 'unirse-volver'
+export function renderEncabezado(nombreBilletera: string, numeroMiembros: number, tema: Tema): string {
+  const plural = numeroMiembros === 1 ? 'miembro' : 'miembros'
+  return `
+    <header class="cab">
+      <div><b>${escapeHtml(nombreBilletera)}</b><span>${numeroMiembros} ${plural}</span></div>
+      <button id="tema" type="button" data-accion="alternar-tema">${tema === 'dark' ? 'Tema claro' : 'Tema oscuro'}</button>
+    </header>
+  `
+}
+
+function pestanaActiva(route: Route, tab: 'inicio' | 'por-aprobar' | 'historial'): boolean {
+  if (tab === 'inicio') return route.name === 'inicio'
+  // La pantalla de un gasto es donde se revisa y se vota un pago pendiente:
+  // conceptualmente es parte de "Por aprobar", aunque su ruta sea #/gasto/:id.
+  if (tab === 'por-aprobar') return route.name === 'por-aprobar' || route.name === 'gasto'
   return route.name === 'historial'
 }
 
-export function renderMenuNavegacion(route: Route): string {
-  const links: { id: 'inicio' | 'gasto' | 'unirse' | 'historial'; href: string; label: string }[] = [
-    { id: 'inicio', href: '#/inicio', label: 'Inicio' },
-    { id: 'gasto', href: '#/gasto/nuevo', label: 'Pedir un gasto' },
-    { id: 'unirse', href: '#/unirse', label: 'Unirse' },
-    { id: 'historial', href: '#/historial', label: 'Historial' },
-  ]
-  const items = links
-    .map((link) => {
-      const active = current(route, link.id)
-      return `<a class="${active ? 'menu-activo' : ''}" href="${link.href}"${active ? ' aria-current="page"' : ''}>${link.label}</a>`
-    })
-    .join('')
-  return `<nav class="menu-navegacion" aria-label="Navegación principal">${items}</nav>`
+function itemPestana(route: Route, tab: 'inicio' | 'por-aprobar' | 'historial', href: string, etiqueta: string, contador?: number): string {
+  const activa = pestanaActiva(route, tab)
+  const insignia = contador && contador > 0 ? `<i>${contador}</i>` : ''
+  return `<a class="${activa ? 'tab-activa' : ''}" href="${href}"${activa ? ' aria-current="page"' : ''}>${etiqueta}${insignia}</a>`
 }
 
-export function renderAppChrome(
-  route: Route,
-  mode: ApiModeInfo['mode'],
-  label?: string,
-  error?: string,
-): string {
-  const mensaje = error ? `<span role="status">${escapeHtml(error)}</span>` : ''
-  return `${renderBandaRespaldo(mode, label)}
+export function renderPestanas(route: Route, contadorPorAprobar: number): string {
+  return `
+    <nav class="tabs" aria-label="Navegación principal">
+      ${itemPestana(route, 'inicio', '#/inicio', 'Inicio')}
+      ${itemPestana(route, 'por-aprobar', '#/por-aprobar', 'Por aprobar', contadorPorAprobar)}
+      ${itemPestana(route, 'historial', '#/historial', 'Historial')}
+    </nav>
+  `
+}
+
+export interface AppChromeInfo {
+  route: Route
+  mode: ApiModeInfo['mode']
+  label?: string
+  error?: string
+  nombreBilletera: string
+  numeroMiembros: number
+  tema: Tema
+  contadorPorAprobar: number
+}
+
+export function renderAppChrome(info: AppChromeInfo): string {
+  const mensaje = info.error ? `<span role="status">${escapeHtml(info.error)}</span>` : ''
+  return `${renderBandaRespaldo(info.mode, info.label)}
+    ${renderEncabezado(info.nombreBilletera, info.numeroMiembros, info.tema)}
     <div class="acciones-demo">
       ${mensaje}
       <button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>
     </div>
-    ${renderMenuNavegacion(route)}`
+    ${renderPestanas(info.route, info.contadorPorAprobar)}`
 }

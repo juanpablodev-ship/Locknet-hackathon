@@ -27,10 +27,12 @@ import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
 import { renderHistorial } from './historial.js'
+import { renderPorAprobar } from './por-aprobar.js'
 import { DEMO_MODE } from './config.js'
 import { renderAppChrome } from './navegacion.js'
 import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
+import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
 import './styles.css'
 
 const nombres: Record<Route['name'], string> = {
@@ -39,17 +41,38 @@ const nombres: Record<Route['name'], string> = {
   'unirse-volver': 'unirse-volver',
   'gasto-nuevo': 'gasto-nuevo',
   gasto: 'gasto',
+  'por-aprobar': 'por-aprobar',
   historial: 'historial',
   'no-encontrada': 'Pantalla no encontrada'
 }
 
 let desuscribir: (() => void) | null = null
+let desuscribirChrome: (() => void) | null = null
 let votaComoActual: string | undefined
 let redireccionUnirsePendiente: string | null = null
 let hashInvalidoActual = false
 let modoServidor: ApiModeInfo | null = null
 let errorModoServidor: string | null = null
 const turnos = crearTurnos()
+
+function temaPreferidoDelSistema(): Tema {
+  try {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
+}
+
+// Se aplica ANTES del primer render (abajo, fuera de cualquier función) para que no parpadee.
+let temaActual: Tema = leerTemaGuardado() ?? temaPreferidoDelSistema()
+document.documentElement.setAttribute('data-theme', temaActual)
+
+function alternarTema(): void {
+  temaActual = siguienteTema(temaActual)
+  document.documentElement.setAttribute('data-theme', temaActual)
+  guardarTema(temaActual)
+  void pintarChrome(parseHash(location.hash))
+}
 
 function navegarA(hash: string): void {
   if (location.hash === hash) render()
@@ -241,12 +264,23 @@ async function pintarGasto(id: string): Promise<void> {
     void pintarGasto(id)
   })
 
+  const checkboxRiesgo = app.querySelector('#aceptar-riesgo') as HTMLInputElement | null
+  const botonAprobarRiesgo = app.querySelector('#aprobar-riesgo') as HTMLButtonElement | null
+  checkboxRiesgo?.addEventListener('change', () => {
+    if (botonAprobarRiesgo) botonAprobarRiesgo.disabled = !checkboxRiesgo.checked
+  })
+
   app.querySelector('.acciones')?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
     if (!boton) return
     const accion = boton.dataset.accion
     const spendId = boton.dataset.spend
     if (!spendId) return
+    if (accion === 'abrir-confirmacion') {
+      const dialogo = app.querySelector('#confirmacion-riesgo') as HTMLDialogElement | null
+      dialogo?.showModal()
+      return
+    }
 
     void (async () => {
       try {
@@ -310,7 +344,7 @@ async function pintarFormularioGasto(): Promise<void> {
     const mensaje = document.getElementById('mensaje')
     const valorPesos = Number(monto?.value)
     if (!Number.isSafeInteger(valorPesos) || valorPesos <= 0) {
-      if (mensaje) mensaje.textContent = 'Escribe un monto mayor que cero en pesos enteros.'
+      if (mensaje) mensaje.textContent = `Escribe un monto mayor que cero en ${wallet.currency} y sin decimales.`
       return
     }
 
@@ -377,7 +411,7 @@ function pintarFormularioUnirse(
     const mensaje = document.getElementById('mensaje')
     const capPesos = Number(tope?.value)
     if (!Number.isSafeInteger(capPesos) || capPesos <= 0) {
-      if (mensaje) mensaje.textContent = 'Escribe un tope mensual mayor que cero en pesos enteros.'
+      if (mensaje) mensaje.textContent = `Escribe un tope mensual mayor que cero en ${wallet.currency} y sin decimales.`
       return
     }
 
@@ -475,6 +509,32 @@ async function pintarHistorial(): Promise<void> {
   }
 }
 
+async function pintarPorAprobar(): Promise<void> {
+  const app = document.getElementById('app')
+  if (!app) return
+  const miTurno = turnos.nuevo()
+  pintarCargando(app)
+
+  let wallet: SharedWallet
+  let spends: Spend[]
+  try {
+    const walletId = getWalletActual()
+    const resultado = await Promise.all([getWallet(walletId), getSpends(walletId)])
+    wallet = resultado[0]
+    spends = resultado[1]
+  } catch (err) {
+    if (!turnos.esVigente(miTurno)) return
+    pintarError(app, err, () => void pintarPorAprobar())
+    return
+  }
+  if (!turnos.esVigente(miTurno)) return
+
+  app.innerHTML = renderPorAprobar(spends, wallet) + panelDevHtml()
+  enlazarPanelDev()
+
+  desuscribir = onEvents(wallet.id, () => void pintarPorAprobar())
+}
+
 async function pintarVueltaUnirse(route: Extract<Route, { name: 'unirse-volver' }>): Promise<void> {
   const app = document.getElementById('app')
   if (!app) return
@@ -505,7 +565,17 @@ async function pintarVueltaUnirse(route: Extract<Route, { name: 'unirse-volver' 
   }
 }
 
-function pintarChrome(route: Route): void {
+const EVENTOS_CHROME = new Set([
+  'member-active',
+  'member-revoked',
+  'spend-requested',
+  'spend-reviewed',
+  'spend-approved',
+  'spend-rejected',
+  'spend-blocked'
+])
+
+async function pintarChrome(route: Route): Promise<void> {
   let shell = document.getElementById('app-shell')
   if (!shell) {
     shell = document.createElement('header')
@@ -515,14 +585,47 @@ function pintarChrome(route: Route): void {
     document.body.insertBefore(shell, app)
   }
   const mode = modoServidor?.mode ?? DEMO_MODE
+
+  let nombreBilletera = ''
+  let numeroMiembros = 0
+  let contadorPorAprobar = 0
+  let walletId = ''
+  try {
+    walletId = getWalletActual()
+    const [wallet, spends] = await Promise.all([getWallet(walletId), getSpends(walletId)])
+    nombreBilletera = wallet.name
+    numeroMiembros = wallet.members.length
+    contadorPorAprobar = spends.filter((spend) => spend.status === 'awaiting-approval').length
+  } catch {
+    // El cuerpo de la pantalla ya muestra el error de carga; el encabezado se degrada sin romperse.
+  }
+
   shell.className = `app-shell${mode === 'fixtures' ? ' app-shell-fixtures' : ''}`
-  shell.innerHTML = renderAppChrome(route, mode, modoServidor?.label, errorModoServidor ?? undefined)
+  shell.innerHTML = renderAppChrome({
+    route,
+    mode,
+    label: modoServidor?.label,
+    error: errorModoServidor ?? undefined,
+    nombreBilletera,
+    numeroMiembros,
+    tema: temaActual,
+    contadorPorAprobar
+  })
   document.body.dataset.demoMode = mode
   const app = document.getElementById('app')
   if (app) app.style.paddingTop = `${shell.offsetHeight + 16}px`
   shell.onclick = (event) => {
-    const boton = (event.target as HTMLElement).closest('[data-accion="reiniciar-demo"]') as HTMLButtonElement | null
-    if (boton) void reiniciarDemo(boton)
+    const reiniciar = (event.target as HTMLElement).closest('[data-accion="reiniciar-demo"]') as HTMLButtonElement | null
+    if (reiniciar) void reiniciarDemo(reiniciar)
+    const tema = (event.target as HTMLElement).closest('[data-accion="alternar-tema"]')
+    if (tema) alternarTema()
+  }
+
+  desuscribirChrome?.()
+  if (walletId) {
+    desuscribirChrome = onEvents(walletId, (e) => {
+      if (EVENTOS_CHROME.has(e.type)) void pintarChrome(route)
+    })
   }
 }
 
@@ -556,7 +659,7 @@ async function reiniciarDemo(boton: HTMLButtonElement): Promise<void> {
 function mostrarErrorModo(err: unknown): void {
   const texto = err instanceof Error ? err.message : 'Ocurrió un error inesperado.'
   errorModoServidor = texto
-  pintarChrome(parseHash(location.hash))
+  void pintarChrome(parseHash(location.hash))
 }
 
 async function cargarModoServidor(): Promise<void> {
@@ -567,7 +670,7 @@ async function cargarModoServidor(): Promise<void> {
     mostrarErrorModo(err)
     return
   }
-  pintarChrome(parseHash(location.hash))
+  void pintarChrome(parseHash(location.hash))
 }
 
 function render(): void {
@@ -577,7 +680,7 @@ function render(): void {
   const app = document.getElementById('app')
   if (!app) return
   const route = parseHash(location.hash)
-  pintarChrome(route)
+  void pintarChrome(route)
 
   if (route.name === 'inicio') {
     void pintarInicio()
@@ -601,6 +704,11 @@ function render(): void {
 
   if (route.name === 'unirse-volver') {
     void pintarVueltaUnirse(route)
+    return
+  }
+
+  if (route.name === 'por-aprobar') {
+    void pintarPorAprobar()
     return
   }
 

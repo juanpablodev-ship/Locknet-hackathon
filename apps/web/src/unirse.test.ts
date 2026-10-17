@@ -14,6 +14,7 @@ describe('renderUnirse', () => {
     expect(html).toContain('Escanea para unirte a Cuidado de mamá')
     expect(html).toContain('name="walletAddress"')
     expect(html).toContain('name="cap"')
+    expect(html).toContain('Tope mensual en COP')
   })
 
   it('solo muestra la advertencia y sus dos botones con status warn', () => {
@@ -38,6 +39,15 @@ describe('renderUnirse', () => {
 
     expect(html).not.toContain('<script>alert')
     expect(html).toContain('&lt;script&gt;')
+  })
+
+  it('escapa la moneda usada en el tope mensual', () => {
+    const wallet = structuredClone(cuidadoDeMama)
+    wallet.currency = '<img src=x>'
+    const html = renderUnirse(wallet, '<svg></svg>')
+
+    expect(html).not.toContain('<img')
+    expect(html).toContain('Tope mensual en &lt;img src=x&gt;')
   })
 
   it('muestra los dos resultados de la vuelta del banco', () => {

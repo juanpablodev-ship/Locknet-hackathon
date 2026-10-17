@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Spend } from '../../../contracts/index.js'
-import { cuidadoDeMama, medicina } from '../../../contracts/ejemplo.js'
+import { ataque, cuidadoDeMama, medicina } from '../../../contracts/ejemplo.js'
 import { getWallets } from '../../../mocks/api.mock.js'
 import { renderInicio, renderSelectorBilleteras } from './inicio.js'
 
@@ -19,6 +19,43 @@ describe('renderInicio', () => {
     const html = renderInicio(cuidadoDeMama)
     expect(html).toContain('🇨🇴')
     expect(html).toContain('🇪🇸')
+  })
+
+  it('muestra una casilla independiente por miembro con su porcentaje available/cap', () => {
+    const wallet = structuredClone(cuidadoDeMama)
+    wallet.members[0].available = { ...wallet.members[0].cap, value: '2500000' }
+    delete wallet.members[1].available
+
+    const html = renderInicio(wallet)
+    expect(html.match(/class="casilla-cupo"/g)).toHaveLength(3)
+    expect(html).toContain('Hermano en Bogotá: 25% disponible')
+    expect(html).toContain('style="width: 25%"')
+    expect(html).toContain('Hermana en Medellín: disponible desconocido')
+    expect(html).toContain('casilla-cupo-vacia">—')
+  })
+
+  it('escapa nombres de miembros en la etiqueta accesible de la barra', () => {
+    const wallet = structuredClone(cuidadoDeMama)
+    wallet.members[0].name = '<script>alert(1)</script>'
+
+    const html = renderInicio(wallet)
+
+    expect(html).not.toContain('aria-label="<script>')
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;: 100% disponible')
+  })
+
+  it('muestra un enlace de espera al primer gasto awaiting-approval', () => {
+    const secondPending = { ...structuredClone(ataque), id: 's-otro-pendiente' }
+    const html = renderInicio(cuidadoDeMama, [medicina, ataque, secondPending])
+
+    expect(html).toContain('class="espera" href="#/gasto/s-ataque"')
+    expect(html).toContain('Farmacia (cuenta nueva), $120.000')
+    expect(html).toContain('Riesgo alto: esperando aprobación del grupo')
+    expect(html).not.toContain('href="#/gasto/s-otro-pendiente"')
+  })
+
+  it('no muestra la tarjeta de espera si no hay gastos awaiting-approval', () => {
+    expect(renderInicio(cuidadoDeMama, [medicina])).not.toContain('class="espera"')
   })
 
   it('un miembro pending-approval muestra Pendiente', () => {

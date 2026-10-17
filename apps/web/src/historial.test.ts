@@ -7,7 +7,9 @@ describe('renderHistorial', () => {
   it('muestra una fila y un enlace por gasto', () => {
     const html = renderHistorial([medicina, ataque], cuidadoDeMama)
 
-    expect(html.match(/class="fila-gasto"/g)).toHaveLength(2)
+    expect(html.match(/class="fila-gasto fila-gasto-/g)).toHaveLength(2)
+    expect(html).toContain('class="fila-gasto fila-gasto-verde"')
+    expect(html).toContain('class="fila-gasto fila-gasto-ambar"')
     expect(html).toContain('href="#/gasto/s-medicina"')
     expect(html).toContain('href="#/gasto/s-ataque"')
   })
@@ -26,7 +28,9 @@ describe('renderHistorial', () => {
   })
 
   it('muestra el estado vacío sin gastos', () => {
-    expect(renderHistorial([], cuidadoDeMama)).toContain('Todavía no hay gastos en esta billetera')
+    const html = renderHistorial([], cuidadoDeMama)
+    expect(html).toContain('class="sin-historial"')
+    expect(html).toContain('Todavía no hay gastos en esta billetera')
   })
 
   it('escapa el nombre del destino', () => {
