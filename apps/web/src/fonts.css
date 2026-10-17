@@ -1,0 +1,21 @@
+/* Fuente de la Test Wallet de Interledger, extraída del borrador de diseño
+   (apps/web/public/fonts/). Sin dependencias externas: funciona sin internet. */
+@font-face {
+  font-family: 'DejaVu Sans Mono';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/dejavu-sans-mono-regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'DejaVu Sans Mono';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/dejavu-sans-mono-bold.woff2') format('woff2');
+}
+
+:root {
+  --mono: 'DejaVu Sans Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
