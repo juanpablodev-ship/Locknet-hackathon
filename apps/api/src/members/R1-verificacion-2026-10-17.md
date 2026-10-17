@@ -108,3 +108,13 @@ Se reprodujo con checkDestination real, sin red de pagos:
 La comparación de nombres es correcta, pero no confirma la moneda ni la propiedad
 de la dirección receptora. Falta confirmar con su dueño una dirección COP adecuada
 y la dirección parecida controlada. No se crearon cuentas ni direcciones externas.
+
+## Configuración definitiva indicada por R1
+
+El usuario confirmó que la farmacia del equipo es far, COP escala 2.
+La dirección farmacia-medellin consultada no correspondía a esa cuenta.
+Se alinearon .env.integration.json, .env.r1-live.json y el ejemplo público
+demo/live-config.example.json usando far y las tres direcciones existentes.
+El detalle operativo y la limitación del ataque están en demo/CONFIGURACION-R1.md.
+No se afirma que farmacia-medellin haya cambiado de moneda ni que el escenario
+del juez esté confirmado en vivo.
