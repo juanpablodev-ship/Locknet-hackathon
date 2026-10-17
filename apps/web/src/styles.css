@@ -358,6 +358,34 @@ body {
   font-size: 24px;
 }
 
+.contrato-filas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contrato-filas li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--borde);
+  font-size: 20px;
+}
+
+.contrato-filas li:first-child {
+  border-top: 0;
+}
+
+.contrato-regla {
+  flex: 1 1 320px;
+}
+
+.contrato-quien {
+  flex: 0 0 auto;
+}
+
 .nota-configuracion {
   font-size: 20px;
 }

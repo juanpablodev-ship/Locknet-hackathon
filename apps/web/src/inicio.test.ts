@@ -3,6 +3,7 @@ import type { Spend } from '../../../contracts/index.js'
 import { ataque, cuidadoDeMama, medicina } from '../../../contracts/ejemplo.js'
 import { getWallets } from '../../../mocks/api.mock.js'
 import { renderInicio, renderSelectorBilleteras } from './inicio.js'
+import { NOMBRE_GUARDIAN } from './config.js'
 
 describe('renderInicio', () => {
   it('muestra la etiqueta y el cupo formateado', () => {
@@ -90,12 +91,35 @@ describe('renderInicio', () => {
     expect(html).not.toContain('multifirma')
   })
 
-  it('muestra las reglas de la billetera de cuidado', () => {
+  it('muestra el panel "El contrato del grupo" con la regla y quién la hace cumplir', () => {
     const [care] = getWallets()
     const html = renderInicio(care)
 
-    expect(html).toContain('Partes iguales')
-    expect(html).toContain('aprobación del grupo si pasa de $200.000 o el riesgo llega a 60')
+    expect(html).toContain('El contrato del grupo')
+    expect(html).toContain('Nadie aporta más del tope que autorizó</span><b class="contrato-quien">Su propio banco')
+    expect(html).toContain('El permiso se renueva cada mes</span><b class="contrato-quien">Su propio banco')
+    expect(html).toContain('su permiso se cancela al instante</span><b class="contrato-quien">Su propio banco')
+    expect(html).toContain('aunque alguien pague en otra moneda</span><b class="contrato-quien">La cotización de Open Payments')
+    expect(html).toContain(`Nada se da por pagado sin verificar lo que llegó</span><b class="contrato-quien">${NOMBRE_GUARDIAN}`)
+    expect(html).not.toContain('Partes iguales')
+  })
+
+  it('el contrato toma monto, aprobaciones y destinos de confianza de la wallet', () => {
+    const [care] = getWallets()
+    const html = renderInicio(care)
+
+    expect(html).toContain('mayor a $200.000 necesita 2 aprobaciones del grupo; un solo rechazo detiene un pago riesgoso</span><b class="contrato-quien">Kivor')
+    for (const d of care.knownDestinations) expect(html).toContain(d.name)
+    expect(html).toContain(`Destinos de confianza: ${care.knownDestinations[0].name}`)
+
+    const cambiada = structuredClone(care)
+    cambiada.rules.groupApproval.aboveAmount = { value: '50000000', assetCode: 'COP', assetScale: 2 }
+    cambiada.rules.groupApproval.approvalsRequired = 3
+    cambiada.knownDestinations = [{ name: 'Óptica <Centro>', walletAddress: 'https://ilp.interledger-test.dev/optica' }]
+    const html2 = renderInicio(cambiada)
+    expect(html2).toContain('mayor a $500.000 necesita 3 aprobaciones')
+    expect(html2).toContain('Destinos de confianza: Óptica &lt;Centro&gt;')
+    expect(html2).not.toContain('$200.000')
   })
 
   it('muestra la meta, el progreso 2 de 3 y el aviso mientras no haya pagos', () => {
