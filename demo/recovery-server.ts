@@ -10,6 +10,12 @@ import type { SharedWallet, Spend } from '../contracts'
 
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 
+export function readAuthorizationExpiresAt(seconds: number | undefined, now = Date.now()) {
+  const lifetime = seconds ?? 300
+  if (!Number.isFinite(lifetime) || lifetime <= 5) throw new Error('Permiso sin vigencia suficiente')
+  return now + (lifetime - 5) * 1000
+}
+
 export async function startRecovery() {
   const port = Number(process.env.RECOVERY_PORT ?? '3345')
   const origin = `http://localhost:${port}`
@@ -25,6 +31,7 @@ export async function startRecovery() {
   }
   const choices = [...members.values()]
   const readTokens = new Map<string, string>()
+  const readExpiries = new Map<string, number>()
   const sessions = new Set<string>()
   async function begin(index: number, sid: string) {
     const member = choices[index]
@@ -55,6 +62,9 @@ export async function startRecovery() {
       sid = randomBytes(32).toString('hex'); sessions.add(sid)
       res.setHeader('Set-Cookie', `recovery_sid=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600`)
     }
+    for (const [wallet, expiresAt] of readExpiries) if (expiresAt <= Date.now()) {
+      readTokens.delete(wallet); readExpiries.delete(wallet)
+    }
     try {
       if (req.method === 'GET' && url.pathname === '/') {
         res.end(`<h1>Recuperar pagos existentes — solo lectura</h1><p>Este servidor no puede enviar dinero. Cada dueño debe autorizar desde su perfil de navegador.</p><ul>${choices.map((m, i) => `<li>${escape(m.name)}: ${readTokens.has(m.walletAddress) ? 'lectura autorizada' : `<a href="/start?member=${i}">Solicitar permiso de lectura</a>`}</li>`).join('')}</ul><form method="post" action="/check"><button>Consultar intentos existentes y guardar resultados confirmados (sin pagar)</button></form>`)
@@ -77,7 +87,9 @@ export async function startRecovery() {
         if (!isFinalizedGrantWithAccessToken(grant) || grant.access_token.access.length !== 1) throw new Error('Grant inválido')
         const access = grant.access_token.access[0]
         if (access.type !== 'outgoing-payment' || access.identifier !== session.wallet.id || access.actions.length !== 1 || access.actions[0] !== 'read') throw new Error('Alcance distinto')
+        const expiresAt = readAuthorizationExpiresAt(grant.access_token.expires_in)
         readTokens.set(session.wallet.id, grant.access_token.value)
+        readExpiries.set(session.wallet.id, expiresAt)
         res.writeHead(303, { Location: '/' }).end()
       } else if (req.method === 'POST' && url.pathname === '/check') {
         if (req.headers.origin !== origin || checking) throw new Error('Consulta no disponible')

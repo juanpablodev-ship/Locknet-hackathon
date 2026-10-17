@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AuthenticatedClient, OpenPaymentsClientError } from '@interledger/open-payments'
+import { OpenPaymentsClientError, type AuthenticatedClient } from '@interledger/open-payments'
 import type { SharedWallet, Spend } from '../contracts'
 import { cuidadoDeMama, medicina } from '../contracts/ejemplo'
 import { recoverExisting } from './recover-existing-payments'
@@ -64,12 +64,22 @@ describe('recuperación: nunca confunde solicitado, vencido y recibido', () => {
     expect(f.journal.record).toHaveBeenCalledWith('quote-old', expect.objectContaining({ status: 'unknown' }))
     expect(f.client.outgoingPayment.get).not.toHaveBeenCalled()
   })
+  it('identifica un 401 del cobro sin culpar al permiso del miembro', async () => {
+    const f = setup()
+    f.client.incomingPayment.get.mockRejectedValue(new OpenPaymentsClientError('private', { status: 401, description: 'private' }))
+    const result = await recoverExisting(f.client as unknown as AuthenticatedClient, f.snapshot, f.journal, true, f.tokens)
+    expect(result.report[0]).toMatchObject({ status: 'unknown', stage: 'incoming' })
+    expect(result.report[0].reason).toContain('cobro de la farmacia')
+    expect(result.report[0].reason).not.toContain('private')
+    expect(result.blocked).toBe(true)
+    expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
+  })
   it('una consulta rechazada nunca borra el bloqueo ni declara fallo definitivo', async () => {
     const f = setup()
     f.client.outgoingPayment.get.mockRejectedValue(new Error('private-detail'))
     const result = await recoverExisting(f.client as unknown as AuthenticatedClient, f.snapshot, f.journal, true, f.tokens)
     expect(result.blocked).toBe(true)
-    expect(result.report[0].status).toBe('unknown')
+    expect(result.report[0]).toMatchObject({ status: 'unknown', stage: 'outgoing' })
     expect(JSON.stringify(result)).not.toContain('private-detail')
     expect(f.journal.record).toHaveBeenCalledWith('quote-old', expect.objectContaining({ status: 'unknown' }))
   })

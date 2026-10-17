@@ -254,3 +254,10 @@ pudieron consultar y conserva desconocidos cuando no se pudieron verificar;
 si el proveedor exige interacción utiliza el servidor anterior. Ninguno de los
 comandos ejecuta pagos. La aceptación real de grants read y los resultados de
 la red deben comprobarlos los dueños en su navegador; los tests usan SDK simulado.
+
+Si el informe indica `stage: outgoing`, falló la lectura del pago del miembro;
+`stage: incoming` identifica la lectura del cobro de la farmacia. Un HTTP 401
+no demuestra que el pago haya fallado. No repitas pagos ni borres el diario.
+La página retira los permisos de lectura al vencer su `expires_in`; solicitar
+permisos nuevos repetidamente no resuelve un 401 que también aparece con un
+permiso recién emitido. Conserva el informe saneado para revisar con el proveedor.

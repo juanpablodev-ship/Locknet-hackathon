@@ -14,7 +14,7 @@ const enough = (received: Money, expected: Money) => validMoney(received) && val
 /** Solo grant read y GET de IDs existentes. No contiene create de pagos, quotes ni cobros. */
 export async function recoverExisting(client: AuthenticatedClient, snapshot: Snapshot, journal: Journal, apply: boolean, readTokens: ReadonlyMap<string, string> = new Map()) {
   const reader = createPaymentReader(client, readTokens)
-  const report: { spendId: string; memberName: string; status: PaymentAttempt['status']; received?: Money; expired?: boolean; reason: string }[] = []
+  const report: { spendId: string; memberName: string; status: PaymentAttempt['status']; stage?: 'outgoing' | 'incoming' | 'validation'; received?: Money; expired?: boolean; reason: string }[] = []
   const checked = new Map<string, { status: PaymentAttempt['status']; received: Money; expired: boolean }>()
   for (const spend of snapshot.spends) {
     const wallet = snapshot.wallets.find(w => w.id === spend.walletId)
@@ -31,12 +31,15 @@ export async function recoverExisting(client: AuthenticatedClient, snapshot: Sna
             reason: attempt.status === 'failed' ? 'Este intento no creó un pago.' : 'No se conserva un ID saliente; no se puede desbloquear automáticamente.' })
           continue
         }
+        let stage: 'outgoing' | 'incoming' | 'validation' = 'outgoing'
         try {
           let result = checked.get(attempt.outgoingId)
           if (!result) {
             const outgoing = await reader.outgoing(attempt.outgoingId, member.walletAddress)
             if (outgoing.walletAddress !== member.walletAddress || outgoing.receiver !== attempt.incomingPaymentUrl) throw new Error('Recurso no corresponde al intento')
+            stage = 'incoming'
             const incoming = await reader.incoming(attempt.incomingPaymentUrl, spend.destination.walletAddress)
+            stage = 'validation'
             if (incoming.walletAddress !== spend.destination.walletAddress || !validMoney(incoming.receivedAmount)) throw new Error('Cobro no corresponde al destino')
             const received = incoming.receivedAmount
             const status = enough(received, outgoing.receiveAmount) ? 'completed' : outgoing.failed ? 'failed' : 'pending'
@@ -53,7 +56,7 @@ export async function recoverExisting(client: AuthenticatedClient, snapshot: Sna
           if (apply) attempt.status = 'unknown'
           if (apply && attempt.quoteId) await journal.record(attempt.quoteId, { ...attempt, status: 'unknown' })
           const hint = error instanceof PaymentError ? error.message : error instanceof OpenPaymentsClientError ? 'Consulta rechazada HTTP ' + error.status + ' (' + (/^[a-z_]{1,60}$/.test(error.code ?? '') ? error.code : 'sin codigo') + ').' : 'Respuesta incompatible con el intento guardado.'
-          report.push({ spendId: spend.id, memberName: member.name, status: 'unknown', reason: hint + ' No se modifica ni desbloquea este intento.' })
+          report.push({ spendId: spend.id, memberName: member.name, status: 'unknown', stage, reason: (stage === 'outgoing' ? 'Lectura del pago saliente: ' : stage === 'incoming' ? 'Lectura del cobro de la farmacia: ' : 'Validación del recurso: ') + hint + ' Se conserva como desconocido; no se desbloquea este intento.' })
         }
       }
     }
