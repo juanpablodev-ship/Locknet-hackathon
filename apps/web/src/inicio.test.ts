@@ -33,11 +33,11 @@ describe('renderInicio', () => {
     delete wallet.members[1].available
 
     const html = renderInicio(wallet)
-    expect(html.match(/class="casilla-cupo"/g)).toHaveLength(3)
+    expect(html.match(/<div class="casilla(?!s)/g)).toHaveLength(3)
     expect(html).toContain('Hermano en Bogotá: 25% disponible')
     expect(html).toContain('style="width: 25%"')
     expect(html).toContain('Hermana en Medellín: disponible desconocido')
-    expect(html).toContain('casilla-cupo-vacia">—')
+    expect(html).toContain('class="casilla casilla-vacia"')
   })
 
   it('escapa nombres de miembros en la etiqueta accesible de la barra', () => {
@@ -96,15 +96,22 @@ describe('renderInicio', () => {
     expect(html).not.toContain('multifirma')
   })
 
-  it('muestra el panel "El contrato del grupo" con la regla y quién la hace cumplir', () => {
+  it('muestra el panel "El contrato del grupo" agrupado por quién hace cumplir cada regla', () => {
     const [care] = getWallets()
     const html = renderInicio(care)
 
     expect(html).toContain('El contrato del grupo')
-    expect(html).toContain('Cada uno autoriza el tope que elija</span><b class="contrato-quien">Su propio banco')
-    expect(html).toContain('su permiso se cancela al instante</span><b class="contrato-quien">Su propio banco')
-    expect(html).toContain('aunque alguien pague en otra moneda</span><b class="contrato-quien">La cotización de Open Payments')
-    expect(html).toContain(`Nada se da por pagado sin verificar lo que llegó</span><b class="contrato-quien">${NOMBRE_GUARDIAN}`)
+    const bancoBloque = html.slice(html.indexOf('<h3>Su propio banco</h3>'), html.indexOf('</div>', html.indexOf('<h3>Su propio banco</h3>')))
+    expect(bancoBloque).toContain('Cada uno autoriza el tope que elija')
+    expect(html).toContain('su permiso se cancela al instante')
+    // La renovación mensual no está demostrada: no se afirma como regla del contrato.
+    expect(html).not.toContain('El permiso se renueva cada mes')
+
+    expect(html).toContain('<h3>Open Payments</h3>')
+    expect(html).toContain('El destino recibe el monto exacto, aunque alguien pague en otra moneda')
+
+    const sentinelsBloque = html.slice(html.indexOf(`<h3>${NOMBRE_GUARDIAN}</h3>`))
+    expect(sentinelsBloque).toContain('Nada se da por pagado sin verificar lo que llegó')
     expect(html).not.toContain('Partes iguales')
   })
 
@@ -130,7 +137,9 @@ describe('renderInicio', () => {
     expect(renderInicio(care)).not.toContain('Cada uno autoriza hasta')
     care.rules.memberCap = { cap: { value: '4000000', assetCode: 'COP', assetScale: 2 }, interval: 'R12/2026-10-16T00:00:00Z/P1M' }
     const html = renderInicio(care)
-    expect(html).toContain('Cada uno autoriza hasta $40.000 al mes</span><b class="contrato-quien">Su propio banco')
+    const acordado = html.slice(html.indexOf('Lo que acordó el grupo'), html.indexOf('Lo que se garantiza siempre'))
+    const banco = acordado.slice(acordado.indexOf('<h3>Su propio banco</h3>'), acordado.indexOf('</div>', acordado.indexOf('<h3>Su propio banco</h3>')))
+    expect(banco).toContain('Cada uno autoriza hasta $40.000 al mes')
     expect(html).not.toContain('el tope que elija')
   })
 
@@ -138,7 +147,8 @@ describe('renderInicio', () => {
     const [care] = getWallets()
     const html = renderInicio(care)
 
-    expect(html).toContain('mayor a $200.000 necesita 2 aprobaciones del grupo; un solo rechazo detiene un pago riesgoso</span><b class="contrato-quien">Kivor')
+    const kivorBloque = html.slice(html.indexOf('<h3>Kivor</h3>'), html.indexOf(`<h3>${NOMBRE_GUARDIAN}</h3>`))
+    expect(kivorBloque).toContain('mayor a $200.000 necesita 2 aprobaciones del grupo; un solo rechazo detiene un pago riesgoso')
     for (const d of care.knownDestinations) expect(html).toContain(d.name)
     expect(html).toContain(`Destinos de confianza: ${care.knownDestinations[0].name}`)
 

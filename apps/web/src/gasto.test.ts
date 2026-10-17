@@ -176,6 +176,8 @@ describe('renderGasto - otros estados', () => {
 
   it('paying muestra el progreso "2 de 3 aportes confirmados · falta Madrid"', () => {
     const html = renderGasto(gastoPagando, cuidadoDeMama)
+    expect(html).toContain('class="pasos-gasto"')
+    expect(html).toContain('aria-current="step"')
     expect(html).toContain('2 de 3 aportes confirmados · falta Hermano en Madrid')
     expect(html).toContain('aria-valuemax="3" aria-valuenow="2"')
     expect(html).toContain('class="barra-progreso-relleno barra-progreso-ambar" style="width: 67%"')
@@ -188,6 +190,8 @@ describe('renderGasto - otros estados', () => {
     const html = renderGasto(spend, cuidadoDeMama)
 
     expect(html).toContain('Gasto verificado: llegó completo a Farmacia Medellín')
+    expect(html).toContain('class="recibo"')
+    expect(html).toContain('>Recibo</h1>')
     expect(html).toContain('aria-valuemax="3" aria-valuenow="3"')
     expect(html).toContain('class="barra-progreso-relleno barra-progreso-verde" style="width: 100%"')
   })
@@ -195,6 +199,7 @@ describe('renderGasto - otros estados', () => {
   it('incomplete muestra panel ámbar, el motivo del fallo y el botón de reintentar', () => {
     const html = renderGasto(gastoIncompleto, cuidadoDeMama)
     expect(html).toContain('Pago incompleto')
+    expect(html).toContain('Incompleto: llegaron 2 de 3 aportes.')
     expect(html).toContain('cupo insuficiente')
     expect(html).toContain('Reintentar el aporte de Hermano en Madrid')
     expect(html).toContain('data-accion="reintentar"')
@@ -226,6 +231,14 @@ describe('consulta accesible en gastos incompletos', () => {
     const actions = [...html.matchAll(/<div class="acciones">([\s\S]*?)<\/div>/g)].map(m => m[1])
     expect(actions.some(content => content.includes('data-accion="consultar"'))).toBe(true)
     expect(html).toContain('Consultar intentos y recepción (sin pagar)')
+  })
+
+  it('paying con una respuesta pendiente permite volver a consultar y no reintentar', () => {
+    const html = renderGasto(gastoPagando, cuidadoDeMama)
+    expect(html).toContain('No se pudo verificar')
+    expect(html).toContain('data-accion="consultar"')
+    expect(html).toContain('Volver a consultar')
+    expect(html).not.toContain('data-accion="reintentar"')
   })
 })
 

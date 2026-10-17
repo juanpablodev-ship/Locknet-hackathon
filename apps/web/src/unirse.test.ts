@@ -21,6 +21,8 @@ describe('renderUnirse', () => {
     expect(html).toContain('name="walletAddress"')
     expect(html).toContain('name="cap"')
     expect(html).toContain('Tope por período')
+    expect(html).toContain('class="tarjeta-invitacion"')
+    expect(html).toContain('id="cancelar-union"')
   })
 
   it('solo muestra la advertencia y sus dos botones con status warn', () => {

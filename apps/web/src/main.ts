@@ -35,7 +35,6 @@ import { DEMO_MODE } from './config.js'
 import { renderAppChrome } from './navegacion.js'
 import { qrComoSvg, renderGrupoNoExiste, renderSinWalletPropia, renderUnirse, renderVueltaUnirse, topeDelContrato, urlInvitacion } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
-import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
 import { moneyFromMajor } from './money-input.js'
 import './styles.css'
 
@@ -66,25 +65,6 @@ const mensajesConsulta = new Map<string, string>()
 const consultasEnCurso = new Set<string>()
 const turnos = crearTurnos()
 
-function temaPreferidoDelSistema(): Tema {
-  try {
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  } catch {
-    return 'light'
-  }
-}
-
-// Se aplica ANTES del primer render (abajo, fuera de cualquier función) para que no parpadee.
-let temaActual: Tema = leerTemaGuardado() ?? temaPreferidoDelSistema()
-document.documentElement.setAttribute('data-theme', temaActual)
-
-function alternarTema(): void {
-  temaActual = siguienteTema(temaActual)
-  document.documentElement.setAttribute('data-theme', temaActual)
-  guardarTema(temaActual)
-  void pintarChrome(parseHash(location.hash))
-}
-
 function navegarA(hash: string): void {
   if (location.hash === hash) render()
   else if (/^https:\/\//.test(hash)) location.assign(hash)
@@ -110,20 +90,24 @@ function panelDevHtml(): string {
   if (MODO !== 'mock') return ''
   const soloMama = getWalletActual() === 'w-mama'
   return `
-    <div class="panel-dev">
-      <span>Modo MOCK - datos simulados</span>
-      ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
-      <button type="button" data-accion="escenario2">Escenario 2</button>
-      ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
-      ${soloMama ? `<label class="interruptor">
-        <input type="checkbox" id="falla-madrid" />
-        Que falle Madrid
-      </label>` : ''}
-      <label class="interruptor">
-        <input type="checkbox" id="hash-invalido" ${hashInvalidoActual ? 'checked' : ''} />
-        Simular hash inválido
-      </label>
-    </div>
+    <details class="panel-dev">
+      <summary>Panel de demo</summary>
+      <div class="panel-dev-controles">
+        <span>Modo MOCK · datos y pagos simulados</span>
+        ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
+        <button type="button" data-accion="escenario2">Escenario 2</button>
+        ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
+        ${soloMama ? `<label class="interruptor">
+          <input type="checkbox" id="falla-madrid" />
+          Que falle Madrid
+        </label>` : ''}
+        <label class="interruptor">
+          <input type="checkbox" id="hash-invalido" ${hashInvalidoActual ? 'checked' : ''} />
+          Simular hash inválido
+        </label>
+        <button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>
+      </div>
+    </details>
   `
 }
 
@@ -133,7 +117,9 @@ function enlazarPanelDev(): void {
   panel?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('button')
     const accion = boton?.dataset.accion
-    if (accion === 'escenario1') {
+    if (accion === 'reiniciar-demo' && boton) {
+      void reiniciarDemo(boton)
+    } else if (accion === 'escenario1') {
       playEscenario1()
       navegarA('#/inicio')
     } else if (accion === 'escenario2') {
@@ -188,13 +174,13 @@ async function pintarInicio(): Promise<void> {
   if (!turnos.esVigente(miTurno)) return
   const result = new URLSearchParams(location.hash.split('?')[1] ?? '').get('union')
   const message = result === 'ok' ? 'Union confirmada; ya puedes actuar como tu miembro.' : result ? 'No se confirmo la union. No se activo un miembro; vuelve a intentarlo desde Unirse.' : ''
-  app.innerHTML = renderInicio(wallet, spends, wallets) + `<p role="status">${escapeHtml(message)}</p><button id="consultar-cupo">Consultar cupos</button>` + (MODO === 'live' ? wallet.members.filter(m => ownedIds.includes(m.id) && m.status === 'active').map(m => `<button data-revoke="${escapeHtml(m.id)}">Revocar mi permiso: ${escapeHtml(m.name)}</button>`).join('') : '') + panelDevHtml()
+  app.innerHTML = renderInicio(wallet, spends, wallets) + (message ? `<p role="status">${escapeHtml(message)}</p>` : '') + (MODO === 'live' ? wallet.members.filter(m => ownedIds.includes(m.id) && m.status === 'active').map(m => `<button data-revoke="${escapeHtml(m.id)}">Revocar mi permiso: ${escapeHtml(m.name)}</button>`).join('') : '') + panelDevHtml()
   document.getElementById('consultar-cupo')?.addEventListener('click', () => { void refreshCapacity(wallet.id).then(() => pintarInicio()).catch(err => pintarError(app, err, () => void pintarInicio())) })
   app.querySelectorAll('[data-revoke]').forEach(button => button.addEventListener('click', () => {
     if (confirm('Revocar explicitamente este permiso en la wallet?')) void revokeMember(wallet.id, (button as HTMLElement).dataset.revoke!).then(() => pintarInicio()).catch(err => pintarError(app, err, () => void pintarInicio()))
   }))
   enlazarPanelDev()
-  app.querySelector('.selector-billeteras')?.addEventListener('click', (event) => {
+  app.querySelector('.grupos')?.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest('[data-wallet-id]') as HTMLElement | null
     const walletId = button?.dataset.walletId
     if (walletId && wallets.some((item) => item.id === walletId)) {
@@ -314,7 +300,7 @@ async function pintarGasto(id: string): Promise<void> {
     if (botonAprobarRiesgo) botonAprobarRiesgo.disabled = !checkboxRiesgo.checked
   })
 
-  app.querySelector('.acciones')?.addEventListener('click', (ev) => {
+  app.querySelector('.gasto-pantalla')?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('[data-accion]') as HTMLElement | null
     if (!boton) return
     const accion = boton.dataset.accion
@@ -761,16 +747,14 @@ async function pintarChrome(route: Route): Promise<void> {
     error: errorModoServidor ?? undefined,
     nombreBilletera,
     numeroMiembros,
-    tema: temaActual,
-    contadorPorAprobar
+    contadorPorAprobar,
+    mostrarReinicio: MODO !== 'mock'
   })
   document.body.dataset.demoMode = mode
 
   shell.onclick = (event) => {
     const reiniciar = (event.target as HTMLElement).closest('[data-accion="reiniciar-demo"]') as HTMLButtonElement | null
     if (reiniciar) void reiniciarDemo(reiniciar)
-    const tema = (event.target as HTMLElement).closest('[data-accion="alternar-tema"]')
-    if (tema) alternarTema()
   }
 
   desuscribirChrome?.()

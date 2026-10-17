@@ -1,67 +1,32 @@
 @import './fonts.css';
 
-/* Paleta de la Test Wallet de Interledger (borrador de diseño). Los NOMBRES de los
-   tokens son los del proyecto; los VALORES vienen del borrador: --verde = su teal,
-   --rojo = su magenta (riesgo alto), --morado = riesgo medio. --ambar es propio del
-   proyecto (no viene del borrador): se usa para "pendiente de unirse" e "incompleto". */
+/* Paleta final de Kivor (solo tema claro; ver decisión 2 del prompt de diseño).
+   Los NOMBRES de los tokens son los del proyecto; los VALORES son los de Kivor:
+   --verde = el producto/riesgo bajo/verificado, --rojo = las advertencias (--aviso
+   del diseño), --sent = Open Sentinels (negro). --ambar es propio del proyecto (no
+   viene del diseño): se usa para "pendiente de unirse" e "incompleto". El riesgo
+   medio se marca con borde rojo (3px), no con un color propio: así lo resuelve la
+   cascada del diseño para .veredicto.medio. */
 :root {
-  --verde: #00797f;
+  --verde: #14d26f;
   --ambar: #8a5a00;
-  --morado: #7e1ac0;
-  --rojo: #c011a0;
+  --rojo: #e3242b;
+  --sent: #111111;
   --fondo: #ffffff;
-  --texto: #222222;
-  --borde: #b2b2b2;
-  --fondo-panel-rojo: #fdecea;
-  --texto-panel-rojo: #c011a0;
+  --sup: #f5f5f5;
+  --texto: #111111;
+  --muted: #555555;
+  --borde: #cfcfcf;
+  --fondo-panel-rojo: #e3242b;
+  --texto-panel-rojo: #ffffff;
   --fondo-panel-verde: #e8f5e9;
-  --texto-panel-verde: #00797f;
+  --texto-panel-verde: #0a7a3d;
   --fondo-panel-ambar: #fff8e1;
   --texto-panel-ambar: #8a5a00;
-  --texto-sobre-verde: #ffffff;
+  --texto-sobre-verde: #111111;
   --texto-sobre-rojo: #ffffff;
   --altura-tabs: 64px;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --verde: #08ffff;
-    --ambar: #ffc107;
-    --morado: #c9a0ff;
-    --rojo: #ed4dc8;
-    --fondo: #2a0f49;
-    --texto: #ffffff;
-    --borde: rgb(255 194 243 / 0.3);
-    --fondo-panel-rojo: #361330;
-    --texto-panel-rojo: #ed4dc8;
-    --fondo-panel-verde: #0b3434;
-    --texto-panel-verde: #08ffff;
-    --fondo-panel-ambar: #3a2a05;
-    --texto-panel-ambar: #ffc107;
-    --texto-sobre-verde: #2a0f49;
-    --texto-sobre-rojo: #2a0f49;
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme='dark'] {
-  --verde: #08ffff;
-  --ambar: #ffc107;
-  --morado: #c9a0ff;
-  --rojo: #ed4dc8;
-  --fondo: #2a0f49;
-  --texto: #ffffff;
-  --borde: rgb(255 194 243 / 0.3);
-  --fondo-panel-rojo: #361330;
-  --texto-panel-rojo: #ed4dc8;
-  --fondo-panel-verde: #0b3434;
-  --texto-panel-verde: #08ffff;
-  --fondo-panel-ambar: #3a2a05;
-  --texto-panel-ambar: #ffc107;
-  --texto-sobre-verde: #2a0f49;
-  --texto-sobre-rojo: #2a0f49;
-  color-scheme: dark;
 }
 
 *,
@@ -87,11 +52,15 @@ body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* Proyector: 1366×768 y más grande. El diseño de a pie (móvil) es la columna angosta
+/* Proyector: 1366�-768 y más grande. El diseño de a pie (móvil) es la columna angosta
    del borrador; aquí se escala la letra base y, por pantalla, el ancho del contenedor. */
 @media (min-width: 1024px) {
   body {
     font-size: 20px;
+  }
+
+  .contenedor {
+    max-width: 640px;
   }
 }
 
@@ -145,10 +114,41 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  max-width: 520px;
+  margin: 0 auto;
   padding: 14px 16px;
   background: var(--fondo);
   color: var(--texto);
   border-bottom: 1px solid var(--borde);
+}
+
+.cab b {
+  position: relative;
+  padding-left: 32px;
+}
+
+.cab b::before {
+  content: 'K';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  border-radius: 5px;
+  background: var(--verde);
+  color: var(--texto-sobre-verde);
+  font-size: 15px;
+}
+
+@media (min-width: 1024px) {
+  .cab,
+  .acciones-demo {
+    max-width: 640px;
+  }
 }
 
 .cab > div {
@@ -197,6 +197,8 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 8px 16px;
+  max-width: 520px;
+  margin: 0 auto;
   padding: 4px 16px;
   border-bottom: 1px solid var(--borde);
   background: var(--fondo);
@@ -221,8 +223,9 @@ body {
 .cab button:focus-visible,
 .boton-reiniciar-demo:focus-visible,
 .panel-dev button:focus-visible,
-.panel-dev input:focus-visible {
-  outline: 3px solid var(--morado);
+.panel-dev input:focus-visible,
+.panel-dev summary:focus-visible {
+  outline: 3px solid var(--texto);
   outline-offset: 2px;
 }
 
@@ -271,7 +274,7 @@ body {
   right: 24%;
   height: 4px;
   border-radius: 0 0 4px 4px;
-  background: var(--morado);
+  background: var(--texto);
 }
 
 .tabs i {
@@ -287,23 +290,16 @@ body {
 .contenedor {
   width: 100%;
   min-width: 0;
-  max-width: 1100px;
+  max-width: 520px;
   margin: 0 auto;
-  /* Deja espacio para las pestañas fijas de abajo y, en modo simulado, el panel de
-     desarrollo apilado encima de ellas (ver .panel-dev). */
-  padding: 16px 16px calc(var(--altura-tabs) + 140px);
+  /* Deja espacio para las pestañas fijas de abajo; los controles demo fluyen debajo. */
+  padding: 16px 16px calc(var(--altura-tabs) + 32px);
   box-sizing: border-box;
 }
 
 @media (max-width: 375px) {
   .contenedor {
     overflow-x: hidden;
-  }
-}
-
-@media (max-width: 600px) {
-  #app:has(.panel-dev) .contenedor {
-    padding-bottom: calc(var(--altura-tabs) + 200px);
   }
 }
 
@@ -331,9 +327,47 @@ body {
   }
 }
 
+/* El dinero sigue en el banco de cada miembro: $0 en custodia de Kivor (decisión 4). */
+.custodia {
+  margin: 16px 0;
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: var(--sup);
+}
+
+.c-num {
+  margin: 0 0 4px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.c-txt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.c-txt b {
+  color: var(--texto);
+}
+
+/* Cupo agrupado por moneda (capacityByAsset): nunca se suman monedas distintas. */
+.monedas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.cupo-de {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
 /* Una casilla del mismo ancho por miembro (decisión 8): el relleno es SU propio
    porcentaje available/cap, nunca una suma entre monedas distintas. */
-.barra-cupo {
+.casillas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
   gap: 3px;
@@ -344,72 +378,103 @@ body {
   border-radius: 6px;
 }
 
-.casilla-cupo {
+.casilla {
   position: relative;
   background: var(--borde);
 }
 
-.casilla-cupo span {
+.casilla i {
   display: block;
   height: 100%;
   background: var(--verde);
 }
 
-.casilla-cupo-vacia {
-  position: absolute;
-  inset: 0;
+.casilla-vacia {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--sup);
+  color: var(--muted);
   font-size: 13px;
-  color: var(--texto);
 }
 
 .miembros {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 16px;
   margin: 16px 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
 }
 
-.reglas-billetera {
-  margin: 24px 0;
-  padding: 20px;
+.miembros li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 12px 14px;
   border: 1px solid var(--borde);
   border-radius: 8px;
 }
 
-.reglas-billetera h2 {
-  margin-top: 0;
+.miembros li small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.h-sec {
+  margin: 28px 0 4px;
   font-size: 24px;
 }
 
-.contrato-filas {
+/* El contrato agrupado por quién hace cumplir cada regla (decisión 6). */
+#contrato {
+  display: grid;
+  gap: 14px;
+  margin: 12px 0;
+}
+
+.contrato-bloques {
+  display: grid;
+  gap: 14px;
+}
+
+.grupo-c {
+  padding: 16px 18px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+
+.grupo-c h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.grupo-c ul {
   margin: 0;
   padding: 0;
   list-style: none;
+  display: grid;
+  gap: 8px;
 }
 
-.contrato-filas li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 4px 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--borde);
-  font-size: 20px;
+.grupo-c li {
+  font-size: 16px;
 }
 
-.contrato-filas li:first-child {
-  border-top: 0;
+.grupo-c.kivor {
+  border-color: var(--verde);
+  background: var(--sup);
 }
 
-.contrato-regla {
-  flex: 1 1 320px;
+.grupo-c.sentinels {
+  border-color: var(--sent);
+  background: var(--sent);
+  color: #ffffff;
 }
 
-.contrato-quien {
-  flex: 0 0 auto;
+.grupo-c.sentinels h3 {
+  color: #ffffff;
 }
 
 .nota-configuracion {
@@ -430,48 +495,38 @@ body {
   background: var(--verde);
 }
 
-.selector-billeteras {
-  margin: 0 0 24px;
+.grupos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 20px;
 }
 
-.selector-billeteras > p {
-  margin: 0 0 8px;
-  font-weight: 700;
+.chip {
+  padding: 8px 16px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
 }
 
-.selector-billeteras .acciones {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-  margin-top: 0;
+.chip:hover:not(.billetera-seleccionada) {
+  border-color: var(--texto);
+  background: var(--sup);
 }
 
-.selector-billeteras .boton {
-  width: 100%;
-  max-width: 100%;
-  min-height: 64px;
-  border: 2px solid var(--borde);
-  overflow-wrap: anywhere;
-  white-space: normal;
-  text-align: center;
-}
-
-.billetera-seleccionada {
-  outline: 3px solid var(--texto);
+.chip:focus-visible {
+  outline: 3px solid var(--verde);
   outline-offset: 2px;
 }
 
-.miembro {
-  border: 1px solid var(--borde);
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.miembro-nombre {
-  margin: 0 0 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
+.billetera-seleccionada {
+  border-color: var(--texto);
+  background: var(--texto);
+  color: #ffffff;
 }
 
 .marca {
@@ -503,7 +558,7 @@ body {
   margin-top: 26px;
   padding: 16px 18px;
   border: 1px solid var(--borde);
-  border-left: 6px solid var(--morado);
+  border-left: 8px solid var(--rojo);
   border-radius: 6px;
   color: var(--texto);
   text-decoration: none;
@@ -526,7 +581,7 @@ body {
   flex: none;
   font-style: normal;
   font-weight: 700;
-  color: var(--morado);
+  color: var(--rojo);
 }
 
 .estado {
@@ -567,12 +622,218 @@ body {
   cursor: pointer;
 }
 
+/* Botones del dise�o final de Kivor (decisiones 1 y 5): mismo rol que .boton,
+   sistema visual nuevo. Conviven mientras los commits 3 a 6 restylen el resto. */
+.acc {
+  margin-top: 24px;
+}
+
+.dos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+}
+
+.btn {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid var(--texto);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn.lleno {
+  border-color: var(--verde);
+  background: var(--verde);
+  color: var(--texto-sobre-verde);
+}
+
+.btn.peq {
+  display: block;
+  width: auto;
+  padding: 8px 16px;
+  margin: 12px 0;
+  font-size: 15px;
+}
+
+.btn-contorno {
+  border-color: var(--texto);
+  background: var(--fondo);
+}
+
+.gasto-pantalla {
+  display: grid;
+  gap: 12px;
+}
+
+.pasos-gasto {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.paso-gasto {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.paso-punto {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--borde);
+  border-radius: 50%;
+  background: var(--fondo);
+}
+
+.paso-completado .paso-punto {
+  border-color: var(--verde);
+  background: var(--verde);
+}
+
+.paso-actual {
+  color: var(--texto);
+}
+
+.paso-actual .paso-punto {
+  outline: 3px solid var(--texto);
+  outline-offset: 2px;
+}
+
+.paso-fallido {
+  color: var(--rojo);
+}
+
+.paso-fallido .paso-punto {
+  border-color: var(--rojo);
+  background: var(--rojo);
+}
+
+.no-verificado {
+  margin-top: 16px;
+  padding: 16px;
+  border: 2px solid var(--rojo);
+  border-radius: 8px;
+  background: var(--sup);
+}
+
+.no-verificado h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.no-verificado p {
+  margin: 0;
+}
+
+.ayuda-consulta {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.recibo {
+  margin: 8px 0 16px;
+  padding: 20px;
+  border: 2px dashed var(--texto);
+  border-radius: 10px;
+}
+
+.recibo h1 {
+  margin: 0 0 8px;
+}
+
+.recibo .progreso {
+  margin-top: 20px;
+}
+
+@media (max-width: 375px) {
+  .pasos-gasto {
+    gap: 4px;
+  }
+
+  .paso-gasto {
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .paso-punto {
+    width: 14px;
+    height: 14px;
+  }
+
+  .recibo {
+    padding: 16px;
+  }
+}
+
 .formulario {
   width: 100%;
   min-width: 0;
   display: grid;
   gap: 12px;
   max-width: 720px;
+}
+
+.pagina-formulario {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.encabezado-formulario {
+  margin: 0;
+}
+
+.formulario-ceja {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.encabezado-formulario h1 {
+  margin: 0;
+  font-size: clamp(28px, 7vw, 36px);
+  line-height: 1.15;
+}
+
+.encabezado-formulario > p:last-child {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.formulario-panel {
+  max-width: none;
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--sup);
+}
+
+.formulario-panel h2 {
+  margin: 0;
+  font-size: 22px;
 }
 
 .formulario label {
@@ -602,6 +863,28 @@ body {
   resize: vertical;
 }
 
+.formulario input:focus-visible,
+.formulario select:focus-visible,
+.formulario textarea:focus-visible {
+  outline: 3px solid var(--texto);
+  outline-offset: 2px;
+}
+
+.campos-extra:not([hidden]) {
+  display: grid;
+  gap: 12px;
+}
+
+.formulario-panel > p {
+  margin: 4px 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.formulario-panel > .btn {
+  min-height: 52px;
+}
+
 .vista-previa {
   margin: 4px 0;
   padding: 12px 16px;
@@ -621,9 +904,114 @@ body {
   background: #ffffff;
 }
 
+.tarjeta-invitacion {
+  display: grid;
+  justify-items: center;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--sup);
+  text-align: center;
+}
+
+.tarjeta-invitacion > p {
+  max-width: 38ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.pagina-unirse .qr-unirse {
+  margin-top: 0;
+  background: var(--fondo);
+}
+
+.resultado-unirse {
+  align-content: start;
+}
+
+.resultado-unirse-panel {
+  margin-top: 8px;
+}
+
+.advertencia-unirse .acciones {
+  margin-top: 16px;
+}
+
 .lista-historial {
   display: grid;
   gap: 16px;
+}
+
+.historial-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--texto);
+}
+
+.historial-cabecera h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.historial-ceja {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.historial-billetera {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.contador-historial {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--texto);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.estado-vacio-historial {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 24px 0;
+  padding: 28px 20px;
+  border: 1px dashed var(--borde);
+  border-radius: 10px;
+  background: var(--sup);
+  text-align: center;
+}
+
+.estado-vacio-historial p {
+  margin: 0;
+}
+
+.estado-vacio-historial .sin-historial {
+  padding: 0;
+  border: 0;
+  font-size: 20px;
+}
+
+.marca-vacio {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 2px solid var(--borde);
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 700;
 }
 
 .lista-aprobar {
@@ -639,7 +1027,7 @@ body {
   min-width: 0;
   padding: 18px 20px;
   border: 1px solid var(--borde);
-  border-left: 6px solid var(--morado);
+  border-left: 6px solid var(--texto);
   border-radius: 8px;
   background: var(--fondo);
   color: var(--texto);
@@ -649,7 +1037,7 @@ body {
 
 .pedido:hover,
 .pedido:focus-visible {
-  border-color: var(--morado);
+  border-color: var(--texto);
   transform: translateY(-1px);
 }
 
@@ -685,7 +1073,7 @@ body {
 }
 
 .riesgo-ambar {
-  color: var(--morado);
+  color: var(--rojo);
 }
 
 .riesgo-rojo {
@@ -714,6 +1102,7 @@ body {
   padding: 16px;
   border: 1px solid var(--borde);
   border-radius: 8px;
+  background: var(--fondo);
 }
 
 .fila-gasto-verde {
@@ -769,17 +1158,8 @@ body {
   color: var(--texto-panel-rojo);
 }
 
-.fila-gasto .boton {
+.fila-gasto .btn {
   white-space: nowrap;
-}
-
-.sin-historial {
-  margin: 24px 0;
-  padding: 32px 20px;
-  border: 1px dashed var(--borde);
-  border-radius: 8px;
-  text-align: center;
-  font-weight: 700;
 }
 
 @media (max-width: 600px) {
@@ -805,7 +1185,7 @@ body {
     gap: 8px;
   }
 
-  .fila-gasto .boton {
+  .fila-gasto .btn {
     text-align: center;
   }
 }
@@ -821,24 +1201,35 @@ body {
 }
 
 .panel-dev {
-  position: fixed;
-  bottom: calc(var(--altura-tabs) + env(safe-area-inset-bottom, 0px));
-  left: env(safe-area-inset-left, 0px);
-  right: env(safe-area-inset-right, 0px);
-  z-index: 6;
+  width: min(640px, 100%);
+  margin: 8px auto calc(var(--altura-tabs) + 16px);
+  padding: 0 16px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.panel-dev summary {
+  min-height: 48px;
+  padding: 12px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.panel-dev-controles {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: var(--fondo);
-  color: var(--texto);
-  border-top: 2px solid var(--borde);
-  box-shadow: 0 -4px 16px rgb(0 0 0 / 0.12);
+  padding: 0 0 12px;
 }
 
-.panel-dev > span {
+.panel-dev-controles > span {
+  flex: 1 1 100%;
   padding: 4px;
+  color: var(--muted);
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -872,9 +1263,8 @@ body {
 
 @media (max-width: 600px) {
   .panel-dev {
-    justify-content: flex-start;
-    gap: 4px 8px;
-    padding: 6px 8px;
+    margin-bottom: calc(var(--altura-tabs) + 8px);
+    padding: 0 12px;
   }
 }
 
@@ -926,8 +1316,50 @@ body {
   font-family: var(--mono), monospace;
 }
 
-.veredicto {
-  border-left: 6px solid var(--rojo);
+/* Veredicto de riesgo en 3 niveles (decisión 1): bajo = gris claro y borde fino;
+   medio = blanco y borde rojo de 3px; alto = negro con franja diagonal roja/negra
+   y la etiqueta de nivel en rojo con texto blanco. El texto del nivel siempre dice
+   "Riesgo bajo/medio/alto": nunca se confía solo en el color. */
+.veredicto-verde {
+  background: var(--sup);
+}
+
+.veredicto-ambar {
+  border: 3px solid var(--rojo);
+}
+
+.veredicto-rojo {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--sent);
+  background: var(--sent);
+  color: #ffffff;
+}
+
+.veredicto-rojo::before {
+  content: '';
+  display: block;
+  height: 12px;
+  margin: -20px -20px 16px;
+  background: repeating-linear-gradient(135deg, var(--rojo) 0 12px, #111111 12px 24px);
+}
+
+.veredicto-rojo .puntaje-etiqueta {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: var(--rojo);
+  color: #ffffff;
+}
+
+.sello-alto {
+  margin: 12px 0 0;
+  padding: 6px 14px;
+  border: 3px solid var(--sent);
+  border-radius: 999px;
+  background: var(--rojo);
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .veredicto .puntaje-etiqueta {
@@ -989,10 +1421,19 @@ body {
   max-height: min(90vh, 900px);
   padding: 0;
   overflow: auto;
-  border: 2px solid var(--rojo);
+  border: 3px solid var(--sent);
   border-radius: 12px;
   background: var(--fondo);
   color: var(--texto);
+}
+
+/* Confirmación de riesgo alto (decisión 7): la misma franja diagonal del
+   veredicto alto, como primer contenido del diálogo. */
+.confirma::before {
+  content: '';
+  display: block;
+  height: 12px;
+  background: repeating-linear-gradient(135deg, var(--rojo) 0 12px, #111111 12px 24px);
 }
 
 .confirma::backdrop {
@@ -1032,15 +1473,27 @@ body {
 
 .cuenta-dato mark {
   border-radius: 2px;
-  background: var(--morado);
+  background: var(--rojo);
   color: var(--fondo);
   font-weight: 700;
+}
+
+/* La cuenta que se va a pagar, destacada frente a la conocida (decisión 7). */
+.cuenta-dato-nueva {
+  border: 3px solid var(--sent);
+  background: var(--rojo);
+  color: #ffffff;
+}
+
+.cuenta-dato-nueva mark {
+  background: #ffffff;
+  color: var(--rojo);
 }
 
 .cuenta-nueva {
   margin: 0;
   padding: 12px;
-  border-left: 5px solid var(--ambar);
+  border-left: 5px solid var(--rojo);
   font-weight: 700;
 }
 
@@ -1063,6 +1516,7 @@ body {
   width: 24px;
   height: 24px;
   margin: 0;
+  accent-color: var(--sent);
 }
 
 .confirma-acciones {
@@ -1091,20 +1545,9 @@ body {
   font-weight: 700;
 }
 
-.puntaje-verde {
-  color: var(--verde);
-}
-
-/* Riesgo medio usa --morado, no --ambar: --ambar queda reservado para los estados
-   genéricos del proyecto (miembro pendiente de unirse, pago incompleto) que el
-   borrador no cubre, para no mezclar dos significados distintos bajo el mismo tono. */
-.puntaje-ambar {
-  color: var(--morado);
-}
-
-.puntaje-rojo {
-  color: var(--rojo);
-}
+/* El número y la etiqueta de riesgo no llevan su propio color (decisión 1): el
+   texto siempre dice el nivel, y el tono lo carga el panel .veredicto-* entero
+   (gris claro, borde rojo, o negro con texto blanco según el riesgo). */
 
 .advertencia {
   margin: 0 0 8px;
@@ -1383,6 +1826,7 @@ body {
   .panel { padding: 16px; }
   .panel-titulo { font-size: clamp(24px, 7vw, 32px); }
   .acciones > button { width: 100%; }
+  .formulario-panel > .btn { width: 100%; }
 }
 
 .error-campo {

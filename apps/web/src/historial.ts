@@ -19,17 +19,34 @@ function renderFila(spend: Spend): string {
         ${sello}
       </div>
       <p class="fila-gasto-monto">${escapeHtml(formatMoney(spend.amount))}</p>
-      <a class="boton" href="#/gasto/${escapeHtml(spend.id)}">Ver gasto</a>
+      <a class="btn peq" href="#/gasto/${escapeHtml(spend.id)}">Ver gasto</a>
     </article>
   `
 }
 
 export function renderHistorial(spends: Spend[], wallet: SharedWallet): string {
+  const cantidad = spends.length === 1 ? '1 gasto' : `${spends.length} gastos`
+  const encabezado = `
+    <header class="historial-cabecera">
+      <div>
+        <p class="historial-ceja">Actividad del grupo</p>
+        <h1>Historial</h1>
+        <p class="historial-billetera">${escapeHtml(wallet.name)}</p>
+      </div>
+      <span class="contador-historial">${cantidad}</span>
+    </header>
+  `
+
   if (spends.length === 0) {
     return `
       <div class="contenedor historial">
-        <h1>Historial · ${escapeHtml(wallet.name)}</h1>
-        <p class="sin-historial">Todavía no hay gastos en este grupo</p>
+        ${encabezado}
+        <section class="estado-vacio-historial">
+          <span class="marca-vacio" aria-hidden="true">0</span>
+          <p class="sin-historial">Todavía no hay gastos en este grupo</p>
+          <p>Cuando alguien pida un gasto, aparecerá aquí con su estado.</p>
+          <a class="btn lleno" href="#/gasto/nuevo">Pedir un gasto</a>
+        </section>
       </div>
     `
   }
@@ -37,8 +54,8 @@ export function renderHistorial(spends: Spend[], wallet: SharedWallet): string {
   // Spend no tiene fecha; conservar el orden de la API hasta que R3 agregue ese campo.
   return `
     <div class="contenedor historial">
-      <h1>Historial · ${escapeHtml(wallet.name)}</h1>
-      <div class="lista-historial">${spends.map(renderFila).join('')}</div>
+      ${encabezado}
+      <div class="lista-historial" aria-label="Gastos del grupo">${spends.map(renderFila).join('')}</div>
     </div>
   `
 }
