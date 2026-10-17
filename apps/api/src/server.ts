@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import type { Member, MembersService, Money, SharedWallet, WalletEvent } from '../../../contracts'
 import type { Engine } from './wallet/engine'
+import { parseAddress } from '../../../packages/guardian/src/index.js'
 
 // ---------- Unirse: una instancia de MembersService (R1) por sesión del navegador ----------
 export interface JoinDeps {
@@ -67,6 +68,51 @@ function isMoney(x: unknown): x is Money {
   const m = x as Money
   return !!m && typeof m.value === 'string' && /^\d+$/.test(m.value)
     && typeof m.assetCode === 'string' && Number.isInteger(m.assetScale)
+}
+
+const CURRENCIES = ['COP', 'EUR', 'USD']
+const isText = (x: unknown): x is string => typeof x === 'string' && x.length >= 1 && x.length <= 60 && x === x.trim()
+
+function slugify(name: string): string {
+  const slug = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return slug || 'grupo'
+}
+
+// Valida el cuerpo de POST /api/wallets y arma el grupo; cada fallo es un 400 en español.
+function buildWallet(body: any, exists: (id: string) => boolean): SharedWallet {
+  const { name, currency, approvalsRequired, aboveAmount, riskThreshold, knownDestinations } = body ?? {}
+  if (!isText(name)) throw new BadRequest('El nombre debe tener de 1 a 60 caracteres, sin espacios al inicio o al final.')
+  if (!CURRENCIES.includes(currency)) throw new BadRequest('La moneda debe ser COP, EUR o USD.')
+  if (!Number.isInteger(approvalsRequired) || approvalsRequired < 1 || approvalsRequired > 5) {
+    throw new BadRequest('Las aprobaciones requeridas deben ser un entero de 1 a 5.')
+  }
+  if (!isMoney(aboveAmount)) throw new BadRequest('aboveAmount debe ser Money { value, assetCode, assetScale }.')
+  if (aboveAmount.assetCode !== currency) throw new BadRequest('El monto de aprobación debe estar en la moneda del grupo.')
+  if (aboveAmount.assetScale !== 2) throw new BadRequest('El monto de aprobación debe usar escala 2.')
+  if (BigInt(aboveAmount.value) <= 0n) throw new BadRequest('El monto de aprobación debe ser mayor que 0.')
+  const threshold = riskThreshold ?? 60
+  if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) {
+    throw new BadRequest('El umbral de riesgo debe ser un entero de 1 a 100.')
+  }
+  if (!Array.isArray(knownDestinations) || knownDestinations.length < 1 || knownDestinations.length > 5) {
+    throw new BadRequest('Debe haber de 1 a 5 destinos de confianza.')
+  }
+  for (const d of knownDestinations) {
+    if (!isText(d?.name)) throw new BadRequest('Cada destino de confianza necesita un nombre de 1 a 60 caracteres.')
+    const a = d.walletAddress
+    if (typeof a !== 'string' || !(a.startsWith('https://') || a.startsWith('$')) || !parseAddress(a).host) {
+      throw new BadRequest(`La dirección de "${d.name}" debe empezar por https:// o $ y tener un servidor.`)
+    }
+  }
+  let id: string
+  do { id = `w-${slugify(name)}-${randomBytes(4).toString('base64url').replace(/[^a-z0-9]/gi, '').toLowerCase().padEnd(6, '0').slice(0, 6)}` } while (exists(id))
+  return {
+    id, name, currency, kind: 'care', members: [],
+    rules: { split: 'equal', groupApproval: { aboveAmount, approvalsRequired, riskThreshold: threshold, confirmInWallet: false } },
+    knownDestinations: knownDestinations.map((d: { name: string; walletAddress: string }) => ({ name: d.name, walletAddress: d.walletAddress })),
+    authorizedCapacity: { value: '0', assetCode: currency, assetScale: 2 },
+  }
 }
 
 function statusFor(err: unknown): number {
@@ -132,6 +178,12 @@ export function createApp(deps: {
   })
 
   app.get('/api/wallets', wrap((_req, res) => res.json(engine.listWallets())))
+
+  app.post('/api/wallets', wrap((req, res) => {
+    const wallet = buildWallet(req.body, (id) => engine.listWallets().some((w) => w.id === id))
+    engine.addWallet(wallet)
+    res.status(201).json(wallet)
+  }))
 
   app.get('/api/wallets/:id', wrap((req, res) => res.json(engine.getWallet(req.params.id))))
 
