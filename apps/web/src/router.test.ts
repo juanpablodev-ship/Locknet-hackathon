@@ -14,6 +14,14 @@ describe('parseHash', () => {
     expect(parseHash('#/unirse')).toEqual({ name: 'unirse' })
   })
 
+  it('reconoce #/crear-grupo', () => {
+    expect(parseHash('#/crear-grupo')).toEqual({ name: 'crear-grupo' })
+  })
+
+  it('#/crear-grupo/otra-cosa no es la pantalla de crear grupo', () => {
+    expect(parseHash('#/crear-grupo/otra-cosa')).toEqual({ name: 'no-encontrada' })
+  })
+
   it('reconoce #/unirse/volver', () => {
     expect(parseHash('#/unirse/volver')).toEqual({ name: 'unirse-volver' })
   })

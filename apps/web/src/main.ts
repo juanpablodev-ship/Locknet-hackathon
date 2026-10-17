@@ -40,6 +40,7 @@ import './styles.css'
 const nombres: Record<Route['name'], string> = {
   inicio: 'inicio',
   unirse: 'unirse',
+  'crear-grupo': 'crear-grupo',
   'unirse-volver': 'unirse-volver',
   'gasto-nuevo': 'gasto-nuevo',
   gasto: 'gasto',
