@@ -31,6 +31,7 @@ export function createPaymentsService(deps: {
   }
   const service: PaymentsService = {
     async createIncoming(walletAddress, amount) {
+      if (deps.journal?.blocked) throw new PaymentError('Hay intentos previos sin resolver en el diario local. No se creó un cobro ni se envió un pago; completa la recuperación.', 'not-created')
       if (BigInt(amount.value) <= 0n) throw new Error('El cobro debe ser positivo')
       const wallet = await client.walletAddress.get({ url: walletAddress })
       if (wallet.assetCode !== amount.assetCode || wallet.assetScale !== amount.assetScale)
@@ -51,6 +52,7 @@ export function createPaymentsService(deps: {
     },
 
     async quoteShare(memberId, incomingPaymentUrl, share) {
+      if (deps.journal?.blocked) throw new PaymentError('Hay intentos previos sin resolver en el diario local. No se creó una cotización ni se envió un pago; completa la recuperación.', 'not-created')
       if (BigInt(share.value) <= 0n) throw new Error('El aporte debe ser positivo')
       const walletAddress = await deps.memberWalletAddress(memberId)
       const wallet = await client.walletAddress.get({ url: walletAddress })

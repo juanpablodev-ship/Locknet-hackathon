@@ -236,7 +236,8 @@ Para recuperar IDs ya existentes cuando la lectura original dejó de funcionar:
    cotizaciones ni pagos. No cancela permisos existentes.
 3. Cada dueño abre ese origen en su propio perfil y solicita un permiso de lectura.
    El callback valida cookie, state, vencimiento, uso único y hash de Open Sentinels.
-   Solo acepta exactamente `outgoing-payment/read` para la wallet solicitada.
+   Solo acepta `outgoing-payment` con `read` y `read-all` para la wallet solicitada;
+   nunca incluye `create`. Este diagnóstico de lectura histórica fue autorizado por R1.
 4. Pulsa el botón de consulta. Solo usa GET de los IDs existentes; los permisos
    automáticos para incoming tienen únicamente acción `read`. Los tokens quedan
    en memoria y nunca se guardan ni se imprimen.
@@ -261,3 +262,12 @@ no demuestra que el pago haya fallado. No repitas pagos ni borres el diario.
 La página retira los permisos de lectura al vencer su `expires_in`; solicitar
 permisos nuevos repetidamente no resuelve un 401 que también aparece con un
 permiso recién emitido. Conserva el informe saneado para revisar con el proveedor.
+
+La recuperación también puede confirmar un intento fallido sin leer el cobro si
+el proveedor devuelve `failed: true` y `sentAmount.value: "0"`, con moneda y escala
+comparables a un `debitAmount` positivo. No inventa un `receivedAmount` de cero.
+Un pago pendiente, un envío parcial, una lectura rechazada o `EXPIRED` por sí solo
+mantienen el bloqueo. La API de una sesión ya abierta conserva su diario en memoria:
+actualizarlo externamente no prueba que ese proceso haya cargado los estados nuevos.
+No reiniciar la API ni perder uniones hasta completar la recuperación y guardar
+el estado público. No se habilita un pago real mientras quede algún intento incierto.

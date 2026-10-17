@@ -36,6 +36,37 @@ describe('recuperación: nunca confunde solicitado, vencido y recibido', () => {
     expect(f.client.quote.create).not.toHaveBeenCalled()
     expect(f.client.grant.request).toHaveBeenCalledWith({ url: 'https://auth.example' }, { access_token: { access: [{ type: 'incoming-payment', actions: ['read'] }] } })
   })
+  it('recupera un outgoing terminal con cero enviado aunque el cobro ya no sea legible', async () => {
+    const f = setup()
+    f.client.outgoingPayment.get.mockResolvedValueOnce({ ...(await f.client.outgoingPayment.get()), sentAmount: { value: '0', assetCode: 'COP', assetScale: 2 }, debitAmount: f.snapshot.spends[0].shares[0].share } as any)
+    f.client.incomingPayment.get.mockRejectedValue(new Error('unreadable'))
+    const result = await recoverExisting(f.client as unknown as AuthenticatedClient, f.snapshot, f.journal, true, f.tokens)
+    expect(result.blocked).toBe(false)
+    expect(result.report[0]).toMatchObject({ status: 'failed', zeroSent: true })
+    expect(result.report[0].received).toBeUndefined()
+    expect(f.client.incomingPayment.get).not.toHaveBeenCalled()
+    expect(f.journal.record).toHaveBeenCalledWith('quote-old', expect.objectContaining({ status: 'failed' }))
+    expect(f.client.outgoingPayment.create).not.toHaveBeenCalled()
+  })
+  it.each([
+    { failed: false, sent: '0', currency: 'COP' },
+    { failed: true, sent: '1', currency: 'COP' },
+    { failed: true, sent: '0', currency: 'EUR' },
+  ])('no deduce fallo sin movimiento con %j', async ({ failed, sent, currency }) => {
+    const f = setup()
+    f.client.outgoingPayment.get.mockResolvedValueOnce({ ...(await f.client.outgoingPayment.get()), failed, sentAmount: { value: sent, assetCode: currency, assetScale: 2 }, debitAmount: f.snapshot.spends[0].shares[0].share } as any)
+    f.client.incomingPayment.get.mockRejectedValue(new Error('unreadable'))
+    const result = await recoverExisting(f.client as unknown as AuthenticatedClient, f.snapshot, f.journal, true, f.tokens)
+    expect(result.blocked).toBe(true)
+    expect(result.report[0].status).toBe('unknown')
+  })
+  it('rechaza un recurso saliente que no corresponde al ID solicitado', async () => {
+    const f = setup()
+    f.client.outgoingPayment.get.mockResolvedValueOnce({ ...(await f.client.outgoingPayment.get()), id: 'https://provider.example/outgoing-payments/another' })
+    const result = await recoverExisting(f.client as unknown as AuthenticatedClient, f.snapshot, f.journal, true, f.tokens)
+    expect(result.blocked).toBe(true)
+    expect(result.report[0].status).toBe('unknown')
+  })
   it('EXPIRED sin outgoing fallido mantiene el bloqueo y el intento pendiente', async () => {
     const f = setup(false)
     const result = await recoverExisting(f.client as unknown as AuthenticatedClient, f.snapshot, f.journal, true, f.tokens)
