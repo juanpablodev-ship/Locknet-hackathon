@@ -4,7 +4,7 @@
 
 | Rol | Herramienta de IA | Para qué | Archivos | Qué verificamos nosotros |
 |---|---|---|---|---|
-| R1 | | | | |
+| R1 | Codex | Miembros y corrección de integración familiar entre módulos, con excepción de roles autorizada por el usuario | `apps/api/src/members`, `apps/api/src/payments`, `apps/api/src/wallet`, `apps/api/src/server.ts`, arranque/configuración, `apps/web`, `/contracts`, `/demo`, `/fixtures`, documentación y pruebas asociadas | Pruebas automatizadas, typecheck y build; metadatos públicos y arranque/formulario local. No se ejecutaron pagos ni autorizaciones reales en esta corrección; pendientes los recorridos humanos del README |
 | R2 | Codex | Simulado y servicio de cobro, cotización, pago saliente, seguimiento y lectura del monto recibido | `mocks/payments.mock.ts`, `apps/api/src/payments/` | Pruebas automatizadas y typecheck; pendiente prueba manual con dos pagadores en Test Wallet |
 | R3 | Claude Code | | | |
 | R4 | | | | |
