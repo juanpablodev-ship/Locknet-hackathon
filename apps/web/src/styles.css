@@ -12,6 +12,13 @@
   --fondo: #ffffff;
   --texto: #222222;
   --borde: #b2b2b2;
+  --fondo-panel-rojo: #fdecea;
+  --texto-panel-rojo: #c011a0;
+  --fondo-panel-verde: #e8f5e9;
+  --texto-panel-verde: #00797f;
+  --fondo-panel-ambar: #fff8e1;
+  --texto-panel-ambar: #8a5a00;
+  --texto-sobre-verde: #ffffff;
   --altura-tabs: 64px;
   color-scheme: light;
 }
@@ -25,6 +32,13 @@
     --fondo: #2a0f49;
     --texto: #ffffff;
     --borde: rgb(255 194 243 / 0.3);
+    --fondo-panel-rojo: #361330;
+    --texto-panel-rojo: #ed4dc8;
+    --fondo-panel-verde: #0b3434;
+    --texto-panel-verde: #08ffff;
+    --fondo-panel-ambar: #3a2a05;
+    --texto-panel-ambar: #ffc107;
+    --texto-sobre-verde: #2a0f49;
     color-scheme: dark;
   }
 }
@@ -37,6 +51,13 @@
   --fondo: #2a0f49;
   --texto: #ffffff;
   --borde: rgb(255 194 243 / 0.3);
+  --fondo-panel-rojo: #361330;
+  --texto-panel-rojo: #ed4dc8;
+  --fondo-panel-verde: #0b3434;
+  --texto-panel-verde: #08ffff;
+  --fondo-panel-ambar: #3a2a05;
+  --texto-panel-ambar: #ffc107;
+  --texto-sobre-verde: #2a0f49;
   color-scheme: dark;
 }
 
@@ -1007,26 +1028,50 @@ body {
 }
 
 .panel-rojo {
-  background: #fdecea;
+  background: var(--fondo-panel-rojo);
   border: 2px solid var(--rojo);
-  color: var(--rojo);
+  color: var(--texto-panel-rojo);
 }
 
 .panel-verde {
-  background: #e8f5e9;
+  background: var(--fondo-panel-verde);
   border: 2px solid var(--verde);
-  color: var(--verde);
+  color: var(--texto-panel-verde);
 }
 
 .panel-ambar {
-  background: #fff8e1;
+  background: var(--fondo-panel-ambar);
   border: 2px solid var(--ambar);
-  color: var(--ambar);
+  color: var(--texto-panel-ambar);
 }
 
 .progreso {
   margin: 16px 0 8px;
   font-weight: 700;
+}
+
+.barra-progreso {
+  height: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo);
+}
+
+.barra-progreso-relleno {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.barra-progreso-verde {
+  background: var(--verde);
+}
+
+.barra-progreso-ambar {
+  background: var(--ambar);
 }
 
 .aportes {
@@ -1042,6 +1087,39 @@ body {
   padding: 16px;
 }
 
+.aporte-verde {
+  border-left: 4px solid var(--verde);
+}
+
+.aporte-ambar {
+  border-left: 4px solid var(--ambar);
+}
+
+.aporte-rojo {
+  border-left: 4px solid var(--rojo);
+}
+
+.aporte .estado {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.aporte .estado-verde {
+  background: var(--fondo-panel-verde);
+  color: var(--texto-panel-verde);
+}
+
+.aporte .estado-ambar {
+  background: var(--fondo-panel-ambar);
+  color: var(--texto-panel-ambar);
+}
+
+.aporte .estado-rojo {
+  background: var(--fondo-panel-rojo);
+  color: var(--texto-panel-rojo);
+}
+
 .aporte-nombre {
   margin: 0 0 8px;
   font-weight: 700;
@@ -1053,7 +1131,7 @@ body {
   padding: 8px 16px;
   border-radius: 999px;
   background: var(--verde);
-  color: #fff;
+  color: var(--texto-sobre-verde);
   font-weight: 700;
 }
 

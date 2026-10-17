@@ -177,6 +177,19 @@ describe('renderGasto - otros estados', () => {
   it('paying muestra el progreso "2 de 3 aportes confirmados · falta Madrid"', () => {
     const html = renderGasto(gastoPagando, cuidadoDeMama)
     expect(html).toContain('2 de 3 aportes confirmados · falta Hermano en Madrid')
+    expect(html).toContain('aria-valuemax="3" aria-valuenow="2"')
+    expect(html).toContain('class="barra-progreso-relleno barra-progreso-ambar" style="width: 67%"')
+    expect(html).toContain('class="aporte aporte-verde"')
+    expect(html).toContain('class="aporte aporte-ambar"')
+  })
+
+  it('muestra el progreso completo y verde solo después del pago', () => {
+    const spend = { ...structuredClone(medicina), status: 'paid' as const }
+    const html = renderGasto(spend, cuidadoDeMama)
+
+    expect(html).toContain('Gasto verificado: llegó completo a Farmacia Medellín')
+    expect(html).toContain('aria-valuemax="3" aria-valuenow="3"')
+    expect(html).toContain('class="barra-progreso-relleno barra-progreso-verde" style="width: 100%"')
   })
 
   it('incomplete muestra panel ámbar, el motivo del fallo y el botón de reintentar', () => {

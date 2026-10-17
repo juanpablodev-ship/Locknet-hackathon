@@ -152,7 +152,7 @@ function renderAporte(share: Share, wallet: SharedWallet): string {
   const nombre = escapeHtml(wallet.members.find((m) => m.id === share.memberId)?.name ?? share.memberId)
   const estado = estadoAporte(share.status)
   return `
-    <div class="aporte">
+    <div class="aporte aporte-${estado.tono}">
       <p class="aporte-nombre">${nombre}</p>
       <p>Aporta: ${share.debit ? escapeHtml(formatMoney(share.debit)) : '—'}</p>
       <p>Llegó: ${share.received ? escapeHtml(formatMoney(share.received)) : '—'}</p>
@@ -163,8 +163,15 @@ function renderAporte(share: Share, wallet: SharedWallet): string {
 
 function cuerpoProgreso(spend: Spend, wallet: SharedWallet): string {
   const aportes = spend.shares.map((s) => renderAporte(s, wallet)).join('')
+  const total = Math.max(0, spend.progress.total)
+  const confirmados = Math.max(0, Math.min(spend.progress.confirmed, total))
+  const porcentaje = total === 0 ? 0 : Math.round((confirmados / total) * 100)
+  const tono = spend.status === 'paid' ? 'verde' : 'ambar'
   return `
     <p class="progreso">${escapeHtml(progressText(spend.progress, nombresFaltantes(spend, wallet)))}</p>
+    <div class="barra-progreso" role="progressbar" aria-label="Aportes confirmados" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${confirmados}">
+      <span class="barra-progreso-relleno barra-progreso-${tono}" style="width: ${porcentaje}%"></span>
+    </div>
     <div class="aportes">${aportes}</div>
   `
 }
