@@ -6,7 +6,23 @@ export function qrComoSvg(url: string): Promise<string> {
   return QRCode.toString(url, { type: 'svg' })
 }
 
-export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verdict, setup?: JoinSetup, grupoCreado = false): string {
+// Enlace de la invitación: lleva el id del grupo para que funcione en otro navegador o dispositivo.
+export function urlInvitacion(base: string, walletId: string): string {
+  return `${base}#/unirse?grupo=${encodeURIComponent(walletId)}`
+}
+
+export function renderGrupoNoExiste(): string {
+  return `
+    <div class="contenedor">
+      <div class="panel panel-ambar" role="status">
+        <p class="panel-titulo">Este grupo no existe o el servidor se reinició.</p>
+      </div>
+      <a class="boton" href="#/inicio">Ir al inicio</a>
+    </div>
+  `
+}
+
+export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verdict, setup?: JoinSetup, grupoCreado = false, enlace?: string): string {
   const advertencia =
     warning?.status === 'warn'
       ? `
@@ -27,6 +43,7 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
       <h1>Unirse a ${escapeHtml(wallet.name)}</h1>
       <p>Escanea para unirte a ${escapeHtml(wallet.name)}</p>
       <div class="qr-unirse" aria-label="Código QR para unirse">${qrSvg}</div>
+      ${enlace ? `<label for="enlace-invitacion">Enlace de la invitación</label><input id="enlace-invitacion" type="text" readonly value="${escapeHtml(enlace)}" />` : ''}
       ${advertencia}
       <form id="form-unirse" class="formulario">
         ${setup ? `<label for="wallet-configurada">Wallet de prueba (sin autorizar todavía)</label><select id="wallet-configurada"><option value="">Selecciona tu propia wallet</option>${setup.members.map(m => `<option value="${escapeHtml(m.walletAddress)}">${escapeHtml(m.name)} · ${escapeHtml(m.assetCode)} · escala ${m.assetScale}</option>`).join('')}</select>` : ''}

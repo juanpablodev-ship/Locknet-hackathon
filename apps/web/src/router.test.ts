@@ -14,6 +14,16 @@ describe('parseHash', () => {
     expect(parseHash('#/unirse')).toEqual({ name: 'unirse' })
   })
 
+  it('lee el grupo de la invitación y lo decodifica', () => {
+    expect(parseHash('#/unirse?grupo=w-mama-a1b2c3')).toEqual({ name: 'unirse', grupo: 'w-mama-a1b2c3' })
+    expect(parseHash('#/unirse?grupo=w%20x%26y')).toEqual({ name: 'unirse', grupo: 'w x&y' })
+  })
+
+  it('#/unirse con grupo vacío o con otros parámetros sigue siendo la invitación del grupo actual', () => {
+    expect(parseHash('#/unirse?grupo=')).toEqual({ name: 'unirse' })
+    expect(parseHash('#/unirse?otro=1')).toEqual({ name: 'unirse' })
+  })
+
   it('reconoce #/crear-grupo', () => {
     expect(parseHash('#/crear-grupo')).toEqual({ name: 'crear-grupo' })
   })

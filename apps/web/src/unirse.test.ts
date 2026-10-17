@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cuidadoDeMama, destinoParecido } from '../../../contracts/ejemplo.js'
-import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
+import { qrComoSvg, renderGrupoNoExiste, renderUnirse, renderVueltaUnirse, urlInvitacion } from './unirse.js'
 
 describe('qrComoSvg', () => {
   it('genera un SVG para la URL de invitación', async () => {
@@ -59,5 +59,30 @@ describe('renderUnirse', () => {
   it('muestra los dos resultados de la vuelta del banco', () => {
     expect(renderVueltaUnirse(true)).toContain('Ya eres parte del grupo')
     expect(renderVueltaUnirse(false)).toContain('No pudimos confirmar que vienes de tu banco. No te uniste.')
+  })
+})
+
+describe('invitación con el grupo', () => {
+  it('la URL incluye el id del grupo', () => {
+    expect(urlInvitacion('https://kivor.test/app', 'w-mama-a1b2c3')).toBe('https://kivor.test/app#/unirse?grupo=w-mama-a1b2c3')
+  })
+
+  it('el id se escapa para no romper la URL', () => {
+    const url = urlInvitacion('https://kivor.test/', 'a&b=c#d e')
+    expect(url).toBe('https://kivor.test/#/unirse?grupo=a%26b%3Dc%23d%20e')
+    expect(url.split('#')).toHaveLength(2)
+  })
+
+  it('renderUnirse muestra el enlace para copiar, escapado, solo si se pasa', () => {
+    const con = renderUnirse(cuidadoDeMama, '<svg></svg>', undefined, undefined, false, 'https://k.test/#/unirse?grupo="x"')
+    expect(con).toContain('id="enlace-invitacion"')
+    expect(con).toContain('grupo=&quot;x&quot;')
+    expect(renderUnirse(cuidadoDeMama, '<svg></svg>')).not.toContain('enlace-invitacion')
+  })
+
+  it('avisa cuando el grupo no existe y enlaza al inicio', () => {
+    const html = renderGrupoNoExiste()
+    expect(html).toContain('Este grupo no existe o el servidor se reinició.')
+    expect(html).toContain('href="#/inicio"')
   })
 })

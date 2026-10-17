@@ -1,6 +1,6 @@
 export type Route =
   | { name: 'inicio' }
-  | { name: 'unirse' }
+  | { name: 'unirse'; grupo?: string }
   | { name: 'crear-grupo' }
   | { name: 'unirse-volver'; ok?: boolean; memberId?: string }
   | { name: 'gasto-nuevo' }
@@ -15,7 +15,10 @@ export function parseHash(hash: string): Route {
 
   if (parts.length === 0) return { name: 'inicio' }
   if (parts.length === 1 && parts[0] === 'inicio') return { name: 'inicio' }
-  if (parts.length === 1 && parts[0] === 'unirse') return { name: 'unirse' }
+  if (parts.length === 1 && parts[0] === 'unirse') {
+    const grupo = new URLSearchParams(query).get('grupo')
+    return grupo ? { name: 'unirse', grupo } : { name: 'unirse' }
+  }
   if (parts.length === 2 && parts[0] === 'unirse' && parts[1] === 'volver') {
     if (!query) return { name: 'unirse-volver' }
     const params = new URLSearchParams(query)
