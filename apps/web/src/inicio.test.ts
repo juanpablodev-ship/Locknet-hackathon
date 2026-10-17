@@ -101,12 +101,37 @@ describe('renderInicio', () => {
     const html = renderInicio(care)
 
     expect(html).toContain('El contrato del grupo')
-    expect(html).toContain('Nadie aporta más del tope que autorizó</span><b class="contrato-quien">Su propio banco')
-    expect(html).toContain('El permiso se renueva cada mes</span><b class="contrato-quien">Su propio banco')
+    expect(html).toContain('Cada uno autoriza el tope que elija</span><b class="contrato-quien">Su propio banco')
     expect(html).toContain('su permiso se cancela al instante</span><b class="contrato-quien">Su propio banco')
     expect(html).toContain('aunque alguien pague en otra moneda</span><b class="contrato-quien">La cotización de Open Payments')
     expect(html).toContain(`Nada se da por pagado sin verificar lo que llegó</span><b class="contrato-quien">${NOMBRE_GUARDIAN}`)
     expect(html).not.toContain('Partes iguales')
+  })
+
+  it('el contrato separa lo acordado de lo garantizado', () => {
+    const html = renderInicio(getWallets()[0])
+    const acordado = html.indexOf('Lo que acordó el grupo')
+    const garantizado = html.indexOf('Lo que se garantiza siempre')
+    expect(acordado).toBeGreaterThan(-1)
+    expect(garantizado).toBeGreaterThan(acordado)
+    const delAcuerdo = html.slice(acordado, garantizado)
+    const delGarantizado = html.slice(garantizado)
+    expect(delAcuerdo).toContain('Cada uno autoriza')
+    expect(delAcuerdo).toContain('necesita 2 aprobaciones del grupo')
+    expect(delAcuerdo).toContain('Destinos de confianza:')
+    expect(delAcuerdo).not.toContain('se cancela al instante')
+    expect(delGarantizado).toContain('se cancela al instante')
+    expect(delGarantizado).toContain('Nada se da por pagado')
+    expect(delGarantizado).not.toContain('Destinos de confianza')
+  })
+
+  it('con memberCap, la primera parte muestra el tope y "al mes"; sin él, "el tope que elija"', () => {
+    const care = structuredClone(getWallets()[0])
+    expect(renderInicio(care)).not.toContain('Cada uno autoriza hasta')
+    care.rules.memberCap = { cap: { value: '4000000', assetCode: 'COP', assetScale: 2 }, interval: 'R12/2026-10-16T00:00:00Z/P1M' }
+    const html = renderInicio(care)
+    expect(html).toContain('Cada uno autoriza hasta $40.000 al mes</span><b class="contrato-quien">Su propio banco')
+    expect(html).not.toContain('el tope que elija')
   })
 
   it('el contrato toma monto, aprobaciones y destinos de confianza de la wallet', () => {

@@ -1395,3 +1395,8 @@ body {
   display: grid;
   gap: 12px;
 }
+
+.contrato-subtitulo {
+  margin: 16px 0 4px;
+  font-size: 1rem;
+}
