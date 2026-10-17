@@ -3,6 +3,9 @@
 // cambiar esta línea de importación).
 import type { JoinSetup, Member, Money, SharedWallet, Spend, Verdict, WalletEvent } from '../../../contracts/index.js'
 import * as mock from '../../../mocks/api.mock.js'
+import type { NuevoGrupo } from '../../../mocks/api.mock.js'
+
+export type { NuevoGrupo }
 
 export const MODO: 'live' | 'mock' =
   import.meta.env.MODE === 'live' ? 'live' : import.meta.env.MODE === 'mock' ? 'mock' :
@@ -63,6 +66,11 @@ export function resetDemo(): Promise<DemoResetResult> {
 export async function getWallets(): Promise<SharedWallet[]> {
   if (MODO === 'live') return pedir('GET', '/api/wallets')
   return mock.getWallets()
+}
+
+export async function createWallet(body: NuevoGrupo): Promise<SharedWallet> {
+  if (MODO === 'live') return pedir('POST', '/api/wallets', body)
+  return mock.createWallet(body)
 }
 
 export async function getWallet(id: string): Promise<SharedWallet> {

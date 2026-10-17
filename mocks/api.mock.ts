@@ -80,6 +80,58 @@ export function getSpends(walletId: string): Spend[] {
   return structuredClone(spends[walletId] ?? [])
 }
 
+// Cuerpo de POST /api/wallets. Las mismas reglas que valida el servidor (apps/api/src/server.ts).
+export interface NuevoGrupo {
+  name: string; currency: string; approvalsRequired: number; aboveAmount: Money
+  riskThreshold?: number; knownDestinations: { name: string; walletAddress: string }[]
+}
+
+const textoValido = (x: unknown): x is string => typeof x === 'string' && x.length >= 1 && x.length <= 60 && x === x.trim()
+
+function direccionValida(a: unknown): boolean {
+  if (typeof a !== 'string' || !(a.startsWith('https://') || a.startsWith('$'))) return false
+  try { return new URL(a.startsWith('$') ? `https://${a.slice(1)}` : a).host !== '' } catch { return false }
+}
+
+export function createWallet(body: NuevoGrupo): SharedWallet {
+  const { name, currency, approvalsRequired, aboveAmount, riskThreshold, knownDestinations } = body ?? ({} as NuevoGrupo)
+  if (!textoValido(name)) throw new Error('El nombre debe tener de 1 a 60 caracteres, sin espacios al inicio o al final.')
+  if (!['COP', 'EUR', 'USD'].includes(currency)) throw new Error('La moneda debe ser COP, EUR o USD.')
+  if (!Number.isInteger(approvalsRequired) || approvalsRequired < 1 || approvalsRequired > 5) {
+    throw new Error('Las aprobaciones requeridas deben ser un entero de 1 a 5.')
+  }
+  if (!aboveAmount || typeof aboveAmount.value !== 'string' || !/^\d+$/.test(aboveAmount.value)
+    || typeof aboveAmount.assetCode !== 'string' || !Number.isInteger(aboveAmount.assetScale)) {
+    throw new Error('aboveAmount debe ser Money { value, assetCode, assetScale }.')
+  }
+  if (aboveAmount.assetCode !== currency) throw new Error('El monto de aprobación debe estar en la moneda del grupo.')
+  if (aboveAmount.assetScale !== 2) throw new Error('El monto de aprobación debe usar escala 2.')
+  if (BigInt(aboveAmount.value) <= 0n) throw new Error('El monto de aprobación debe ser mayor que 0.')
+  const threshold = riskThreshold ?? 60
+  if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) {
+    throw new Error('El umbral de riesgo debe ser un entero de 1 a 100.')
+  }
+  if (!Array.isArray(knownDestinations) || knownDestinations.length < 1 || knownDestinations.length > 5) {
+    throw new Error('Debe haber de 1 a 5 destinos de confianza.')
+  }
+  for (const d of knownDestinations) {
+    if (!textoValido(d?.name)) throw new Error('Cada destino de confianza necesita un nombre de 1 a 60 caracteres.')
+    if (!direccionValida(d.walletAddress)) throw new Error(`La dirección de "${d.name}" debe empezar por https:// o $ y tener un servidor.`)
+  }
+  const slug = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'grupo'
+  let id: string
+  do { id = `w-${slug}-${Math.random().toString(36).slice(2, 8).padEnd(6, '0')}` } while (wallets.some((w) => w.id === id))
+  const grupo: SharedWallet = {
+    id, name, currency, kind: 'care', members: [],
+    rules: { split: 'equal', groupApproval: { aboveAmount, approvalsRequired, riskThreshold: threshold, confirmInWallet: false } },
+    knownDestinations: knownDestinations.map((d) => ({ name: d.name, walletAddress: d.walletAddress })),
+    authorizedCapacity: { value: '0', assetCode: currency, assetScale: 2 },
+  }
+  wallets.push(grupo)
+  spends[id] = []
+  return structuredClone(grupo)
+}
+
 const listeners: Record<string, Set<(e: WalletEvent) => void>> = {}
 let timers: ReturnType<typeof setTimeout>[] = []
 let falloMemberId: string | null = null

@@ -69,6 +69,14 @@ describe('api.ts en modo live', () => {
     expectRequest('/api/spends/s-medicina/approvals', 'POST', { memberId: 'm-bogota', yes: true })
 
     const destination = medicina.destination
+    const nuevo = {
+      name: 'Medicinas de mamá', currency: 'COP', approvalsRequired: 2,
+      aboveAmount: medicina.amount, knownDestinations: [{ name: 'Farmacia', walletAddress: 'https://a.dev/farmacia' }],
+    }
+    fetchMock.mockResolvedValueOnce(jsonResponse(201, cuidadoDeMama))
+    expect(await api.createWallet(nuevo)).toEqual(cuidadoDeMama)
+    expectRequest('/api/wallets', 'POST', nuevo)
+
     await api.requestSpend('w-mama', destination, medicina.amount)
     expectRequest('/api/wallets/w-mama/spends', 'POST', { destination, amount: medicina.amount })
 
@@ -224,5 +232,12 @@ describe('api.ts en modo live', () => {
   it('usa datos del contrato como respuesta de las consultas', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, [cuidadoDeMama]))
     await expect(api.getWallets()).resolves.toEqual([cuidadoDeMama])
+  })
+
+  it('createWallet muestra el mensaje del servidor cuando responde 400', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(400, { error: 'La moneda debe ser COP, EUR o USD.' }))
+    await expect(api.createWallet({
+      name: 'X', currency: 'MXN', approvalsRequired: 2, aboveAmount: medicina.amount, knownDestinations: [],
+    })).rejects.toThrow('La moneda debe ser COP, EUR o USD.')
   })
 })

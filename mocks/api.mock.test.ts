@@ -4,6 +4,7 @@ import { cuidadoDeMama } from '../contracts/ejemplo.js'
 import {
   _testEmitir,
   _testProgramar,
+  createWallet,
   castApproval,
   executeSpend,
   finishJoin,
@@ -503,5 +504,55 @@ describe('executeSpend y retryShare', () => {
     vi.advanceTimersByTime(10_000)
 
     expect(eventos).toHaveLength(0)
+  })
+})
+
+describe('createWallet', () => {
+  const cop = (pesos: number) => ({ value: String(pesos * 100), assetCode: 'COP', assetScale: 2 })
+  const valido = () => ({
+    name: 'Medicinas de mamá', currency: 'COP', approvalsRequired: 2, aboveAmount: cop(200_000),
+    knownDestinations: [{ name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }],
+  })
+
+  afterEach(() => resetMock())
+
+  it('crea el grupo, lo agrega a la lista y lo devuelve con el formato del servidor', () => {
+    const grupo = createWallet(valido())
+    expect(grupo.id).toMatch(/^w-medicinas-de-mama-[a-z0-9]{6}$/)
+    expect(grupo).toMatchObject({ kind: 'care', members: [], authorizedCapacity: { value: '0', assetCode: 'COP', assetScale: 2 } })
+    expect(grupo.rules).toEqual({ split: 'equal', groupApproval: { aboveAmount: cop(200_000), approvalsRequired: 2, riskThreshold: 60, confirmInWallet: false } })
+    expect(getWallets().map((w) => w.id)).toContain(grupo.id)
+    expect(getSpends(grupo.id)).toEqual([])
+  })
+
+  it('dos grupos con el mismo nombre tienen ids distintos y resetMock los quita', () => {
+    const a = createWallet(valido()); const b = createWallet(valido())
+    expect(a.id).not.toBe(b.id)
+    resetMock()
+    expect(getWallets()).toHaveLength(3)
+  })
+
+  it('acepta direcciones con $', () => {
+    expect(() => createWallet({ ...valido(), knownDestinations: [{ name: 'X', walletAddress: '$ilp.example/x' }] })).not.toThrow()
+  })
+
+  const invalidos: [string, object, RegExp][] = [
+    ['nombre vacío', { name: '' }, /nombre/],
+    ['nombre con espacios al borde', { name: ' Mamá' }, /nombre/],
+    ['moneda no permitida', { currency: 'MXN', aboveAmount: { ...cop(1), assetCode: 'MXN' } }, /moneda/],
+    ['aprobaciones 0', { approvalsRequired: 0 }, /aprobaciones/],
+    ['aprobaciones 6', { approvalsRequired: 6 }, /aprobaciones/],
+    ['monto en otra moneda', { aboveAmount: { ...cop(1000), assetCode: 'EUR' } }, /moneda del grupo/],
+    ['monto en escala distinta de 2', { aboveAmount: { value: '1000', assetCode: 'COP', assetScale: 0 } }, /escala 2/],
+    ['monto en 0', { aboveAmount: cop(0) }, /mayor que 0/],
+    ['riesgo 101', { riskThreshold: 101 }, /riesgo/],
+    ['sin destinos', { knownDestinations: [] }, /destinos/],
+    ['dirección http://', { knownDestinations: [{ name: 'X', walletAddress: 'http://a.dev/x' }] }, /https:\/\//],
+    ['dirección sin esquema', { knownDestinations: [{ name: 'X', walletAddress: 'farmacia' }] }, /https:\/\//],
+    ['dirección https:// sin host', { knownDestinations: [{ name: 'X', walletAddress: 'https://' }] }, /https:\/\//],
+  ]
+  it.each(invalidos)('rechaza: %s', (_caso, cambio, mensaje) => {
+    expect(() => createWallet({ ...valido(), ...cambio } as never)).toThrow(mensaje)
+    expect(getWallets()).toHaveLength(3)
   })
 })
