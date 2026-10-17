@@ -2,6 +2,10 @@
 .env.*
 !.env.example
 *.key
+# Ayudantes y datos locales: nunca al repositorio (p. ej. grant-outgoing.local.ts, *.local.json)
+*.local.ts
+*.local.json
+*.local.md
 *.pem
 private*
 node_modules/

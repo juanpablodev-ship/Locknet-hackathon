@@ -36,6 +36,8 @@ export function fakePayments(opts: {
   feePercent?: Record<string, number>          // memberId → comisión en la cotización
   shortReceive?: boolean                        // el destino recibe 1 unidad menos por aporte
   receivedFails?: boolean                       // la consulta de lo recibido no responde
+  failWith?: Record<string, unknown>            // memberId → error exacto que lanza payShare
+  incomingFails?: unknown                       // error exacto que lanza createIncoming
 } = {}) {
   const received = new Map<string, Money>()
   const quotes = new Map<string, { memberId: string; url: string; receive: Money }>()
@@ -47,6 +49,7 @@ export function fakePayments(opts: {
   const svc: PaymentsService = {
     async createIncoming(_walletAddress, amount) {
       calls.createIncoming.push(amount)
+      if (opts.incomingFails !== undefined) throw opts.incomingFails
       const url = `https://cobro/${++n}`
       received.set(url, zero(amount))
       return { incomingPaymentUrl: url }
@@ -60,6 +63,7 @@ export function fakePayments(opts: {
     },
     async payShare(memberId, quoteId) {
       calls.payShare++
+      if (opts.failWith && memberId in opts.failWith) throw opts.failWith[memberId]
       if (opts.failMember?.[memberId]) throw new PaymentError(opts.failMember[memberId], 'not-created')
       const outgoingId = `o-${++n}`
       outgoing.set(outgoingId, quotes.get(quoteId)!)
