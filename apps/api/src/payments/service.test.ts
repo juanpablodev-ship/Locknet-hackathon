@@ -79,4 +79,39 @@ describe('PaymentsService con SDK oficial', () => {
     expect(await service.track(outgoing.id)).toBe('failed')
     await expect(service.track('https://resources.example/outgoing/unknown')).rejects.toThrow('Pago saliente no encontrado')
   })
+
+  it('permite dos cotizaciones locales para aportes parciales al mismo cobro', async () => {
+    const { service, client, quote } = setup()
+    const partialQuote = { ...quote, receiveAmount: cop('2000000'), debitAmount: cop('2000000') }
+    const secondQuote = { ...partialQuote, id: 'https://resources.example/quote/2' }
+    vi.mocked(client.quote.create).mockResolvedValueOnce(partialQuote).mockResolvedValueOnce(secondQuote)
+
+    const first = await service.quoteShare('hermano_1', 'https://resources.example/incoming/1', cop('2000000'))
+    const second = await service.quoteShare('hermano_2', 'https://resources.example/incoming/1', cop('2000000'))
+
+    expect(first.quoteId).toBe(quote.id)
+    expect(second.quoteId).toBe(secondQuote.id)
+    expect(client.quote.create).toHaveBeenCalledTimes(2)
+    expect(client.quote.create).toHaveBeenNthCalledWith(2,
+      { url: 'https://resources.example', accessToken: '[REDACTADO]' },
+      { method: 'ilp', walletAddress: 'https://payer.example', receiver: 'https://resources.example/incoming/1', receiveAmount: cop('2000000') },
+    )
+  })
+
+  it('rechaza un segundo pago secuencial de la misma cotización', async () => {
+    const { service, quote } = setup()
+    await service.quoteShare('hermano_1', 'https://resources.example/incoming/1', cop('4000000'))
+    await service.payShare('hermano_1', quote.id)
+
+    await expect(service.payShare('hermano_1', quote.id)).rejects.toThrow('Cotización no encontrada')
+  })
+
+  it('lee del cobro la acumulación de aportes en lugar de acumularla localmente', async () => {
+    const { service, incoming } = setup()
+    await service.createIncoming('https://farmacia.example', cop('4000000'))
+    incoming.receivedAmount = cop('2000000')
+    expect(await service.received(incoming.id)).toEqual(cop('2000000'))
+    incoming.receivedAmount = cop('4000000')
+    expect(await service.received(incoming.id)).toEqual(cop('4000000'))
+  })
 })

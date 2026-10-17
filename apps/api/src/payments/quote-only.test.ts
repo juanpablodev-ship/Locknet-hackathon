@@ -116,4 +116,37 @@ describe('montos de la cotización', () => {
     expect(quoteCost({ value: '4000000', assetCode: 'COP', assetScale: 2 },
       { value: '100', assetCode: 'EUR', assetScale: 2 })).toBeNull()
   })
+
+  it('rechaza importes, códigos y escalas inválidos sin usar conversiones de punto flotante', () => {
+    expect(() => receiveAmountFromMajor('10.001', 'COP', 2)).toThrow()
+    expect(() => receiveAmountFromMajor('-1', 'COP', 2)).toThrow()
+    expect(() => receiveAmountFromMajor('1', 'CO', 2)).toThrow()
+    expect(() => receiveAmountFromMajor('1', 'COP', 21)).toThrow()
+    expect(() => quoteCost({ value: '0', assetCode: 'COP', assetScale: 2 },
+      { value: '1', assetCode: 'COP', assetScale: 2 })).toThrow()
+    expect(() => quoteCost({ value: '100', assetCode: 'COP', assetScale: -1 },
+      { value: '101', assetCode: 'COP', assetScale: 2 })).toThrow()
+  })
+
+  it('normaliza escalas y trunca el porcentaje a dos decimales', () => {
+    expect(quoteCost({ value: '300', assetCode: 'COP', assetScale: 2 },
+      { value: '310', assetCode: 'COP', assetScale: 2 })).toMatchObject({
+      difference: '0.10 COP', percent: '3.33', exceedsFivePercent: false,
+    })
+    expect(quoteCost({ value: '30000', assetCode: 'COP', assetScale: 2 },
+      { value: '315', assetCode: 'COP', assetScale: 0 })).toMatchObject({
+      difference: '15.00 COP', percent: '5.00', exceedsFivePercent: false,
+    })
+  })
+
+  it('marca únicamente los costes estrictamente superiores al 5 por ciento', () => {
+    expect(quoteCost({ value: '10000', assetCode: 'COP', assetScale: 2 },
+      { value: '10500', assetCode: 'COP', assetScale: 2 })?.exceedsFivePercent).toBe(false)
+    expect(quoteCost({ value: '10000', assetCode: 'COP', assetScale: 2 },
+      { value: '10501', assetCode: 'COP', assetScale: 2 })?.exceedsFivePercent).toBe(true)
+    expect(quoteCost({ value: '10000', assetCode: 'COP', assetScale: 2 },
+      { value: '9900', assetCode: 'COP', assetScale: 2 })).toMatchObject({
+      difference: '-1.00 COP', exceedsFivePercent: false,
+    })
+  })
 })
