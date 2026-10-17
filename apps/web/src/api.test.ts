@@ -19,8 +19,8 @@ describe('api.ts en modo simulado', () => {
     expect(wallet.id).toBe('w-mama')
   })
 
-  it('getWallet("nada") se rechaza con "Billetera no encontrada"', async () => {
-    await expect(getWallet('nada')).rejects.toThrow('Billetera no encontrada')
+  it('getWallet("nada") se rechaza con "Grupo no encontrado"', async () => {
+    await expect(getWallet('nada')).rejects.toThrow('Grupo no encontrado')
   })
 
   it('getSpend encuentra gastos de billeteras distintas de w-mama', async () => {

@@ -225,7 +225,7 @@ function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string):
           <p class="panel-titulo">El grupo aprobó el gasto.</p>
         </div>
         <div class="acciones">
-          <button type="button" class="boton" data-accion="pagar" data-spend="${escapeHtml(spend.id)}">Pagar ahora</button>
+          <button type="button" class="boton" data-accion="pagar" data-spend="${escapeHtml(spend.id)}">Pagar la cuota del mes</button>
         </div>
         <div id="mensaje" role="status"></div>
       `

@@ -169,7 +169,7 @@ async function pintarInicio(): Promise<void> {
   try {
     wallets = await getWallets()
     const actual = wallets.find((item) => item.id === getWalletActual())
-    if (!actual) throw new Error('Billetera no encontrada')
+    if (!actual) throw new Error('Grupo no encontrado')
     wallet = actual
     spends = await getSpends(wallet.id)
   } catch (err) {
@@ -716,7 +716,7 @@ async function reiniciarDemo(boton: HTMLButtonElement): Promise<void> {
 
     const resultado = await resetDemo()
     const wallets = await getWallets()
-    if (wallets.length === 0) throw new Error('No hay billeteras disponibles después del reinicio.')
+    if (wallets.length === 0) throw new Error('No hay grupos disponibles después del reinicio.')
     if (!wallets.some((wallet) => wallet.id === getWalletActual())) {
       setWalletActual(wallets[0].id)
     }

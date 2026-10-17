@@ -129,11 +129,23 @@ describe('castApproval: aprobación del grupo (2 de 3)', () => {
     expect(engine.castApproval(id, 'm-madrid', true).status).toBe('approved')
   })
 
-  it('dos no → rejected (ya no se alcanzan 2 sí)', () => {
+  it('destino falso (riesgo alto): un solo no → rejected', () => {
     const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))
-    engine.castApproval(id, 'm-bogota', false)
+    expect(engine.castApproval(id, 'm-bogota', false).status).toBe('rejected')
+    expect(events.at(-1)).toMatchObject({ type: 'spend-rejected', message: 'Un miembro del grupo rechazó un pago riesgoso.' })
+  })
+
+  it('destino falso: un solo sí no basta, sigue en awaiting-approval', () => {
+    const { id } = engine.requestSpend('w-mama', falsa, cop(120_000))
+    expect(engine.castApproval(id, 'm-bogota', true).status).toBe('awaiting-approval')
+  })
+
+  it('aprobación solo por monto (riesgo bajo): un no no rechaza, dos no sí', () => {
+    const { id, risk } = engine.requestSpend('w-mama', farmacia, cop(250_000))
+    expect(risk).toBe(0)
+    expect(engine.castApproval(id, 'm-bogota', false).status).toBe('awaiting-approval')
     expect(engine.castApproval(id, 'm-medellin', false).status).toBe('rejected')
-    expect(events.at(-1)!.type).toBe('spend-rejected')
+    expect(events.at(-1)).toMatchObject({ type: 'spend-rejected', message: 'El grupo rechazó el gasto.' })
   })
 
   it('no deja votar dos veces ni a quien no es miembro', () => {

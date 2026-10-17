@@ -18,7 +18,7 @@ export function checkGrantRequest({ debitAmount, interval, policy }: Params): Ve
   const noTime = !interval ? ' sin límite de tiempo' : ''
 
   if (!debitAmount) {
-    problems.push({ points: 80, message: `Esta billetera te pide autorizar pagos sin tope${noTime ? ' y' + noTime : ''}.`, reason: 'no hay debitAmount: sin tope' })
+    problems.push({ points: 80, message: `Esta app te pide autorizar pagos sin tope${noTime ? ' y' + noTime : ''}.`, reason: 'no hay debitAmount: sin tope' })
   } else if (debitAmount.assetCode !== policy.maxCap.assetCode) {
     problems.push({
       points: 30, message: 'No pudimos comparar el tope con lo normal.',
@@ -27,7 +27,7 @@ export function checkGrantRequest({ debitAmount, interval, policy }: Params): Ve
   } else if (compareMoney(debitAmount, policy.maxCap) > 0) {
     problems.push({
       points: 60,
-      message: `Esta billetera te pide autorizar hasta ${formatMoney(debitAmount)}${noTime}. Es mucho más de lo normal.`,
+      message: `Esta app te pide autorizar hasta ${formatMoney(debitAmount)}${noTime}. Es mucho más de lo normal.`,
       reason: `debitAmount ${formatMoney(debitAmount)} supera el tope ${formatMoney(policy.maxCap)}`,
     })
   }

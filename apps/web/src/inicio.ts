@@ -1,4 +1,5 @@
 import type { Member, SharedWallet, Spend } from '../../../contracts/index.js'
+import { NOMBRE_GUARDIAN } from './config.js'
 import { flagFor, formatMoney, riskLevel } from './format.js'
 
 export function escapeHtml(texto: string): string {
@@ -66,10 +67,28 @@ function renderTarjetaEspera(spends: Spend[]): string {
 function renderReglas(w: SharedWallet, spends: Spend[]): string {
   if (w.kind === 'care') {
     const approval = w.rules.groupApproval
+    const aprobaciones = approval.approvalsRequired === 1 ? '1 aprobación' : `${approval.approvalsRequired} aprobaciones`
+    const destinos = w.knownDestinations.map((d) => escapeHtml(d.name)).join(', ') || 'ninguno todavía'
+    const filas: Array<[string, string]> = [
+      ['Nadie aporta más del tope que autorizó', 'Su propio banco'],
+      ['El permiso se renueva cada mes', 'Su propio banco'],
+      ['Si alguien se sale, su permiso se cancela al instante', 'Su propio banco'],
+      ['El destino recibe el monto exacto, aunque alguien pague en otra moneda', 'La cotización de Open Payments'],
+      [
+        `Un pago riesgoso o mayor a ${escapeHtml(formatMoney(approval.aboveAmount))} necesita ${aprobaciones} del grupo; un solo rechazo detiene un pago riesgoso`,
+        'Kivor',
+      ],
+      [`Destinos de confianza: ${destinos}`, NOMBRE_GUARDIAN],
+      ['Nada se da por pagado sin verificar lo que llegó', NOMBRE_GUARDIAN],
+    ]
     return `
-      <section class="reglas-billetera">
-        <h2>Reglas de esta billetera</h2>
-        <p>Partes iguales · aprobación del grupo si pasa de ${escapeHtml(formatMoney(approval.aboveAmount))} o el riesgo llega a ${approval.riskThreshold}</p>
+      <section class="reglas-billetera contrato-grupo">
+        <h2>El contrato del grupo</h2>
+        <ul class="contrato-filas">
+          ${filas
+            .map(([regla, quien]) => `<li><span class="contrato-regla">${regla}</span><b class="contrato-quien">${quien}</b></li>`)
+            .join('\n          ')}
+        </ul>
       </section>
     `
   }
@@ -97,7 +116,7 @@ function renderReglas(w: SharedWallet, spends: Spend[]): string {
       : ''
     return `
       <section class="reglas-billetera">
-        <h2>Reglas de esta billetera</h2>
+        <h2>Reglas de este grupo</h2>
         <p>${descripcionMeta}</p>
         <p>${participantes}</p>
         ${barra}
@@ -111,7 +130,7 @@ function renderReglas(w: SharedWallet, spends: Spend[]): string {
     const rule = w.rules.return
     return `
       <section class="reglas-billetera">
-        <h2>Reglas de esta billetera</h2>
+        <h2>Reglas de este grupo</h2>
         <p>Cada venta devuelve el ${rule.percentPerSale}% hasta ${escapeHtml(formatMoney(rule.cap))}</p>
         <p class="nota-configuracion">Configuración en pantalla: este caso aún no ejecuta pagos reales</p>
       </section>
@@ -123,8 +142,8 @@ function renderReglas(w: SharedWallet, spends: Spend[]): string {
 
 export function renderSelectorBilleteras(wallets: SharedWallet[], currentId: string): string {
   return `
-    <nav class="selector-billeteras" aria-label="Selector de billeteras">
-      <p>Misma billetera, otra regla</p>
+    <nav class="selector-billeteras" aria-label="Selector de grupos">
+      <p>Mismo motor, otro contrato</p>
       <div class="acciones">
         ${wallets
           .map(

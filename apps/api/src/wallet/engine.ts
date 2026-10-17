@@ -300,7 +300,12 @@ export function createEngine(deps: EngineDeps) {
       emit({ walletId: wallet.id, type: 'approval-cast', spendId, memberId,
              message: yes ? 'Aprobó el gasto.' : 'Rechazó el gasto.' })
 
-      const required = wallet.rules.groupApproval.approvalsRequired
+      const { approvalsRequired: required, riskThreshold } = wallet.rules.groupApproval
+      if (!yes && spend.risk >= riskThreshold) {   // un rechazo detiene un pago riesgoso
+        setStatus(spend, 'rejected')
+        emit({ walletId: wallet.id, type: 'spend-rejected', spendId, message: 'Un miembro del grupo rechazó un pago riesgoso.' })
+        return spend
+      }
       const yesCount = spend.approvals.filter((a) => a.yes).length
       const pending = voters.length - spend.approvals.length
       if (yesCount >= required) {

@@ -8,7 +8,7 @@ function renderFila(spend: Spend, walletName: string): string {
     <a class="pedido" href="#/gasto/${escapeHtml(spend.id)}">
       <span class="pedido-datos">
         <b class="pedido-destino">${escapeHtml(spend.destination.name)}</b>
-        <span class="pedido-billetera">Billetera: ${escapeHtml(walletName)}</span>
+        <span class="pedido-billetera">Grupo: ${escapeHtml(walletName)}</span>
       </span>
       <span class="pedido-detalle">
         <b class="pedido-monto">${escapeHtml(formatMoney(spend.amount))}</b>

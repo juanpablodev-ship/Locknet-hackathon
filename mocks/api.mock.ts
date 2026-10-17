@@ -54,7 +54,7 @@ const hornoDeLaPanaderia: SharedWallet = {
   authorizedCapacity: cop(1_500_000),
 }
 
-const WALLETS_INICIALES: SharedWallet[] = [cuidadoDeMama, arregloDelParque, hornoDeLaPanaderia]
+const WALLETS_INICIALES: SharedWallet[] = [{ ...cuidadoDeMama, name: 'Medicinas de mamá' }, arregloDelParque, hornoDeLaPanaderia]
 
 let wallets: SharedWallet[] = structuredClone(WALLETS_INICIALES)
 
@@ -64,7 +64,7 @@ export function getWallets(): SharedWallet[] {
 
 export function getWallet(id: string): SharedWallet {
   const wallet = wallets.find((w) => w.id === id)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
   return structuredClone(wallet)
 }
 
@@ -131,9 +131,9 @@ export function startJoin(
   member: Omit<Member, 'id' | 'status'>,
 ): { redirectUrl: string; grantWarning: Verdict } {
   const wallet = wallets.find((item) => item.id === walletId)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
   if (member.cap.assetCode !== wallet.currency) {
-    throw new Error('El tope debe estar en la moneda de la billetera')
+    throw new Error('El tope debe estar en la moneda del grupo')
   }
 
   const id = `m-nuevo-${++joinCounter}`
@@ -148,7 +148,7 @@ export function startJoin(
         check: 'grant',
         status: 'warn',
         riskPoints: 60,
-        userMessage: `Esta billetera te pide autorizar hasta ${formatCap(member.cap)} sin límite de tiempo. Es mucho más de lo normal.`,
+        userMessage: `Esta app te pide autorizar hasta ${formatCap(member.cap)} sin límite de tiempo. Es mucho más de lo normal.`,
         reasons: [
           ...(superaTope ? ['El tope supera $1.000.000 COP equivalentes.'] : []),
           ...(sinIntervalo ? ['No se indicó un límite de tiempo.'] : []),
@@ -189,7 +189,7 @@ export function finishJoin({ ok, memberId }: { ok: boolean; memberId: string }):
   if (memberId === ultimoJoinPendiente) ultimoJoinPendiente = null
 
   const wallet = wallets.find((item) => item.id === pendiente.walletId)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
   wallet.members.push(pendiente.member)
   wallet.authorizedCapacity = {
     ...wallet.authorizedCapacity,
@@ -385,7 +385,7 @@ let contadorGastos = 0
 
 export function requestSpend(walletId: string, destination: Spend['destination'], amount: Money): Spend {
   const wallet = wallets.find((w) => w.id === walletId)
-  if (!wallet) throw new Error('Billetera no encontrada')
+  if (!wallet) throw new Error('Grupo no encontrado')
 
   const activos = wallet.members.filter((m) => m.status === 'active')
   const partes = repartirIgual(amount, activos.length)
@@ -570,7 +570,12 @@ export function castApproval(spendId: string, memberId: string, yes: boolean): S
     message: yes ? 'Aprobó el gasto.' : 'Rechazó el gasto.',
   })
 
-  const required = wallet.rules.groupApproval.approvalsRequired
+  const { approvalsRequired: required, riskThreshold } = wallet.rules.groupApproval
+  if (!yes && spend.risk >= riskThreshold) {   // un rechazo detiene un pago riesgoso
+    spend.status = 'rejected'
+    emitir({ walletId: wallet.id, type: 'spend-rejected', spendId, message: 'Un miembro del grupo rechazó un pago riesgoso.' })
+    return structuredClone(spend)
+  }
   const yesCount = spend.approvals.filter((a) => a.yes).length
   const pending = votantes.length - spend.approvals.length
 
