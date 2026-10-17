@@ -6,9 +6,9 @@ Son funciones puras en TypeScript: reciben datos y devuelven un veredicto. Sin r
 
 ## ¿Para quién es?
 
-- Nació para proteger nuestra billetera compartida, donde la plata de varios se mueve en cada gasto.
+- Nació para proteger Kivor, nuestra plataforma de pagos compartidos, donde la plata de varios se mueve en cada gasto.
 - Sirve igual para cualquier proyecto que use Open Payments: una natillera, una colecta para una donación, una tienda que cobra a varios clientes.
-- Se usa sin nuestra billetera: no importa nada de ella (ver el ejemplo sobre el snippet oficial).
+- Se usa sin Kivor: no importa nada de él (ver el ejemplo sobre el snippet oficial).
 
 ## Qué devuelve
 
