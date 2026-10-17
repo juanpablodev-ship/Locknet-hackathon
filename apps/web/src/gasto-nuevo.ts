@@ -38,7 +38,7 @@ export function renderGastoNuevo(wallet: SharedWallet): string {
           <label for="direccion-destino">Dirección de la billetera</label>
           <input id="direccion-destino" name="destinationAddress" type="url" />
         </div>
-        <label for="monto-gasto">Monto en pesos</label>
+        <label for="monto-gasto">Monto en ${escapeHtml(wallet.currency)}</label>
         <input id="monto-gasto" name="amount" type="number" min="1" step="1" value="120000" required />
         <p id="vista-previa" class="vista-previa">${previewReparto(120000, wallet)}</p>
         <label for="motivo-gasto">Motivo (solo informativo)</label>

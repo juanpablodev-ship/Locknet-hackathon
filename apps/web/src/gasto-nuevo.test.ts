@@ -7,6 +7,13 @@ describe('renderGastoNuevo', () => {
     expect(renderGastoNuevo(cuidadoDeMama)).toContain('Farmacia Medellín')
   })
 
+  it('muestra la moneda actual en el monto', () => {
+    const wallet = structuredClone(cuidadoDeMama)
+    wallet.currency = 'EUR'
+
+    expect(renderGastoNuevo(wallet)).toContain('Monto en EUR')
+  })
+
   it('muestra el reparto de $120.000 entre tres miembros activos', () => {
     expect(renderGastoNuevo(cuidadoDeMama)).toContain('Cada uno pone: $40.000')
   })
@@ -36,5 +43,7 @@ describe('renderGastoNuevo', () => {
     wallet.currency = '<img src=x>'
 
     expect(previewReparto(120000, wallet)).not.toContain('<img')
+    expect(renderGastoNuevo(wallet)).not.toContain('<img')
+    expect(renderGastoNuevo(wallet)).toContain('&lt;img src=x&gt;')
   })
 })

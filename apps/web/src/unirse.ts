@@ -32,7 +32,7 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
         <input id="nombre-miembro" name="name" type="text" autocomplete="name" required />
         <label for="direccion-miembro">Dirección de la billetera</label>
         <input id="direccion-miembro" name="walletAddress" type="url" required />
-        <label for="tope-miembro">Tope mensual en pesos</label>
+        <label for="tope-miembro">Tope mensual en ${escapeHtml(wallet.currency)}</label>
         <input id="tope-miembro" name="cap" type="number" min="1" step="1" value="50000" required />
         <div id="mensaje" role="status"></div>
         <button class="boton" type="submit">Continuar</button>

@@ -344,7 +344,7 @@ async function pintarFormularioGasto(): Promise<void> {
     const mensaje = document.getElementById('mensaje')
     const valorPesos = Number(monto?.value)
     if (!Number.isSafeInteger(valorPesos) || valorPesos <= 0) {
-      if (mensaje) mensaje.textContent = 'Escribe un monto mayor que cero en pesos enteros.'
+      if (mensaje) mensaje.textContent = `Escribe un monto mayor que cero en ${wallet.currency} y sin decimales.`
       return
     }
 
@@ -411,7 +411,7 @@ function pintarFormularioUnirse(
     const mensaje = document.getElementById('mensaje')
     const capPesos = Number(tope?.value)
     if (!Number.isSafeInteger(capPesos) || capPesos <= 0) {
-      if (mensaje) mensaje.textContent = 'Escribe un tope mensual mayor que cero en pesos enteros.'
+      if (mensaje) mensaje.textContent = `Escribe un tope mensual mayor que cero en ${wallet.currency} y sin decimales.`
       return
     }
 

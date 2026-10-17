@@ -19,6 +19,7 @@
   --fondo-panel-ambar: #fff8e1;
   --texto-panel-ambar: #8a5a00;
   --texto-sobre-verde: #ffffff;
+  --texto-sobre-rojo: #ffffff;
   --altura-tabs: 64px;
   color-scheme: light;
 }
@@ -39,6 +40,7 @@
     --fondo-panel-ambar: #3a2a05;
     --texto-panel-ambar: #ffc107;
     --texto-sobre-verde: #2a0f49;
+    --texto-sobre-rojo: #2a0f49;
     color-scheme: dark;
   }
 }
@@ -58,6 +60,7 @@
   --fondo-panel-ambar: #3a2a05;
   --texto-panel-ambar: #ffc107;
   --texto-sobre-verde: #2a0f49;
+  --texto-sobre-rojo: #2a0f49;
   color-scheme: dark;
 }
 
@@ -238,7 +241,7 @@ body {
   padding: 0 7px;
   border-radius: 6px;
   background: var(--rojo);
-  color: #fff;
+  color: var(--texto-sobre-verde);
   font-size: 13px;
   font-style: normal;
 }
@@ -363,16 +366,23 @@ body {
 }
 
 .selector-billeteras .acciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   margin-top: 0;
 }
 
 .selector-billeteras .boton {
+  width: 100%;
   max-width: 100%;
+  min-height: 64px;
+  border: 2px solid var(--borde);
   overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: center;
 }
 
 .billetera-seleccionada {
-  outline: 4px solid var(--texto);
+  outline: 3px solid var(--texto);
   outline-offset: 2px;
 }
 
@@ -475,7 +485,7 @@ body {
   border: none;
   border-radius: 8px;
   background: var(--verde);
-  color: #fff;
+  color: var(--texto-sobre-verde);
   font-family: inherit;
   font-size: 20px;
   font-weight: 700;
@@ -487,6 +497,11 @@ body {
   display: grid;
   gap: 12px;
   max-width: 720px;
+}
+
+.formulario label {
+  margin-top: 8px;
+  font-weight: 700;
 }
 
 .formulario input,
@@ -501,14 +516,33 @@ body {
   font: inherit;
 }
 
+.formulario input,
+.formulario select {
+  min-height: 52px;
+}
+
+.formulario textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
 .vista-previa {
   margin: 4px 0;
+  padding: 12px 16px;
+  border-left: 4px solid var(--verde);
+  border-radius: 4px;
+  background: var(--fondo);
   font-weight: 700;
 }
 
 .qr-unirse {
+  box-sizing: border-box;
   width: min(280px, 100%);
-  margin: 16px auto;
+  margin: 16px auto 24px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: #ffffff;
 }
 
 .lista-historial {
@@ -941,7 +975,7 @@ body {
 
 .boton-peligro {
   background: var(--rojo);
-  color: #fff;
+  color: var(--texto-sobre-rojo);
 }
 
 .boton-peligro:disabled {
@@ -1050,14 +1084,14 @@ body {
 }
 
 .boton-rechazar {
-  background: #fff;
+  background: var(--fondo);
   color: var(--rojo);
   border: 2px solid var(--rojo);
 }
 
 .boton-rechazar-destacado {
   background: var(--rojo);
-  color: #fff;
+  color: var(--texto-sobre-rojo);
   font-size: 24px;
 }
 
