@@ -81,7 +81,7 @@ function slugify(name: string): string {
 
 // Valida el cuerpo de POST /api/wallets y arma el grupo; cada fallo es un 400 en español.
 function buildWallet(body: any, exists: (id: string) => boolean): SharedWallet {
-  const { name, currency, approvalsRequired, aboveAmount, riskThreshold, knownDestinations } = body ?? {}
+  const { name, currency, approvalsRequired, aboveAmount, riskThreshold, knownDestinations, memberCap } = body ?? {}
   if (!isText(name)) throw new BadRequest('El nombre debe tener de 1 a 60 caracteres, sin espacios al inicio o al final.')
   if (!CURRENCIES.includes(currency)) throw new BadRequest('La moneda debe ser COP, EUR o USD.')
   if (!Number.isInteger(approvalsRequired) || approvalsRequired < 1 || approvalsRequired > 5) {
@@ -105,11 +105,21 @@ function buildWallet(body: any, exists: (id: string) => boolean): SharedWallet {
       throw new BadRequest(`La dirección de "${d.name}" debe empezar por https:// o $ y tener un servidor.`)
     }
   }
+  // Tope por persona (opcional): el servidor arma el intervalo; el cliente no lo elige.
+  let capRule: SharedWallet['rules']['memberCap']
+  if (memberCap !== undefined) {
+    const cap = memberCap?.cap
+    if (!isMoney(cap)) throw new BadRequest('El tope por persona debe ser Money { value, assetCode, assetScale }.')
+    if (cap.assetCode !== currency) throw new BadRequest('El tope por persona debe estar en la moneda del grupo.')
+    if (cap.assetScale !== 2) throw new BadRequest('El tope por persona debe usar escala 2.')
+    if (BigInt(cap.value) <= 0n) throw new BadRequest('El tope por persona debe ser mayor que 0.')
+    capRule = { cap: { value: cap.value, assetCode: cap.assetCode, assetScale: cap.assetScale }, interval: `R12/${new Date().toISOString().slice(0, 10)}T00:00:00Z/P1M` }
+  }
   let id: string
   do { id = `w-${slugify(name)}-${randomBytes(4).toString('base64url').replace(/[^a-z0-9]/gi, '').toLowerCase().padEnd(6, '0').slice(0, 6)}` } while (exists(id))
   return {
     id, name, currency, kind: 'care', members: [],
-    rules: { split: 'equal', groupApproval: { aboveAmount, approvalsRequired, riskThreshold: threshold, confirmInWallet: false } },
+    rules: { split: 'equal', ...(capRule ? { memberCap: capRule } : {}), groupApproval: { aboveAmount, approvalsRequired, riskThreshold: threshold, confirmInWallet: false } },
     knownDestinations: knownDestinations.map((d: { name: string; walletAddress: string }) => ({ name: d.name, walletAddress: d.walletAddress })),
     authorizedCapacity: { value: '0', assetCode: currency, assetScale: 2 },
   }
@@ -275,10 +285,17 @@ export function createApp(deps: {
   app.post('/api/wallets/:id/join', wrap(async (req, res) => {
     const join = deps.join
     if (!join) throw new Error('Unirse no está disponible en este servidor')
-    const walletId = engine.getWallet(req.params.id).id
+    const target = engine.getWallet(req.params.id)
+    const walletId = target.id
     const { name, walletAddress, cap, interval } = req.body ?? {}
     if (typeof name !== 'string' || typeof walletAddress !== 'string' || typeof interval !== 'string' || !isMoney(cap)) {
       throw new BadRequest('Falta { name, walletAddress, cap: Money, interval }')
+    }
+    // El contrato del grupo fija el tope y la periodicidad en la moneda del grupo; en otra moneda cada quien pone el suyo.
+    const fixed = target.rules.memberCap
+    if (fixed && cap.assetCode === target.currency
+      && (cap.value !== fixed.cap.value || cap.assetCode !== fixed.cap.assetCode || cap.assetScale !== fixed.cap.assetScale || interval !== fixed.interval)) {
+      throw new BadRequest('El tope y la periodicidad los fija el contrato del grupo.')
     }
     if (engine.getWallet(walletId).members.some(m => m.walletAddress === walletAddress && m.status === 'active')) throw new Error('Esta wallet ya tiene una union activa.')
     let sid = currentSessionId()
