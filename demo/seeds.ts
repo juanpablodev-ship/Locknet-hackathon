@@ -4,6 +4,7 @@ import { cuidadoDeMama } from '../contracts/ejemplo'
 /** Configuraciones de demostración; ninguna dirección autoriza pagos reales. */
 export function createDemoSeeds(): SharedWallet[] {
   const care = structuredClone(cuidadoDeMama)
+  care.name = 'Medicinas de mamá'
   for (const member of care.members) member.walletAddress = `https://simulation.invalid/members/${member.id}`
   for (const destination of care.knownDestinations) destination.walletAddress = 'https://simulation.invalid/pharmacy'
   const park: SharedWallet = { ...structuredClone(care), id: 'w-parque', name: 'Arreglo del parque', kind: 'goal',

@@ -27,7 +27,7 @@ const MAX_CAP: Record<string, Money> = {
 }
 
 // Caso 1 sin miembros: los hermanos se unen de verdad desde su wallet (escenario 1).
-const cuidadoVacio = (): SharedWallet => ({ ...structuredClone(cuidadoDeMama), members: [], authorizedCapacity: money('0', 'COP') })
+const cuidadoVacio = (): SharedWallet => ({ ...structuredClone(cuidadoDeMama), name: 'Medicinas de mamá', members: [], authorizedCapacity: money('0', 'COP') })
 
 interface Mode {
   join: JoinDeps['createService']

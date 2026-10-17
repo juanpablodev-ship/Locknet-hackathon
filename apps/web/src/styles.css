@@ -142,6 +142,15 @@ body {
   border-bottom: 1px solid var(--borde);
 }
 
+.cab-marca {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--texto);
+}
+
 .cab b {
   display: block;
   font-size: 20px;
@@ -356,6 +365,34 @@ body {
 .reglas-billetera h2 {
   margin-top: 0;
   font-size: 24px;
+}
+
+.contrato-filas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contrato-filas li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--borde);
+  font-size: 20px;
+}
+
+.contrato-filas li:first-child {
+  border-top: 0;
+}
+
+.contrato-regla {
+  flex: 1 1 320px;
+}
+
+.contrato-quien {
+  flex: 0 0 auto;
 }
 
 .nota-configuracion {

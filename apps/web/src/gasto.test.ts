@@ -148,18 +148,18 @@ describe('renderGasto - otros estados', () => {
     expect(html).not.toContain('data-accion')
   })
 
-  it('approved muestra el panel verde y el botón "Pagar ahora"', () => {
+  it('approved muestra el panel verde y el botón "Pagar la cuota del mes"', () => {
     const spend = { ...ataque, status: 'approved' as const }
     const html = renderGasto(spend, cuidadoDeMama)
     expect(html).toContain('El grupo aprobó el gasto.')
-    expect(html).toContain('Pagar ahora')
+    expect(html).toContain('Pagar la cuota del mes')
     expect(html).toContain('data-accion="pagar"')
   })
 
-  it('"Pagar ahora" solo aparece en approved', () => {
+  it('"Pagar la cuota del mes" solo aparece en approved', () => {
     for (const estado of ['requested', 'paying', 'incomplete', 'paid', 'rejected'] as const) {
       const spend = estado === 'paying' ? gastoPagando : estado === 'incomplete' ? gastoIncompleto : { ...ataque, status: estado }
-      expect(renderGasto(spend, cuidadoDeMama)).not.toContain('Pagar ahora')
+      expect(renderGasto(spend, cuidadoDeMama)).not.toContain('Pagar la cuota del mes')
     }
   })
 
