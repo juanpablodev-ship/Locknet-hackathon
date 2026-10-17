@@ -10,27 +10,38 @@ export type QuoteOnlyConfig = {
   memberId: string
   payerWalletAddress: string
   receiverWalletAddress: string
+  receiveAmountMajor: string
 }
 
 export function quoteOnlyConfig(env: NodeJS.ProcessEnv): QuoteOnlyConfig {
-  const names = ['QUOTE_ONLY_MEMBER_ID', 'QUOTE_ONLY_PAYER_WALLET_ADDRESS', 'QUOTE_ONLY_RECEIVER_WALLET_ADDRESS'] as const
+  const names = ['QUOTE_ONLY_MEMBER_ID', 'QUOTE_ONLY_PAYER_WALLET_ADDRESS', 'QUOTE_ONLY_RECEIVER_WALLET_ADDRESS', 'QUOTE_ONLY_RECEIVE_AMOUNT_MAJOR'] as const
   const missing = names.filter(name => !env[name]?.trim())
   if (missing.length) throw new Error(`Configuración ausente: ${missing.join(', ')}`)
   const memberId = env.QUOTE_ONLY_MEMBER_ID!.trim()
-  for (const name of names.slice(1)) {
+  for (const name of names.slice(1, 3)) {
     try { if (new URL(env[name]!).protocol !== 'https:') throw new Error() }
     catch { throw new Error(`Dirección inválida: ${name}`) }
   }
   if (decodeURIComponent(new URL(env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!).pathname.split('/').filter(Boolean).at(-1) ?? '') !== memberId)
     throw new Error('QUOTE_ONLY_PAYER_WALLET_ADDRESS no corresponde al miembro indicado')
-  if (new URL(env.QUOTE_ONLY_RECEIVER_WALLET_ADDRESS!).pathname.split('/').filter(Boolean).at(-1) !== 'farmacia-medellin')
-    throw new Error('QUOTE_ONLY_RECEIVER_WALLET_ADDRESS no corresponde a farmacia-medellin')
-  return { memberId, payerWalletAddress: env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!, receiverWalletAddress: env.QUOTE_ONLY_RECEIVER_WALLET_ADDRESS! }
+  if (new URL(env.QUOTE_ONLY_RECEIVER_WALLET_ADDRESS!).href === new URL(env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!).href)
+    throw new Error('Las wallets pagadora y receptora deben ser distintas')
+  const receiveAmountMajor = env.QUOTE_ONLY_RECEIVE_AMOUNT_MAJOR!.trim()
+  if (!/^(0|[1-9]\d*)(?:\.\d+)?$/.test(receiveAmountMajor) || !/[1-9]/.test(receiveAmountMajor))
+    throw new Error('QUOTE_ONLY_RECEIVE_AMOUNT_MAJOR inválido')
+  return { memberId, payerWalletAddress: env.QUOTE_ONLY_PAYER_WALLET_ADDRESS!,
+    receiverWalletAddress: env.QUOTE_ONLY_RECEIVER_WALLET_ADDRESS!, receiveAmountMajor }
 }
 
-export function copReceiveAmount(scale: number): Amount {
-  if (scale !== 2) throw new Error('Escala de farmacia-medellin distinta de 2; no se creó quote')
-  return { value: '4000000', assetCode: 'COP', assetScale: 2 }
+export function receiveAmountFromMajor(major: string, assetCode: string, assetScale: number): Amount {
+  if (!/^(0|[1-9]\d*)(?:\.\d+)?$/.test(major) || !/^[A-Z]{3}$/.test(assetCode) ||
+      !Number.isInteger(assetScale) || assetScale < 0 || assetScale > 20)
+    throw new Error('Monto o metadatos de recepción inválidos')
+  const [whole, fraction = ''] = major.split('.')
+  if (fraction.length > assetScale) throw new Error('El monto tiene más decimales que la escala de la receptora')
+  const value = BigInt(whole) * 10n ** BigInt(assetScale) + BigInt(fraction.padEnd(assetScale, '0') || '0')
+  if (value <= 0n) throw new Error('El monto de recepción debe ser positivo')
+  return { value: value.toString(), assetCode, assetScale }
 }
 
 export function quoteCost(receive: Amount, debit: Amount): { difference: string; percent: string; exceedsFivePercent: boolean } | null {
@@ -64,9 +75,8 @@ export async function runQuoteOnly(client: QuoteClient, config: QuoteOnlyConfig,
     report(`Pagador: ${payer.assetCode}, escala ${payer.assetScale}`)
     report(`Farmacia: ${receiver.assetCode}, escala ${receiver.assetScale}`)
     stage = 'validación de monedas y escala'
-    if (receiver.assetCode !== 'COP') throw new Error('Wallet receptora COP requerida')
     if (payer.assetCode === receiver.assetCode) throw new Error('Se requiere una wallet pagadora en otra moneda')
-    const amount = copReceiveAmount(receiver.assetScale)
+    const amount = receiveAmountFromMajor(config.receiveAmountMajor, receiver.assetCode, receiver.assetScale)
     stage = 'grant.request incoming-payment'
     const incomingGrant = await client.grant.request({ url: receiver.authServer },
       { access_token: { access: [{ type: 'incoming-payment', actions: ['create'] }] } })
