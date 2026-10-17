@@ -33,3 +33,22 @@ describe('POST recheck: consulta sin nuevos pagos', () => {
     expect(payments.calls.createIncoming).toHaveLength(3)
   })
 })
+
+it('responde 409, no 202, si un gasto anterior impide crear pagos nuevos', async () => {
+  const payments = fakePayments({ trackAs: { 'm-madrid': 'pending' } })
+  const bus = createEventBus()
+  const engine = createEngine({ guardian: fakeGuardian, payments: payments.svc, emit: bus.emit, incomingPerShare: true, maxPolls: 1 })
+  engine.addWallet(structuredClone(cuidadoDeMama))
+  const previous = engine.requestSpend('w-mama', cuidadoDeMama.knownDestinations[0], cop(120_000), 'anterior')
+  await engine.executeSpend(previous.id)
+  const next = engine.requestSpend('w-mama', cuidadoDeMama.knownDestinations[0], cop(120_000), 'nuevo')
+  const before = payments.calls.payShare
+  server = createApp({ engine, bus, security: false }).listen(0, '127.0.0.1')
+  await new Promise(resolve => server!.once('listening', resolve))
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  const response = await fetch(`${base}/api/spends/${next.id}/execute`, { method: 'POST' })
+  expect(response.status).toBe(409)
+  expect((await response.json()).error).toContain('pago pendiente o desconocido')
+  expect(engine.getSpend(next.id).status).toBe('approved')
+  expect(payments.calls.payShare).toBe(before)
+})

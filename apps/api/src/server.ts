@@ -167,6 +167,10 @@ export function createApp(deps: {
     if (spend.status !== expected) {
       throw new Error(`El gasto debe estar en ${expected} (estado: ${spend.status})`)
     }
+    const blocker = engine.listSpends(spend.walletId).find(other => other.id !== spend.id &&
+      (other.status === 'paying' || other.shares.some(share => share.attempts?.some(attempt =>
+        attempt.status === 'pending' || attempt.status === 'unknown' || attempt.status === 'prepared'))))
+    if (blocker) throw new Error('Otro gasto del grupo tiene un pago pendiente o desconocido. Consulta el gasto anterior antes de pagar; no se inició un pago nuevo.')
     run(spend.id)
       .catch(() => { /* no registrar errores del proveedor */ })
       .finally(() => refreshLater(spend.walletId))

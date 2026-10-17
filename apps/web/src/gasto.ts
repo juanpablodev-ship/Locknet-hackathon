@@ -213,13 +213,21 @@ function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
   `
 }
 
-function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string): string {
+function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string, paymentBlocker?: Spend): string {
   switch (spend.status) {
     case 'requested':
       return `<p class="revisando">Revisando el gasto con ${NOMBRE_GUARDIAN}…</p>`
     case 'awaiting-approval':
       return cuerpoEsperandoAprobacion(spend, wallet, votaComo)
     case 'approved':
+      if (paymentBlocker) return `
+        <div class="panel panel-ambar" role="status">
+          <p class="panel-titulo">Hay un pago anterior sin resolver</p>
+          <p>Este gasto está aprobado, pero no puede pagarse mientras otro gasto del grupo tenga un resultado pendiente o desconocido. Recargar fondos no elimina ese bloqueo.</p>
+          <a class="boton" href="#/gasto/${encodeURIComponent(paymentBlocker.id)}">Consultar el gasto anterior (sin pagar)</a>
+        </div>
+        <div id="mensaje" role="status"></div>
+      `
       return `
         <div class="panel panel-verde">
           <p class="panel-titulo">El grupo aprobó el gasto.</p>
@@ -255,11 +263,11 @@ function cuerpoPorEstado(spend: Spend, wallet: SharedWallet, votaComo?: string):
   }
 }
 
-export function renderGasto(spend: Spend, wallet: SharedWallet, votaComo?: string): string {
+export function renderGasto(spend: Spend, wallet: SharedWallet, votaComo?: string, paymentBlocker?: Spend): string {
   return `
     <div class="contenedor">
       <p class="sello">Protegido por ${NOMBRE_GUARDIAN}</p>
-      ${cuerpoPorEstado(spend, wallet, votaComo)}
+      ${cuerpoPorEstado(spend, wallet, votaComo, paymentBlocker)}
     </div>
   `
 }

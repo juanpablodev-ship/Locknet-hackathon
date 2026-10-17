@@ -116,8 +116,17 @@ export async function requestSpend(walletId: string, destination: Spend['destina
   return mock.requestSpend(walletId, destination, amount)
 }
 
+export async function getPaymentBlocker(spend: Spend): Promise<Spend | undefined> {
+  const others = await getSpends(spend.walletId)
+  return others.find(other => other.id !== spend.id && (other.status === 'paying' ||
+    other.shares.some(share => share.attempts?.some(attempt =>
+      attempt.status === 'unknown' || attempt.status === 'pending' || attempt.status === 'prepared'))))
+}
 export async function executeSpend(spendId: string): Promise<void> {
   if (MODO === 'live') {
+    const spend = await getSpend(spendId)
+    const blocker = await getPaymentBlocker(spend)
+    if (blocker) throw new Error('Otro gasto tiene un pago pendiente o desconocido. Consulta el gasto anterior antes de pagar; no se envió un pago nuevo.')
     await pedir<{ spendId: string; status: 'paying' }>('POST', `/api/spends/${encodeURIComponent(spendId)}/execute`)
     return
   }

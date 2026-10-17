@@ -7,7 +7,7 @@ import {
   crearTurnos,
   executeSpend,
   finishJoin,
-  getApiMode,
+  getApiMode, getPaymentBlocker,
   getJoinSetup, cancelJoin, getSession, recheckSpend, revokeMember, refreshCapacity,
   getSpend,
   getWallet,
@@ -277,7 +277,13 @@ async function pintarGasto(id: string): Promise<void> {
     votaComoActual = activos[0]?.id
   }
 
-  app.innerHTML = selectVotanteHtml(activos) + renderGasto(spend, wallet, votaComoActual) + panelDevHtml()
+  let paymentBlocker: Spend | undefined
+  if (MODO === 'live' && spend.status === 'approved') {
+    try { paymentBlocker = await getPaymentBlocker(spend) }
+    catch (error) { if (turnos.esVigente(miTurno)) pintarError(app, error, () => void pintarGasto(id)); return }
+    if (!turnos.esVigente(miTurno)) return
+  }
+  app.innerHTML = selectVotanteHtml(activos) + renderGasto(spend, wallet, votaComoActual, paymentBlocker) + panelDevHtml()
   const consultaMensaje = mensajesConsulta.get(id)
   if (consultaMensaje) {
     let feedback = app.querySelector<HTMLElement>('#mensaje')

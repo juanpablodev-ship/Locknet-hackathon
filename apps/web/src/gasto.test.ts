@@ -228,3 +228,14 @@ describe('consulta accesible en gastos incompletos', () => {
     expect(html).toContain('Consultar intentos y recepción (sin pagar)')
   })
 })
+
+it('muestra enlace al gasto bloqueante y oculta pagar cuando existe otro intento pendiente', () => {
+  const approved = structuredClone(medicina)
+  approved.status = 'approved'
+  const blockedBy = structuredClone(gastoIncompleto)
+  blockedBy.id = 'anterior'
+  const html = renderGasto(approved, cuidadoDeMama, undefined, blockedBy)
+  expect(html).toContain('Hay un pago anterior sin resolver')
+  expect(html).toContain('href="#/gasto/anterior"')
+  expect(html).not.toContain('data-accion="pagar"')
+})

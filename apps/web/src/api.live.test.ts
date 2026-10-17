@@ -72,6 +72,8 @@ describe('api.ts en modo live', () => {
     await api.requestSpend('w-mama', destination, medicina.amount)
     expectRequest('/api/wallets/w-mama/spends', 'POST', { destination, amount: medicina.amount })
 
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
     await api.executeSpend('s-medicina')
     expectRequest('/api/spends/s-medicina/execute', 'POST')
 
@@ -124,6 +126,16 @@ describe('api.ts en modo live', () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(409, { error: 'Consulta no disponible' }))
     await expect(api.recheckSpend(medicina.id)).rejects.toThrow('Consulta no disponible')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+  it('no envía POST de pago si otro gasto tiene un intento desconocido', async () => {
+    const previous = structuredClone(medicina)
+    previous.id = 'gasto-anterior'; previous.status = 'incomplete'
+    previous.shares[0].status = 'pending'
+    previous.shares[0].attempts = [{ incomingPaymentUrl: 'https://test.invalid/incoming-payments/old', status: 'unknown' }]
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [previous]))
+    await expect(api.executeSpend(medicina.id)).rejects.toThrow('Otro gasto')
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === 'GET')).toBe(true)
   })
   it('conserva la base VITE_API_URL configurada', async () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.test')
