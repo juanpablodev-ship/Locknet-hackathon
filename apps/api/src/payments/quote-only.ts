@@ -75,7 +75,6 @@ export async function runQuoteOnly(client: QuoteClient, config: QuoteOnlyConfig,
     report(`Pagador: ${payer.assetCode}, escala ${payer.assetScale}`)
     report(`Farmacia: ${receiver.assetCode}, escala ${receiver.assetScale}`)
     stage = 'validación de monedas y escala'
-    if (payer.assetCode === receiver.assetCode) throw new Error('Se requiere una wallet pagadora en otra moneda')
     const amount = receiveAmountFromMajor(config.receiveAmountMajor, receiver.assetCode, receiver.assetScale)
     stage = 'grant.request incoming-payment'
     const incomingGrant = await client.grant.request({ url: receiver.authServer },
@@ -107,7 +106,7 @@ export async function runQuoteOnly(client: QuoteClient, config: QuoteOnlyConfig,
     report('Quote: creada')
     report(`ReceiveAmount: ${quote.receiveAmount.value} ${quote.receiveAmount.assetCode} escala ${quote.receiveAmount.assetScale}`)
     report(`DebitAmount: ${quote.debitAmount.value} ${quote.debitAmount.assetCode} escala ${quote.debitAmount.assetScale}`)
-    report(`Conversión: ${quote.debitAmount.assetCode} → ${quote.receiveAmount.assetCode}`)
+    report(`Conversión: ${quote.debitAmount.assetCode} → ${quote.receiveAmount.assetCode}${quote.debitAmount.assetCode === quote.receiveAmount.assetCode ? ' (misma moneda)' : ''}`)
     if (cost) {
       report(`Diferencia: ${cost.difference}`)
       report(`Costo: ${cost.percent}%`)
