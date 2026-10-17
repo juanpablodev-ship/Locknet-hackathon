@@ -95,6 +95,45 @@ describe('executeSpend: pagos por aporte', () => {
     expect(s.status).toBe('paid')
   })
 
+  it('plan B pagado: cada aporte muestra lo que llegó de ese miembro ($40.000)', async () => {
+    const { engine, id } = setup({}, true)
+    const s = await engine.executeSpend(id)
+    expect(s.status).toBe('paid')
+    expect(s.shares.map((sh) => sh.received)).toEqual([cop(40_000), cop(40_000), cop(40_000)])
+  })
+
+  it('plan B: si llega 1 unidad menos por aporte, cada aporte lo refleja y el gasto queda incompleto', async () => {
+    const { engine, id } = setup({ shortReceive: true }, true)
+    const s = await engine.executeSpend(id)
+    expect(s.status).toBe('incomplete')
+    expect(s.shares.map((sh) => sh.received?.value)).toEqual(['3999999', '3999999', '3999999'])
+  })
+
+  it('plan B: el aporte que falló muestra $0 y el reintento lo reemplaza por lo que llegó', async () => {
+    const { engine, payments, id } = setup({ failMember: { 'm-madrid': 'cupo insuficiente' } }, true)
+    const first = await engine.executeSpend(id)
+    expect(first.shares[2]).toMatchObject({ status: 'failed', received: cop(0) })
+    expect(first.shares[0].received).toEqual(cop(40_000))
+    delete payments.opts.failMember!['m-madrid']
+    const s = await engine.retryShare(id)
+    expect(s.shares[2]).toMatchObject({ status: 'paid', received: cop(40_000) })
+    expect(s.status).toBe('paid')
+  })
+
+  it('plan A (cobro compartido): no se atribuye por miembro, received queda vacío', async () => {
+    const { engine, id } = setup({}, false)
+    const s = await engine.executeSpend(id)
+    expect(s.status).toBe('paid')
+    expect(s.shares.every((sh) => sh.received === undefined)).toBe(true)
+  })
+
+  it('si la consulta de lo recibido no responde: incompleto (nunca pagado) y no se queda en "pagando"', async () => {
+    const { engine, id } = setup({ receivedFails: true }, true)
+    const s = await engine.executeSpend(id)
+    expect(s.status).toBe('incomplete')
+    expect(s.shares.every((sh) => sh.received === undefined)).toBe(true)
+  })
+
   it('no reintenta un gasto que ya está pagado', async () => {
     const { engine, id } = setup()
     await engine.executeSpend(id)

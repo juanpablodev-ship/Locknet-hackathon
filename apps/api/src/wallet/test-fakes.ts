@@ -34,6 +34,7 @@ export function fakePayments(opts: {
   trackAs?: Record<string, 'completed' | 'failed' | 'pending'>
   feePercent?: Record<string, number>          // memberId → comisión en la cotización
   shortReceive?: boolean                        // el destino recibe 1 unidad menos por aporte
+  receivedFails?: boolean                       // la consulta de lo recibido no responde
 } = {}) {
   const received = new Map<string, Money>()
   const quotes = new Map<string, { memberId: string; url: string; receive: Money }>()
@@ -71,6 +72,7 @@ export function fakePayments(opts: {
       return state
     },
     async received(url) {
+      if (opts.receivedFails) throw new Error('sin respuesta')
       return received.get(url)!
     },
     async distributeReturn() {},

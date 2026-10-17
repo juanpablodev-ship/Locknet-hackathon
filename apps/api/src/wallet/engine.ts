@@ -31,6 +31,8 @@ export function createEngine(deps: EngineDeps) {
   const spends = new Map<string, Spend>()
   // Cobros creados para cada gasto. Quedan en el motor: el contrato no tiene campo para ellos.
   const incomings = new Map<string, string[]>()
+  // Plan B: el cobro propio de cada aporte, para saber cuánto llegó de cada miembro. Clave: "gasto:miembro".
+  const shareIncoming = new Map<string, string>()
 
   function emit(e: Omit<WalletEvent, 'ts'>): void {
     deps.emit({ ...e, ts: now() })
@@ -113,8 +115,20 @@ export function createEngine(deps: EngineDeps) {
   // Cierre: nunca "pagado" sin que reconcile confirme lo RECIBIDO en todos los cobros del gasto.
   async function finish(wallet: SharedWallet, spend: Spend): Promise<Spend> {
     let received = zero(spend.amount)
+    const receivedByUrl = new Map<string, Money>()
     for (const url of incomings.get(spend.id) ?? []) {
-      received = add(received, await deps.payments.received(url))
+      let got: Money
+      // Un cobro sin confirmar no suma: reconcile no dará "pagado" y el gasto queda incompleto.
+      try { got = await deps.payments.received(url) } catch { continue }
+      receivedByUrl.set(url, got)
+      received = add(received, got)
+    }
+    // Plan B: cada aporte tiene su propio cobro, así que lo que llegó ahí es lo que llegó de ese miembro.
+    // Con un cobro compartido (plan A) no se puede atribuir por miembro y `received` queda vacío.
+    for (const share of spend.shares) {
+      const url = shareIncoming.get(`${spend.id}:${share.memberId}`)
+      const got = url ? receivedByUrl.get(url) : undefined
+      if (got) share.received = got
     }
     const rv = deps.guardian.reconcile({ expected: spend.amount, received })
     spend.verdicts = [...spend.verdicts.filter((v) => v.check !== 'reconcile'), rv]
@@ -147,7 +161,10 @@ export function createEngine(deps: EngineDeps) {
       // Plan B: cada aporte paga su propio cobro (probado con un pagador en la Test Wallet).
       for (const share of shares) {
         const url = await newIncoming(wallet, spend, [share], share.share)
-        if (url) await payOne(wallet, spend, share, url)
+        if (url) {
+          shareIncoming.set(`${spend.id}:${share.memberId}`, url)   // el reintento lo reemplaza por su cobro nuevo
+          await payOne(wallet, spend, share, url)
+        }
       }
     } else {
       const url = await newIncoming(wallet, spend, shares, amount)
@@ -186,6 +203,7 @@ export function createEngine(deps: EngineDeps) {
       wallets.clear()
       spends.clear()
       incomings.clear()
+      shareIncoming.clear()
       for (const w of next) wallets.set(w.id, structuredClone(w))
     },
 
