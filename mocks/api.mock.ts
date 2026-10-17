@@ -570,7 +570,12 @@ export function castApproval(spendId: string, memberId: string, yes: boolean): S
     message: yes ? 'Aprobó el gasto.' : 'Rechazó el gasto.',
   })
 
-  const required = wallet.rules.groupApproval.approvalsRequired
+  const { approvalsRequired: required, riskThreshold } = wallet.rules.groupApproval
+  if (!yes && spend.risk >= riskThreshold) {   // un rechazo detiene un pago riesgoso
+    spend.status = 'rejected'
+    emitir({ walletId: wallet.id, type: 'spend-rejected', spendId, message: 'Un miembro del grupo rechazó un pago riesgoso.' })
+    return structuredClone(spend)
+  }
   const yesCount = spend.approvals.filter((a) => a.yes).length
   const pending = votantes.length - spend.approvals.length
 
