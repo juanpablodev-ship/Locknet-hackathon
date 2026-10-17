@@ -9,6 +9,12 @@ describe('qrComoSvg', () => {
 })
 
 describe('renderUnirse', () => {
+  it('muestra el aviso de grupo creado solo cuando se pide', () => {
+    const aviso = 'Grupo creado. Comparte esta invitación; empieza por unirte tú.'
+    expect(renderUnirse(cuidadoDeMama, '<svg></svg>', undefined, undefined, true)).toContain(aviso)
+    expect(renderUnirse(cuidadoDeMama, '<svg></svg>')).not.toContain('Grupo creado')
+  })
+
   it('muestra el QR y el formulario para unirse', () => {
     const html = renderUnirse(cuidadoDeMama, '<svg aria-hidden="true"></svg>')
     expect(html).toContain('Escanea para unirte a Cuidado de mamá')

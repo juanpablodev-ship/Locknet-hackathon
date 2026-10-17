@@ -6,7 +6,7 @@ export function qrComoSvg(url: string): Promise<string> {
   return QRCode.toString(url, { type: 'svg' })
 }
 
-export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verdict, setup?: JoinSetup): string {
+export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verdict, setup?: JoinSetup, grupoCreado = false): string {
   const advertencia =
     warning?.status === 'warn'
       ? `
@@ -23,6 +23,7 @@ export function renderUnirse(wallet: SharedWallet, qrSvg: string, warning?: Verd
 
   return `
     <div class="contenedor">
+      ${grupoCreado ? '<div class="panel panel-verde aviso-grupo-creado" role="status"><p class="panel-titulo">Grupo creado. Comparte esta invitación; empieza por unirte tú.</p></div>' : ''}
       <h1>Unirse a ${escapeHtml(wallet.name)}</h1>
       <p>Escanea para unirte a ${escapeHtml(wallet.name)}</p>
       <div class="qr-unirse" aria-label="Código QR para unirse">${qrSvg}</div>

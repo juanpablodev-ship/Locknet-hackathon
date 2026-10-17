@@ -4,6 +4,7 @@ import {
   MODO,
   type ApiModeInfo,
   castApproval,
+  createWallet,
   crearTurnos,
   executeSpend,
   finishJoin,
@@ -26,6 +27,7 @@ import {
 } from './api.js'
 import { escapeHtml, renderInicio } from './inicio.js'
 import { renderGasto } from './gasto.js'
+import { renderCrearGrupo, renderVistaPreviaContrato, validarGrupo, VALORES_INICIALES, type CampoGrupo, type ValoresGrupo } from './crear-grupo.js'
 import { previewReparto, renderGastoNuevo } from './gasto-nuevo.js'
 import { renderHistorial } from './historial.js'
 import { renderPorAprobar } from './por-aprobar.js'
@@ -55,6 +57,8 @@ let votaComoActual: string | undefined
 let redireccionUnirsePendiente: string | null = null
 let hashInvalidoActual = false
 let joinSetup: JoinSetup | undefined
+// Id del grupo recién creado en este navegador: la invitación muestra el aviso mientras se siga en ella.
+let grupoRecienCreado: string | null = null
 let ownedIds: string[] = []
 let modoServidor: ApiModeInfo | null = null
 let errorModoServidor: string | null = null
@@ -459,7 +463,7 @@ function pintarFormularioUnirse(
   const app = document.getElementById('app')
   if (!app) return
 
-  app.innerHTML = renderUnirse(wallet, qrSvg, warning, joinSetup) + panelDevHtml()
+  app.innerHTML = renderUnirse(wallet, qrSvg, warning, joinSetup, grupoRecienCreado === wallet.id) + panelDevHtml()
   const form = document.getElementById('form-unirse') as HTMLFormElement | null
   const nombre = document.getElementById('nombre-miembro') as HTMLInputElement | null
   const direccion = document.getElementById('direccion-miembro') as HTMLInputElement | null
@@ -551,6 +555,55 @@ function pintarFormularioUnirse(
     }
   })
   enlazarPanelDev()
+}
+
+function leerValoresCrearGrupo(form: HTMLFormElement): ValoresGrupo {
+  const campo = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | null)?.value ?? ''
+  return {
+    nombre: campo('nombre'), moneda: campo('moneda'), destinoNombre: campo('destinoNombre'),
+    destinoDireccion: campo('destinoDireccion'), monto: campo('monto'),
+    aprobaciones: campo('aprobaciones'), riesgo: campo('riesgo'),
+  }
+}
+
+function mostrarErroresCrearGrupo(errores: Partial<Record<CampoGrupo, string>>): void {
+  for (const campo of Object.keys(VALORES_INICIALES) as CampoGrupo[]) {
+    const el = document.getElementById(`error-${campo}`)
+    if (!el) continue
+    el.textContent = errores[campo] ?? ''
+    el.hidden = !errores[campo]
+  }
+  if (errores.riesgo) document.querySelector<HTMLDetailsElement>('.avanzado-grupo')?.setAttribute('open', '')
+}
+
+function pintarCrearGrupo(): void {
+  const app = document.getElementById('app')
+  if (!app) return
+  turnos.nuevo()
+  app.innerHTML = renderCrearGrupo()
+  const form = document.getElementById('form-crear-grupo') as HTMLFormElement | null
+  if (!form) return
+  const mensaje = document.getElementById('mensaje')
+  form.addEventListener('input', () => {
+    const vista = document.getElementById('vista-contrato')
+    if (vista) vista.innerHTML = renderVistaPreviaContrato(leerValoresCrearGrupo(form))
+  })
+  form.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const { errores, body } = validarGrupo(leerValoresCrearGrupo(form))
+    mostrarErroresCrearGrupo(errores)
+    if (!body) { if (mensaje) mensaje.textContent = ''; return }
+    const boton = form.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (boton) boton.disabled = true
+    void createWallet(body).then((grupo) => {
+      setWalletActual(grupo.id)
+      grupoRecienCreado = grupo.id
+      navegarA('#/unirse')
+    }).catch((err) => {
+      if (mensaje) mensaje.textContent = err instanceof Error ? err.message : 'No se pudo crear el grupo.'
+      if (boton) boton.disabled = false
+    })
+  })
 }
 
 async function pintarUnirse(): Promise<void> {
@@ -762,6 +815,7 @@ function render(): void {
   const app = document.getElementById('app')
   if (!app) return
   const route = parseHash(location.hash)
+  if (route.name !== 'unirse' && route.name !== 'unirse-volver') grupoRecienCreado = null
   void pintarChrome(route)
 
   if (route.name === 'inicio') {
@@ -776,6 +830,11 @@ function render(): void {
 
   if (route.name === 'gasto-nuevo') {
     void pintarFormularioGasto()
+    return
+  }
+
+  if (route.name === 'crear-grupo') {
+    pintarCrearGrupo()
     return
   }
 
