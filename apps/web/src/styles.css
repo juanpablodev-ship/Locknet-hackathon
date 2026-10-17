@@ -108,12 +108,20 @@ body {
   padding-top: 16px;
 }
 
+/* La cabecera participa en el flujo: su altura cambia con zoom, avisos y nombres. */
 .app-shell {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  width: 100%;
   z-index: 5;
+  background: var(--fondo);
+}
+
+.banda-live {
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--borde);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .banda-respaldo {
@@ -133,6 +141,7 @@ body {
 
 .cab {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -140,6 +149,12 @@ body {
   background: var(--fondo);
   color: var(--texto);
   border-bottom: 1px solid var(--borde);
+}
+
+.cab > div {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .cab b {
@@ -261,6 +276,8 @@ body {
 }
 
 .contenedor {
+  width: 100%;
+  min-width: 0;
   max-width: 1100px;
   margin: 0 auto;
   /* Deja espacio para las pestañas fijas de abajo y, en modo simulado, el panel de
@@ -341,7 +358,7 @@ body {
 
 .miembros {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 16px;
   margin: 16px 0;
 }
@@ -514,6 +531,8 @@ body {
 }
 
 .formulario {
+  width: 100%;
+  min-width: 0;
   display: grid;
   gap: 12px;
   max-width: 720px;
@@ -1225,12 +1244,14 @@ body {
 
 .aportes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
 
 .aporte {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 16px;
@@ -1298,9 +1319,31 @@ body {
 }
 
 .votante select {
+  max-width: 100%;
+  min-width: 0;
   padding: 8px;
   border: 1px solid var(--borde);
   border-radius: 6px;
   font-family: inherit;
   font-size: 20px;
+}
+
+/* Mensajes y acciones extensos deben envolver sin desplazar los campos. */
+.acciones > button,
+.acciones > .boton {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#mensaje {
+  margin-top: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .panel { padding: 16px; }
+  .panel-titulo { font-size: clamp(24px, 7vw, 32px); }
+  .acciones > button { width: 100%; }
 }

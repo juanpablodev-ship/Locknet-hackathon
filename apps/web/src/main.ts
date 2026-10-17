@@ -57,6 +57,8 @@ let joinSetup: JoinSetup | undefined
 let ownedIds: string[] = []
 let modoServidor: ApiModeInfo | null = null
 let errorModoServidor: string | null = null
+const mensajesConsulta = new Map<string, string>()
+const consultasEnCurso = new Set<string>()
 const turnos = crearTurnos()
 
 function temaPreferidoDelSistema(): Tema {
@@ -204,6 +206,7 @@ async function pintarInicio(): Promise<void> {
 }
 
 function selectVotanteHtml(activos: Member[]): string {
+  if (!activos.length) return `<div class="contenedor votante-barra"><p>Autoriza tu wallet en este navegador para aprobar o gestionar pagos. <a href="#/unirse">Unirse al grupo</a></p></div>`
   const opciones = activos
     .map(
       (m) =>
@@ -275,6 +278,19 @@ async function pintarGasto(id: string): Promise<void> {
   }
 
   app.innerHTML = selectVotanteHtml(activos) + renderGasto(spend, wallet, votaComoActual) + panelDevHtml()
+  const consultaMensaje = mensajesConsulta.get(id)
+  if (consultaMensaje) {
+    let feedback = app.querySelector<HTMLElement>('#mensaje')
+    if (!feedback) {
+      feedback = document.createElement('p')
+      feedback.id = 'mensaje'
+      feedback.setAttribute('role', 'status')
+      app.querySelector('.contenedor')?.append(feedback)
+    }
+    feedback.textContent = consultaMensaje
+  }
+  const consultar = app.querySelector<HTMLButtonElement>('[data-accion="consultar"]')
+  if (consultar && consultasEnCurso.has(id)) { consultar.disabled = true; consultar.textContent = 'Consultando…' }
 
   document.getElementById('votante')?.addEventListener('change', (ev) => {
     votaComoActual = (ev.target as HTMLSelectElement).value
@@ -307,8 +323,25 @@ async function pintarGasto(id: string): Promise<void> {
         } else if (accion === 'pagar') {
           await executeSpend(spendId)
         } else if (accion === 'consultar') {
-          await recheckSpend(spendId)
-          await pintarGasto(spendId)
+          if (consultasEnCurso.has(spendId)) return
+          consultasEnCurso.add(spendId)
+          mensajesConsulta.set(spendId, 'Consultando los intentos existentes, sin enviar pagos…')
+          const feedback = document.getElementById('mensaje')
+          if (feedback) feedback.textContent = mensajesConsulta.get(spendId)!
+          ;(boton as HTMLButtonElement).disabled = true
+          boton.textContent = 'Consultando…'
+          try {
+            const updated = await recheckSpend(spendId)
+            const pending = updated.shares.some(s => s.status === 'pending')
+            mensajesConsulta.set(spendId, updated.status === 'paid'
+              ? 'Consulta finalizada: pago verificado. No se enviaron nuevos pagos.'
+              : pending
+                ? 'Consulta finalizada: sigue habiendo resultados pendientes o desconocidos. No se enviaron nuevos pagos.'
+                : 'Consulta finalizada: el gasto sigue incompleto. No se enviaron nuevos pagos.')
+          } catch (error) {
+            mensajesConsulta.set(spendId, error instanceof Error ? error.message : 'No se pudo consultar. No se enviaron nuevos pagos.')
+          } finally { consultasEnCurso.delete(spendId) }
+          if (parseHash(location.hash).name === 'gasto' && location.hash.endsWith('/' + spendId)) await pintarGasto(spendId)
         } else if (accion === 'reintentar') {
           await retryShare(spendId)
         }
@@ -643,7 +676,7 @@ async function pintarChrome(route: Route): Promise<void> {
   }
 
   shell.className = `app-shell${mode === 'fixtures' ? ' app-shell-fixtures' : ''}`
-  shell.innerHTML = (MODO === 'live' && mode !== 'fixtures' ? `<p role="status">${modoServidor ? 'Modo LIVE - Test Wallet. Las acciones pueden mover dinero de prueba.' : 'Comprobando modo del servidor...'}</p>` : '') + renderAppChrome({
+  shell.innerHTML = (MODO === 'live' && mode !== 'fixtures' ? `<p class="banda-live" role="status">${modoServidor ? 'Modo LIVE - Test Wallet. Las acciones pueden mover dinero de prueba.' : 'Comprobando modo del servidor...'}</p>` : '') + renderAppChrome({
     route,
     mode,
     label: MODO === 'mock' ? 'Modo MOCK — datos y pagos simulados, sin backend' : modoServidor?.label,
@@ -654,8 +687,7 @@ async function pintarChrome(route: Route): Promise<void> {
     contadorPorAprobar
   })
   document.body.dataset.demoMode = mode
-  const app = document.getElementById('app')
-  if (app) app.style.paddingTop = `${shell.offsetHeight + 16}px`
+
   shell.onclick = (event) => {
     const reiniciar = (event.target as HTMLElement).closest('[data-accion="reiniciar-demo"]') as HTMLButtonElement | null
     if (reiniciar) void reiniciarDemo(reiniciar)

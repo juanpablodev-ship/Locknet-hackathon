@@ -201,16 +201,14 @@ function cuerpoIncompleto(spend: Spend, wallet: SharedWallet): string {
       ${fallido ? `<p>${nombreFallido}: ${escapeHtml(fallido.failReason ?? 'no se pudo confirmar el aporte')}</p>` : ''}
     </div>
     ${cuerpoProgreso(spend, wallet)}
-    <p>No se devuelven autom?ticamente aportes ya recibidos.</p>
-    <button class="boton" data-accion="consultar" data-spend="${escapeHtml(spend.id)}">Consultar intentos y recepci?n (sin pagar)</button>
+    <p>No se devuelven automáticamente aportes ya recibidos.</p>
     ${unknown ? "<p>Hay un resultado pendiente o desconocido. No se habilita otro pago.</p>" : ""}
-    ${
-      fallido && !unknown
-        ? `<div class="acciones">
-             <button type="button" class="boton" data-accion="reintentar" data-spend="${escapeHtml(spend.id)}">Reintentar el aporte de ${nombreFallido}</button>
-           </div>`
-        : ''
-    }
+    <div class="acciones">
+      <button type="button" class="boton" data-accion="consultar" data-spend="${escapeHtml(spend.id)}">Consultar intentos y recepción (sin pagar)</button>
+      ${fallido && !unknown
+        ? `<button type="button" class="boton" data-accion="reintentar" data-spend="${escapeHtml(spend.id)}">Reintentar el aporte de ${nombreFallido}</button>`
+        : ''}
+    </div>
     <div id="mensaje" role="status"></div>
   `
 }

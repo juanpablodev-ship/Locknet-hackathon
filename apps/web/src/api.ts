@@ -157,8 +157,17 @@ export async function getSession(): Promise<{ memberIds: string[] }> {
   if (MODO === 'mock') return { memberIds: mock.getWallets().flatMap(w => w.members.map(m => m.id)) }
   return pedir('GET', '/api/session')
 }
-export async function recheckSpend(id: string): Promise<void> {
-  if (MODO === 'live') await pedir('POST', `/api/spends/${encodeURIComponent(id)}/recheck`)
+export async function recheckSpend(id: string): Promise<Spend> {
+  if (MODO !== 'live') return getSpend(id)
+  const result = await pedir<Spend | { spendId: string }>('POST', `/api/spends/${encodeURIComponent(id)}/recheck`)
+  if ('shares' in result) return result
+  // Compatibilidad con la API 202 aún abierta: solo consultar, nunca reenviar el POST.
+  for (let i = 0; i < 60; i++) {
+    const current = await getSpend(id)
+    if (current.status !== 'paying') return current
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  throw new Error('La consulta sigue en curso. No se enviaron nuevos pagos; vuelve a consultar el estado.')
 }
 export async function revokeMember(walletId: string, memberId: string): Promise<void> {
   if (MODO !== 'live') throw new Error('Revocacion real solo disponible en modo live')

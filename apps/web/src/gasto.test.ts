@@ -217,3 +217,14 @@ describe('renderGasto - otros estados', () => {
     expect(renderGasto(gastoIncompleto, cuidadoDeMama)).not.toContain('Gasto verificado')
   })
 })
+
+describe('consulta accesible en gastos incompletos', () => {
+  it.each(['failed', 'pending'] as const)('con aporte %s el botón está en el contenedor que escucha clics', status => {
+    const spend = structuredClone(gastoIncompleto)
+    spend.shares[2].status = status
+    const html = renderGasto(spend, cuidadoDeMama)
+    const actions = [...html.matchAll(/<div class="acciones">([\s\S]*?)<\/div>/g)].map(m => m[1])
+    expect(actions.some(content => content.includes('data-accion="consultar"'))).toBe(true)
+    expect(html).toContain('Consultar intentos y recepción (sin pagar)')
+  })
+})

@@ -103,6 +103,28 @@ describe('api.ts en modo live', () => {
     expectRequest('/api/demo/reset', 'POST')
   })
 
+  it('devuelve el estado final de una consulta sin ejecutar ni reintentar pagos', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    await expect(api.recheckSpend(medicina.id)).resolves.toEqual(medicina)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expectRequest(`/api/spends/${medicina.id}/recheck`, 'POST')
+  })
+
+  it('tolera la API anterior con 202 consultando su resultado mediante GET', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(202, { spendId: medicina.id, status: 'paying' }))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, medicina))
+    await expect(api.recheckSpend(medicina.id)).resolves.toEqual(medicina)
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      [`/api/spends/${medicina.id}/recheck`, 'POST'],
+      [`/api/spends/${medicina.id}`, 'GET'],
+    ])
+  })
+
+  it('muestra el error de consulta sin reenviar un pago', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(409, { error: 'Consulta no disponible' }))
+    await expect(api.recheckSpend(medicina.id)).rejects.toThrow('Consulta no disponible')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
   it('conserva la base VITE_API_URL configurada', async () => {
     vi.stubEnv('VITE_API_URL', 'https://api.example.test')
     vi.resetModules()
