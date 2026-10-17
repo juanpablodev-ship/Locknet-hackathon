@@ -223,7 +223,8 @@ body {
 .cab button:focus-visible,
 .boton-reiniciar-demo:focus-visible,
 .panel-dev button:focus-visible,
-.panel-dev input:focus-visible {
+.panel-dev input:focus-visible,
+.panel-dev summary:focus-visible {
   outline: 3px solid var(--texto);
   outline-offset: 2px;
 }
@@ -291,21 +292,14 @@ body {
   min-width: 0;
   max-width: 520px;
   margin: 0 auto;
-  /* Deja espacio para las pestañas fijas de abajo y, en modo simulado, el panel de
-     desarrollo apilado encima de ellas (ver .panel-dev). */
-  padding: 16px 16px calc(var(--altura-tabs) + 140px);
+  /* Deja espacio para las pestañas fijas de abajo; los controles demo fluyen debajo. */
+  padding: 16px 16px calc(var(--altura-tabs) + 32px);
   box-sizing: border-box;
 }
 
 @media (max-width: 375px) {
   .contenedor {
     overflow-x: hidden;
-  }
-}
-
-@media (max-width: 600px) {
-  #app:has(.panel-dev) .contenedor {
-    padding-bottom: calc(var(--altura-tabs) + 200px);
   }
 }
 
@@ -834,6 +828,77 @@ body {
   gap: 16px;
 }
 
+.historial-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--texto);
+}
+
+.historial-cabecera h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.historial-ceja {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.historial-billetera {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.contador-historial {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--texto);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.estado-vacio-historial {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 24px 0;
+  padding: 28px 20px;
+  border: 1px dashed var(--borde);
+  border-radius: 10px;
+  background: var(--sup);
+  text-align: center;
+}
+
+.estado-vacio-historial p {
+  margin: 0;
+}
+
+.estado-vacio-historial .sin-historial {
+  padding: 0;
+  border: 0;
+  font-size: 20px;
+}
+
+.marca-vacio {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 2px solid var(--borde);
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 700;
+}
+
 .lista-aprobar {
   display: grid;
   gap: 12px;
@@ -922,6 +987,7 @@ body {
   padding: 16px;
   border: 1px solid var(--borde);
   border-radius: 8px;
+  background: var(--fondo);
 }
 
 .fila-gasto-verde {
@@ -977,17 +1043,8 @@ body {
   color: var(--texto-panel-rojo);
 }
 
-.fila-gasto .boton {
+.fila-gasto .btn {
   white-space: nowrap;
-}
-
-.sin-historial {
-  margin: 24px 0;
-  padding: 32px 20px;
-  border: 1px dashed var(--borde);
-  border-radius: 8px;
-  text-align: center;
-  font-weight: 700;
 }
 
 @media (max-width: 600px) {
@@ -1013,7 +1070,7 @@ body {
     gap: 8px;
   }
 
-  .fila-gasto .boton {
+  .fila-gasto .btn {
     text-align: center;
   }
 }
@@ -1029,24 +1086,35 @@ body {
 }
 
 .panel-dev {
-  position: fixed;
-  bottom: calc(var(--altura-tabs) + env(safe-area-inset-bottom, 0px));
-  left: env(safe-area-inset-left, 0px);
-  right: env(safe-area-inset-right, 0px);
-  z-index: 6;
+  width: min(640px, 100%);
+  margin: 8px auto calc(var(--altura-tabs) + 16px);
+  padding: 0 16px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+}
+
+.panel-dev summary {
+  min-height: 48px;
+  padding: 12px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.panel-dev-controles {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: var(--fondo);
-  color: var(--texto);
-  border-top: 2px solid var(--borde);
-  box-shadow: 0 -4px 16px rgb(0 0 0 / 0.12);
+  padding: 0 0 12px;
 }
 
-.panel-dev > span {
+.panel-dev-controles > span {
+  flex: 1 1 100%;
   padding: 4px;
+  color: var(--muted);
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -1080,9 +1148,8 @@ body {
 
 @media (max-width: 600px) {
   .panel-dev {
-    justify-content: flex-start;
-    gap: 4px 8px;
-    padding: 6px 8px;
+    margin-bottom: calc(var(--altura-tabs) + 8px);
+    padding: 0 12px;
   }
 }
 

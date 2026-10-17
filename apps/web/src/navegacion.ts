@@ -51,15 +51,18 @@ export interface AppChromeInfo {
   nombreBilletera: string
   numeroMiembros: number
   contadorPorAprobar: number
+  mostrarReinicio?: boolean
 }
 
 export function renderAppChrome(info: AppChromeInfo): string {
   const mensaje = info.error ? `<span role="status">${escapeHtml(info.error)}</span>` : ''
+  const reinicio =
+    info.mostrarReinicio === false
+      ? ''
+      : '<button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>'
+  const acciones = mensaje || reinicio ? `<div class="acciones-demo">${mensaje}${reinicio}</div>` : ''
   return `${renderBandaRespaldo(info.mode, info.label)}
     ${renderEncabezado(info.nombreBilletera, info.numeroMiembros)}
-    <div class="acciones-demo">
-      ${mensaje}
-      <button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>
-    </div>
+    ${acciones}
     ${renderPestanas(info.route, info.contadorPorAprobar)}`
 }

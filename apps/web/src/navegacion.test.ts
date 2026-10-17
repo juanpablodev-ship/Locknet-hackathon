@@ -81,4 +81,14 @@ describe('renderAppChrome', () => {
       expect(html).toContain('data-accion="reiniciar-demo">Reiniciar</button>')
     }
   })
+
+  it('permite ocultar el reinicio global cuando se muestra dentro del panel de demo', () => {
+    const html = renderAppChrome({
+      ...base,
+      route: { name: 'inicio' },
+      mode: 'fixtures',
+      mostrarReinicio: false,
+    })
+    expect(html).not.toContain('data-accion="reiniciar-demo"')
+  })
 })

@@ -85,20 +85,24 @@ function panelDevHtml(): string {
   if (MODO !== 'mock') return ''
   const soloMama = getWalletActual() === 'w-mama'
   return `
-    <div class="panel-dev">
-      <span>Modo MOCK - datos simulados</span>
-      ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
-      <button type="button" data-accion="escenario2">Escenario 2</button>
-      ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
-      ${soloMama ? `<label class="interruptor">
-        <input type="checkbox" id="falla-madrid" />
-        Que falle Madrid
-      </label>` : ''}
-      <label class="interruptor">
-        <input type="checkbox" id="hash-invalido" ${hashInvalidoActual ? 'checked' : ''} />
-        Simular hash inválido
-      </label>
-    </div>
+    <details class="panel-dev">
+      <summary>Panel de demo</summary>
+      <div class="panel-dev-controles">
+        <span>Modo MOCK · datos y pagos simulados</span>
+        ${soloMama ? '<button type="button" data-accion="escenario1">Escenario 1</button>' : ''}
+        <button type="button" data-accion="escenario2">Escenario 2</button>
+        ${soloMama ? '<button type="button" data-accion="escenario3">Escenario 3</button>' : ''}
+        ${soloMama ? `<label class="interruptor">
+          <input type="checkbox" id="falla-madrid" />
+          Que falle Madrid
+        </label>` : ''}
+        <label class="interruptor">
+          <input type="checkbox" id="hash-invalido" ${hashInvalidoActual ? 'checked' : ''} />
+          Simular hash inválido
+        </label>
+        <button type="button" class="boton-reiniciar-demo" data-accion="reiniciar-demo">Reiniciar</button>
+      </div>
+    </details>
   `
 }
 
@@ -108,7 +112,9 @@ function enlazarPanelDev(): void {
   panel?.addEventListener('click', (ev) => {
     const boton = (ev.target as HTMLElement).closest('button')
     const accion = boton?.dataset.accion
-    if (accion === 'escenario1') {
+    if (accion === 'reiniciar-demo' && boton) {
+      void reiniciarDemo(boton)
+    } else if (accion === 'escenario1') {
       playEscenario1()
       navegarA('#/inicio')
     } else if (accion === 'escenario2') {
@@ -669,7 +675,8 @@ async function pintarChrome(route: Route): Promise<void> {
     error: errorModoServidor ?? undefined,
     nombreBilletera,
     numeroMiembros,
-    contadorPorAprobar
+    contadorPorAprobar,
+    mostrarReinicio: MODO !== 'mock'
   })
   document.body.dataset.demoMode = mode
 
