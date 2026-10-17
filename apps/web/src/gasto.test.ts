@@ -68,6 +68,7 @@ describe('renderGasto - awaiting-approval', () => {
     expect(html).toContain('Aprobar $120.000 de todos modos')
     expect(html).toContain('id="aprobar-riesgo"')
     expect(html).toMatch(/id="aprobar-riesgo"[^>]*disabled/)
+    expect(html).toContain('<button type="submit" formnovalidate')
     expect(html).toContain(`Confirma con ${ataque.destination.name}`)
   })
 

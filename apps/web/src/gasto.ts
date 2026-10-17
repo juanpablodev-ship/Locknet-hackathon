@@ -84,7 +84,7 @@ function dialogoConfirmacion(spend: Spend, wallet: SharedWallet): string {
           Confirmo que revisé la cuenta y quiero votar a favor de este gasto.
         </label>
         <div class="acciones confirma-acciones">
-          <button type="submit" class="boton boton-secundario">Volver</button>
+          <button type="submit" formnovalidate class="boton boton-secundario">Volver</button>
           <button id="aprobar-riesgo" type="button" class="boton boton-peligro" data-accion="aprobar" data-spend="${escapeHtml(spend.id)}" disabled>
             Aprobar ${escapeHtml(formatMoney(spend.amount))} de todos modos
           </button>
