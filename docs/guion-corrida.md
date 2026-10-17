@@ -22,8 +22,12 @@ npm ci
 ```
 
 1. `.env` con la wallet de la aplicación y `.env.integration.json` con las wallets públicas (ambos ignorados por Git).
-2. **En `.env.integration.json`, `pharmacy` debe ser `https://ilp.interledger-test.dev/farmacia-medellin`** (COP, escala 2).
-   Con `far` el gasto a `farmacia-medel1in` solo da 20 puntos y se aprueba solo: el paso 4 no ocurre.
+2. **La farmacia conocida debe tener un nombre largo y estar en COP (escala 2).** `farmacia-medellin` existe en la Test Wallet,
+   pero **en USD** (lo comprobó R1), así que no sirve. Con `far` (COP) el guardián no detecta parecidos: nombres cortos dan solo
+   20 puntos y el gasto se aprueba solo, y el paso 4 no ocurre. **Arreglo:** una persona crea en la Test Wallet una cuenta **COP**
+   con un nombre largo, por ejemplo `farmacia-medellin-cop`, y R1 la pone en `pharmacy` de `.env.integration.json` (la API la
+   valida con `walletAddress.get`). No se registra ninguna dirección USD como "de confianza" para subir el puntaje.
+   Verificado con el guardián real: conocido `farmacia-medellin-cop` + pedido a `farmacia-medel1in-cop` = **94 puntos**.
 3. Puertos libres: `netstat -ano -p tcp | Select-String ':3100\s|:5180\s'` (no cerrar procesos de otra persona).
 4. Terminal 1: `npm run dev:integration:api`. Terminal 2: `npm run dev:live -w web`. Abrir **http://localhost:5180**.
 5. Comprobar (R3): `GET http://127.0.0.1:3100/api/wallets` → grupo "Medicinas de mamá", **0 miembros**, y
@@ -65,10 +69,10 @@ Pedir un gasto de **$120.000** a la Farmacia → debe quedar **aprobado, riesgo 
 ## 4. El ataque: destino parecido (R4 pide, el juez decide)
 
 Pedir un gasto → **Otra cuenta** → nombre "Farmacia (cuenta nueva)", dirección
-`https://ilp.interledger-test.dev/farmacia-medel1in`, monto **120000**.
+`https://ilp.interledger-test.dev/farmacia-medel1in-cop` (la letra "l" cambiada por un "1"; la cuenta no necesita existir, porque el gasto se rechaza), monto **120000**.
 
 - **Esperado:** riesgo **94 · alto**, la advertencia "Esta cuenta se parece a la de Farmacia…", y "Esto necesita aprobación del grupo".
-- **Si sale "Aprobado" con riesgo bajo:** la farmacia conocida no es `farmacia-medellin` (volver al paso 0.2). **No pulsar Pagar.**
+- **Si sale "Aprobado" con riesgo bajo:** la farmacia conocida tiene un nombre corto (volver al paso 0.2). **No pulsar Pagar.**
 
 ## 5. El juez rechaza — un clic
 
