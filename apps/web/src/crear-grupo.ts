@@ -10,6 +10,7 @@ export interface ValoresGrupo {
   destinoNombre: string
   destinoDireccion: string
   monto: string          // en unidades mayores, sin separadores de miles ("200000")
+  tope: string           // lo que cada uno autoriza al mes, mismo formato que monto
   aprobaciones: string
   riesgo: string
 }
@@ -19,7 +20,7 @@ export type ErroresGrupo = Partial<Record<CampoGrupo, string>>
 
 export const VALORES_INICIALES: ValoresGrupo = {
   nombre: '', moneda: 'COP', destinoNombre: '', destinoDireccion: '',
-  monto: '200000', aprobaciones: '2', riesgo: '60',
+  monto: '200000', tope: '', aprobaciones: '2', riesgo: '60',
 }
 
 const MONEDAS = ['COP', 'EUR', 'USD']
@@ -45,16 +46,19 @@ export function validarGrupo(v: ValoresGrupo): { errores: ErroresGrupo; body?: N
   let aboveAmount
   try { aboveAmount = moneyFromMajor(v.monto.trim(), MONEDAS.includes(v.moneda) ? v.moneda : 'COP', 2) }
   catch { errores.monto = 'Escribe un monto mayor que 0, sin puntos de miles (por ejemplo 200000).' }
+  let cap
+  try { cap = moneyFromMajor(v.tope.trim(), MONEDAS.includes(v.moneda) ? v.moneda : 'COP', 2) }
+  catch { errores.tope = 'Escribe cuánto autoriza cada uno al mes, mayor que 0 y sin puntos de miles (por ejemplo 40000).' }
   const aprobaciones = Number(v.aprobaciones)
   if (!Number.isInteger(aprobaciones) || aprobaciones < 1 || aprobaciones > 3) errores.aprobaciones = 'Elige de 1 a 3 aprobaciones.'
   const riesgo = Number(v.riesgo)
   if (v.riesgo.trim() === '' || !Number.isInteger(riesgo) || riesgo < 1 || riesgo > 100) errores.riesgo = 'El umbral debe ser un número entero de 1 a 100.'
-  if (Object.keys(errores).length > 0 || !aboveAmount) return { errores }
+  if (Object.keys(errores).length > 0 || !aboveAmount || !cap) return { errores }
   return {
     errores,
     body: {
       name: nombre, currency: v.moneda, approvalsRequired: aprobaciones, aboveAmount, riskThreshold: riesgo,
-      knownDestinations: [{ name: destinoNombre, walletAddress: direccion }],
+      memberCap: { cap }, knownDestinations: [{ name: destinoNombre, walletAddress: direccion }],
     },
   }
 }
@@ -64,6 +68,8 @@ export function armarBorrador(v: ValoresGrupo): SharedWallet {
   const moneda = MONEDAS.includes(v.moneda) ? v.moneda : 'COP'
   let aboveAmount
   try { aboveAmount = moneyFromMajor(v.monto.trim(), moneda, 2) } catch { aboveAmount = { value: '0', assetCode: moneda, assetScale: 2 } }
+  let cap
+  try { cap = moneyFromMajor(v.tope.trim(), moneda, 2) } catch { cap = undefined }
   const aprobaciones = Number(v.aprobaciones)
   const riesgo = Number(v.riesgo)
   const destinoNombre = v.destinoNombre.trim()
@@ -71,6 +77,7 @@ export function armarBorrador(v: ValoresGrupo): SharedWallet {
     id: 'borrador', name: v.nombre.trim() || 'Tu grupo', currency: moneda, kind: 'care', members: [],
     rules: {
       split: 'equal',
+      ...(cap ? { memberCap: { cap, interval: 'R12/2026-01-01T00:00:00Z/P1M' } } : {}),   // el servidor fija el intervalo real
       groupApproval: {
         aboveAmount, approvalsRequired: Number.isInteger(aprobaciones) && aprobaciones >= 1 ? aprobaciones : 2,
         riskThreshold: Number.isInteger(riesgo) && riesgo >= 1 ? riesgo : 60, confirmInWallet: false,
@@ -114,6 +121,10 @@ export function renderCrearGrupo(v: ValoresGrupo = VALORES_INICIALES, errores: E
         <label for="monto-aprobacion">Pedir aprobación del grupo para pagos mayores a</label>
         <input id="monto-aprobacion" name="monto" type="text" inputmode="decimal" value="${escapeHtml(v.monto)}" />
         ${error('monto', errores)}
+        <label for="tope-persona">Cada uno autoriza hasta (al mes)</label>
+        <input id="tope-persona" name="tope" type="text" inputmode="decimal" placeholder="40000" value="${escapeHtml(v.tope)}" />
+        ${error('tope', errores)}
+        <p class="nota-configuracion">Se renueva cada mes.</p>
         <label for="aprobaciones-grupo">Aprobaciones necesarias</label>
         <select id="aprobaciones-grupo" name="aprobaciones">${opcionesAprobaciones}</select>
         ${error('aprobaciones', errores)}

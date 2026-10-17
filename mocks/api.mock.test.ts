@@ -532,6 +532,21 @@ describe('createWallet', () => {
     expect(getWallets()).toHaveLength(3)
   })
 
+  it('guarda el tope por persona con el intervalo armado como en el servidor', () => {
+    const grupo = createWallet({ ...valido(), memberCap: { cap: cop(40_000) } })
+    expect(grupo.rules.memberCap).toEqual({ cap: cop(40_000), interval: `R12/${new Date().toISOString().slice(0, 10)}T00:00:00Z/P1M` })
+    expect(createWallet(valido()).rules).not.toHaveProperty('memberCap')
+  })
+
+  it.each([
+    ['en otra moneda', { cap: { ...cop(40_000), assetCode: 'EUR' } }],
+    ['en escala distinta de 2', { cap: { value: '40000', assetCode: 'COP', assetScale: 0 } }],
+    ['en 0', { cap: cop(0) }],
+    ['sin cap', {}],
+  ])('rechaza el tope por persona %s', (_caso, memberCap) => {
+    expect(() => createWallet({ ...valido(), memberCap } as never)).toThrow(/tope por persona/)
+  })
+
   it('acepta direcciones con $', () => {
     expect(() => createWallet({ ...valido(), knownDestinations: [{ name: 'X', walletAddress: '$ilp.example/x' }] })).not.toThrow()
   })

@@ -83,7 +83,7 @@ export function getSpends(walletId: string): Spend[] {
 // Cuerpo de POST /api/wallets. Las mismas reglas que valida el servidor (apps/api/src/server.ts).
 export interface NuevoGrupo {
   name: string; currency: string; approvalsRequired: number; aboveAmount: Money
-  riskThreshold?: number; knownDestinations: { name: string; walletAddress: string }[]
+  riskThreshold?: number; memberCap?: { cap: Money }; knownDestinations: { name: string; walletAddress: string }[]
 }
 
 const textoValido = (x: unknown): x is string => typeof x === 'string' && x.length >= 1 && x.length <= 60 && x === x.trim()
@@ -94,7 +94,7 @@ function direccionValida(a: unknown): boolean {
 }
 
 export function createWallet(body: NuevoGrupo): SharedWallet {
-  const { name, currency, approvalsRequired, aboveAmount, riskThreshold, knownDestinations } = body ?? ({} as NuevoGrupo)
+  const { name, currency, approvalsRequired, aboveAmount, riskThreshold, knownDestinations, memberCap } = body ?? ({} as NuevoGrupo)
   if (!textoValido(name)) throw new Error('El nombre debe tener de 1 a 60 caracteres, sin espacios al inicio o al final.')
   if (!['COP', 'EUR', 'USD'].includes(currency)) throw new Error('La moneda debe ser COP, EUR o USD.')
   if (!Number.isInteger(approvalsRequired) || approvalsRequired < 1 || approvalsRequired > 5) {
@@ -118,12 +118,23 @@ export function createWallet(body: NuevoGrupo): SharedWallet {
     if (!textoValido(d?.name)) throw new Error('Cada destino de confianza necesita un nombre de 1 a 60 caracteres.')
     if (!direccionValida(d.walletAddress)) throw new Error(`La dirección de "${d.name}" debe empezar por https:// o $ y tener un servidor.`)
   }
+  let capRule: SharedWallet['rules']['memberCap']
+  if (memberCap !== undefined) {
+    const cap = memberCap?.cap
+    if (!cap || typeof cap.value !== 'string' || !/^\d+$/.test(cap.value) || typeof cap.assetCode !== 'string' || !Number.isInteger(cap.assetScale)) {
+      throw new Error('El tope por persona debe ser Money { value, assetCode, assetScale }.')
+    }
+    if (cap.assetCode !== currency) throw new Error('El tope por persona debe estar en la moneda del grupo.')
+    if (cap.assetScale !== 2) throw new Error('El tope por persona debe usar escala 2.')
+    if (BigInt(cap.value) <= 0n) throw new Error('El tope por persona debe ser mayor que 0.')
+    capRule = { cap: { value: cap.value, assetCode: cap.assetCode, assetScale: cap.assetScale }, interval: `R12/${new Date().toISOString().slice(0, 10)}T00:00:00Z/P1M` }
+  }
   const slug = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'grupo'
   let id: string
   do { id = `w-${slug}-${Math.random().toString(36).slice(2, 8).padEnd(6, '0')}` } while (wallets.some((w) => w.id === id))
   const grupo: SharedWallet = {
     id, name, currency, kind: 'care', members: [],
-    rules: { split: 'equal', groupApproval: { aboveAmount, approvalsRequired, riskThreshold: threshold, confirmInWallet: false } },
+    rules: { split: 'equal', ...(capRule ? { memberCap: capRule } : {}), groupApproval: { aboveAmount, approvalsRequired, riskThreshold: threshold, confirmInWallet: false } },
     knownDestinations: knownDestinations.map((d) => ({ name: d.name, walletAddress: d.walletAddress })),
     authorizedCapacity: { value: '0', assetCode: currency, assetScale: 2 },
   }

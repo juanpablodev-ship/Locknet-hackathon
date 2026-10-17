@@ -561,7 +561,7 @@ function leerValoresCrearGrupo(form: HTMLFormElement): ValoresGrupo {
   const campo = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | null)?.value ?? ''
   return {
     nombre: campo('nombre'), moneda: campo('moneda'), destinoNombre: campo('destinoNombre'),
-    destinoDireccion: campo('destinoDireccion'), monto: campo('monto'),
+    destinoDireccion: campo('destinoDireccion'), monto: campo('monto'), tope: campo('tope'),
     aprobaciones: campo('aprobaciones'), riesgo: campo('riesgo'),
   }
 }

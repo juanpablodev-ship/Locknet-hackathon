@@ -3,7 +3,7 @@ import { armarBorrador, renderCrearGrupo, renderVistaPreviaContrato, validarGrup
 
 const completo: ValoresGrupo = {
   ...VALORES_INICIALES, nombre: 'Medicinas de mamá', destinoNombre: 'Farmacia Medellín',
-  destinoDireccion: 'https://ilp.interledger-test.dev/farmacia-medellin',
+  destinoDireccion: 'https://ilp.interledger-test.dev/farmacia-medellin', tope: '40000',
 }
 
 describe('renderCrearGrupo', () => {
@@ -44,6 +44,31 @@ describe('renderCrearGrupo', () => {
   })
 })
 
+describe('tope por persona', () => {
+  it('el formulario pide cuánto autoriza cada uno al mes, vacío y con ejemplo', () => {
+    const html = renderCrearGrupo()
+    expect(html).toContain('Cada uno autoriza hasta (al mes)')
+    expect(html).toContain('id="tope-persona"')
+    expect(html).toContain('placeholder="40000" value=""')
+    expect(html).toContain('Se renueva cada mes.')
+  })
+
+  it('es obligatorio: vacío da error junto al campo y no hay cuerpo', () => {
+    const { errores, body } = validarGrupo({ ...completo, tope: '' })
+    expect(body).toBeUndefined()
+    expect(errores.tope).toBeDefined()
+    expect(renderCrearGrupo(completo, errores)).toContain('id="error-tope" role="alert">')
+  })
+
+  it.each(['0', '-1', '40.000', 'abc'])('rechaza el tope %s', (tope) => {
+    expect(validarGrupo({ ...completo, tope }).errores.tope).toBeDefined()
+  })
+
+  it('se envía en escala 2 y en la moneda elegida', () => {
+    expect(validarGrupo({ ...completo, moneda: 'EUR', tope: '25' }).body?.memberCap).toEqual({ cap: { value: '2500', assetCode: 'EUR', assetScale: 2 } })
+  })
+})
+
 describe('vista previa del contrato', () => {
   it('refleja los valores del borrador', () => {
     const html = renderVistaPreviaContrato({ ...completo, monto: '350000', aprobaciones: '3' })
@@ -71,6 +96,7 @@ describe('validarGrupo', () => {
     expect(body).toEqual({
       name: 'Medicinas de mamá', currency: 'COP', approvalsRequired: 2, riskThreshold: 60,
       aboveAmount: { value: '20000000', assetCode: 'COP', assetScale: 2 },
+      memberCap: { cap: { value: '4000000', assetCode: 'COP', assetScale: 2 } },
       knownDestinations: [{ name: 'Farmacia Medellín', walletAddress: 'https://ilp.interledger-test.dev/farmacia-medellin' }],
     })
   })
@@ -86,7 +112,7 @@ describe('validarGrupo', () => {
   it('campos vacíos dan un error por campo y no hay cuerpo', () => {
     const { errores, body } = validarGrupo({ ...completo, nombre: '  ', destinoNombre: '', destinoDireccion: '', monto: '' })
     expect(body).toBeUndefined()
-    expect(Object.keys(errores).sort()).toEqual(['destinoDireccion', 'destinoNombre', 'monto', 'nombre'])
+    expect(Object.keys(errores).sort()).toEqual(['destinoDireccion', 'destinoNombre', 'monto', 'nombre'])   // el tope ya viene lleno en `completo`
   })
 
   it.each(['http://a.dev/x', 'farmacia', 'https://'])('rechaza la dirección %s', (direccion) => {
