@@ -1,67 +1,31 @@
 @import './fonts.css';
 
-/* Paleta de la Test Wallet de Interledger (borrador de diseño). Los NOMBRES de los
-   tokens son los del proyecto; los VALORES vienen del borrador: --verde = su teal,
-   --rojo = su magenta (riesgo alto), --morado = riesgo medio. --ambar es propio del
-   proyecto (no viene del borrador): se usa para "pendiente de unirse" e "incompleto". */
+/* Paleta final de Kivor (solo tema claro; ver decisión 2 del prompt de diseño).
+   Los NOMBRES de los tokens son los del proyecto; los VALORES son los de Kivor:
+   --verde = el producto/riesgo bajo/verificado, --rojo = las advertencias (--aviso
+   del diseño), --sent = Open Sentinels (negro). --ambar es propio del proyecto (no
+   viene del diseño): se usa para "pendiente de unirse" e "incompleto". --morado es un
+   puente temporal hasta que la pantalla del gasto (commit 3) deje de necesitarlo: el
+   diseño de Kivor no usa morado, el riesgo medio se marca con borde rojo, no con color. */
 :root {
-  --verde: #00797f;
+  --verde: #14d26f;
   --ambar: #8a5a00;
-  --morado: #7e1ac0;
-  --rojo: #c011a0;
+  --morado: #e3242b;
+  --rojo: #e3242b;
+  --sent: #111111;
   --fondo: #ffffff;
-  --texto: #222222;
-  --borde: #b2b2b2;
-  --fondo-panel-rojo: #fdecea;
-  --texto-panel-rojo: #c011a0;
+  --texto: #111111;
+  --borde: #cfcfcf;
+  --fondo-panel-rojo: #e3242b;
+  --texto-panel-rojo: #ffffff;
   --fondo-panel-verde: #e8f5e9;
-  --texto-panel-verde: #00797f;
+  --texto-panel-verde: #0a7a3d;
   --fondo-panel-ambar: #fff8e1;
   --texto-panel-ambar: #8a5a00;
-  --texto-sobre-verde: #ffffff;
+  --texto-sobre-verde: #111111;
   --texto-sobre-rojo: #ffffff;
   --altura-tabs: 64px;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --verde: #08ffff;
-    --ambar: #ffc107;
-    --morado: #c9a0ff;
-    --rojo: #ed4dc8;
-    --fondo: #2a0f49;
-    --texto: #ffffff;
-    --borde: rgb(255 194 243 / 0.3);
-    --fondo-panel-rojo: #361330;
-    --texto-panel-rojo: #ed4dc8;
-    --fondo-panel-verde: #0b3434;
-    --texto-panel-verde: #08ffff;
-    --fondo-panel-ambar: #3a2a05;
-    --texto-panel-ambar: #ffc107;
-    --texto-sobre-verde: #2a0f49;
-    --texto-sobre-rojo: #2a0f49;
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme='dark'] {
-  --verde: #08ffff;
-  --ambar: #ffc107;
-  --morado: #c9a0ff;
-  --rojo: #ed4dc8;
-  --fondo: #2a0f49;
-  --texto: #ffffff;
-  --borde: rgb(255 194 243 / 0.3);
-  --fondo-panel-rojo: #361330;
-  --texto-panel-rojo: #ed4dc8;
-  --fondo-panel-verde: #0b3434;
-  --texto-panel-verde: #08ffff;
-  --fondo-panel-ambar: #3a2a05;
-  --texto-panel-ambar: #ffc107;
-  --texto-sobre-verde: #2a0f49;
-  --texto-sobre-rojo: #2a0f49;
-  color-scheme: dark;
 }
 
 *,
@@ -92,6 +56,10 @@ body {
 @media (min-width: 1024px) {
   body {
     font-size: 20px;
+  }
+
+  .contenedor {
+    max-width: 640px;
   }
 }
 
@@ -145,10 +113,41 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  max-width: 520px;
+  margin: 0 auto;
   padding: 14px 16px;
   background: var(--fondo);
   color: var(--texto);
   border-bottom: 1px solid var(--borde);
+}
+
+.cab b {
+  position: relative;
+  padding-left: 32px;
+}
+
+.cab b::before {
+  content: 'K';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  border-radius: 5px;
+  background: var(--verde);
+  color: var(--texto-sobre-verde);
+  font-size: 15px;
+}
+
+@media (min-width: 1024px) {
+  .cab,
+  .acciones-demo {
+    max-width: 640px;
+  }
 }
 
 .cab > div {
@@ -197,6 +196,8 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 8px 16px;
+  max-width: 520px;
+  margin: 0 auto;
   padding: 4px 16px;
   border-bottom: 1px solid var(--borde);
   background: var(--fondo);
@@ -287,7 +288,7 @@ body {
 .contenedor {
   width: 100%;
   min-width: 0;
-  max-width: 1100px;
+  max-width: 520px;
   margin: 0 auto;
   /* Deja espacio para las pestañas fijas de abajo y, en modo simulado, el panel de
      desarrollo apilado encima de ellas (ver .panel-dev). */

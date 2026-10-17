@@ -33,7 +33,6 @@ import { DEMO_MODE } from './config.js'
 import { renderAppChrome } from './navegacion.js'
 import { qrComoSvg, renderUnirse, renderVueltaUnirse } from './unirse.js'
 import { getWalletActual, setWalletActual } from './wallet-actual.js'
-import { guardarTema, leerTemaGuardado, siguienteTema, type Tema } from './tema.js'
 import { moneyFromMajor } from './money-input.js'
 import './styles.css'
 
@@ -60,25 +59,6 @@ let errorModoServidor: string | null = null
 const mensajesConsulta = new Map<string, string>()
 const consultasEnCurso = new Set<string>()
 const turnos = crearTurnos()
-
-function temaPreferidoDelSistema(): Tema {
-  try {
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  } catch {
-    return 'light'
-  }
-}
-
-// Se aplica ANTES del primer render (abajo, fuera de cualquier función) para que no parpadee.
-let temaActual: Tema = leerTemaGuardado() ?? temaPreferidoDelSistema()
-document.documentElement.setAttribute('data-theme', temaActual)
-
-function alternarTema(): void {
-  temaActual = siguienteTema(temaActual)
-  document.documentElement.setAttribute('data-theme', temaActual)
-  guardarTema(temaActual)
-  void pintarChrome(parseHash(location.hash))
-}
 
 function navegarA(hash: string): void {
   if (location.hash === hash) render()
@@ -689,7 +669,6 @@ async function pintarChrome(route: Route): Promise<void> {
     error: errorModoServidor ?? undefined,
     nombreBilletera,
     numeroMiembros,
-    tema: temaActual,
     contadorPorAprobar
   })
   document.body.dataset.demoMode = mode
@@ -697,8 +676,6 @@ async function pintarChrome(route: Route): Promise<void> {
   shell.onclick = (event) => {
     const reiniciar = (event.target as HTMLElement).closest('[data-accion="reiniciar-demo"]') as HTMLButtonElement | null
     if (reiniciar) void reiniciarDemo(reiniciar)
-    const tema = (event.target as HTMLElement).closest('[data-accion="alternar-tema"]')
-    if (tema) alternarTema()
   }
 
   desuscribirChrome?.()
